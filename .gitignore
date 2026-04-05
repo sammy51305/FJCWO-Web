@@ -1,0 +1,31 @@
+# --- Hugo Build Artifacts ---
+/public/
+/resources/_gen/
+hugo_stats.json
+.hugo_build.lock
+
+# --- OS Temp Files ---
+.DS_Store
+Thumbs.db
+*.tmp
+
+# --- [Security Isolation] ---
+# 這裡排除所有機敏資料夾與檔案
+.private/
+private/
+*.csv
+*.xlsx
+.env
+
+# --- Obsidian Interface (Keep content, ignore config) ---
+# 僅保留筆記，排除個人操作界面快取
+.obsidian/workspace.json
+.obsidian/app.json
+.obsidian/appearance.json
+.obsidian/core-plugins.json
+.obsidian/plugins/
+.obsidian/themes/
+
+# --- Notes Decision ---
+# 如果你想同步筆記到 Private Repo，請註解掉下面這行
+# _notes/
