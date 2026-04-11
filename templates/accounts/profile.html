@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}個人資料 — 輔仁百韻管樂團{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7">
+    <h2 class="mb-4">個人資料</h2>
+    <p class="text-muted">帳號：{{ user.username }}　角色：{{ user.get_role_display }}</p>
+    <form method="post">
+      {% csrf_token %}
+      {% for field in form %}
+        <div class="mb-3">
+          <label class="form-label">{{ field.label }}</label>
+          {{ field }}
+          {% if field.errors %}
+            <div class="text-danger small">{{ field.errors.0 }}</div>
+          {% endif %}
+        </div>
+      {% endfor %}
+      <button type="submit" class="btn btn-primary">儲存</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

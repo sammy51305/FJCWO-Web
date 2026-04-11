@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}首頁 — 輔仁百韻管樂團{% endblock %}
+
+{% block content %}
+<div class="text-center py-5">
+  <h1 class="display-4">輔仁百韻管樂團</h1>
+  <p class="lead text-muted">Fu Jen Catholic University Wind Orchestra</p>
+  <hr class="my-4">
+  <p>歡迎來到百韻校友管樂團官方網站。</p>
+  {% if not user.is_authenticated %}
+    <a href="{% url 'accounts:login' %}" class="btn btn-primary">團員登入</a>
+  {% endif %}
+</div>
+{% endblock %}
