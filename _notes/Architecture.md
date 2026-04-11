@@ -1,6 +1,6 @@
 # FJCWO-Web 架構文件
 
-> 最後更新：2026-04-12（資料庫設計定版，共 21 張 Model）
+> 最後更新：2026-04-12（資料庫設計審查，共 22 張 Model）
 > 本文件記錄系統架構決策與設計規劃，供開發參考。
 
 ---
@@ -81,6 +81,8 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 |------|------|
 | username | 帳號 |
 | password | 密碼 |
+| name | 真實姓名 |
+| email | Email |
 | role | 角色：`member`（團員）/ `officer`（幹部）/ `admin`（管理員）|
 | instrument | 樂器（關聯 InstrumentType）|
 | section | 聲部（關聯 SectionType）|
@@ -134,6 +136,18 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | summary_notes | | 給團員的備註 |
 | summary_by | | 填寫者（關聯 User）|
 
+### 排練 QR Code Token（RehearsalQRToken）
+
+每場排練產生一個專屬 Token，用於 QR Code 簽到，可控制有效期限與啟用狀態。
+
+| 欄位 | 說明 |
+|------|------|
+| rehearsal | 哪場排練（關聯 Rehearsal）|
+| token | 隨機 UUID |
+| created_at | 建立時間 |
+| expires_at | 到期時間 |
+| is_active | 是否啟用（幹部可手動停用）|
+
 ### 排練出席紀錄（RehearsalAttendance）
 
 追蹤每次排練的出席狀況，透過 QR Code 簽到。
@@ -170,10 +184,13 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 系統根據樂器 + 聲部自動對應，並透過 LINE Bot 通知團員。
 （一位團員可能在不同曲目擔任不同樂器或聲部，因此獨立記錄）
 
+`member` 與 `guest_member` 必須恰好填入一個，不可同時填或同時空白。
+
 | 欄位 | 說明 |
 |------|------|
 | setlist | 哪場演出的哪首曲（關聯 Setlist）|
-| member | 哪位團員（關聯 User）|
+| member | 正式團員（關聯 User，可空）|
+| guest_member | 客座團員（關聯 GuestMember，可空）|
 | instrument | 該曲目負責的樂器（關聯 InstrumentType）|
 | section | 該曲目負責的聲部（關聯 SectionType）|
 | score_part | 對應到哪張分譜（關聯 Score）|
@@ -208,7 +225,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | version_note | 改版說明 |
 | source | 來源：購買 / 與他團交換 / 捐贈 |
 | publisher | 出版商（購買時填）|
-| tags | 難度、風格等標籤 |
+| difficulty | 難度：初級 / 中級 / 高級（選填）|
 
 > 版本鏈：原版 → 改版 v1 → 改版 v2，每個版本透過 parent_score 追溯來源。
 
@@ -243,7 +260,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | name | 財產名稱 |
 | category | 類別：樂器 / 譜架 / 音響設備 / 制服 / 其他 |
 | purchase_date | 購入日期 |
-| purchase_cost | 購入費用（關聯 FinanceRecord）|
+| purchase_cost | 購入費用（金額，財務紀錄另存於 FinanceRecord）|
 | condition | 良好 / 需保養 / 送修中 |
 | storage_location | 保管位置 |
 | contact_person | 負責管理的幹部（關聯 User）|
@@ -312,6 +329,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | reason | 請假原因 |
 | status | 待審核 / 核准 / 拒絕 |
 | reviewed_by | 審核幹部（關聯 User）|
+| reviewed_at | 審核時間 |
 
 ### 客座團員（GuestMember）
 
@@ -335,6 +353,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | visibility | public / member_only / officer_only |
 | event_date | 活動日期（選填）|
 | created_by | 發布者（關聯 User）|
+| published_at | 發布時間（草稿時為空）|
 
 ### 會議紀錄（MeetingRecord）
 
@@ -460,20 +479,20 @@ fjcwo/
 ## 七、開發階段規劃
 
 ### Phase 1 — 基礎建設
-- [ ] 建立 Django 專案 + PostgreSQL 連線
-- [ ] 建立自訂 User Model（含角色、樂器、分部欄位）
-- [ ] 登入 / 登出 / 權限控制機制
-- [ ] 把現有 Hugo 公開頁面搬進 Django templates
+- [x] 建立 Django 專案 + PostgreSQL 連線
+- [x] 建立自訂 User Model（含角色、樂器、分部欄位）
+- [x] 登入 / 登出 / 權限控制機制
+- [x] 把現有 Hugo 公開頁面搬進 Django templates
 
 ### Phase 2 — 核心功能
-- [ ] 場地主檔管理
-- [ ] 演出活動 + 排練管理
-- [ ] QR Code 簽到系統
-- [ ] 曲目分配 + LINE Bot 通知
-- [ ] 財務管理
-- [ ] 樂譜庫存管理（含版本控制、對外交換）
-- [ ] 公用財產管理 + 借用系統（樂器為其中一類）
-- [ ] 會員通訊錄
+- [x] 場地主檔管理（Model + Admin）
+- [x] 演出活動 + 排練管理（Model + Admin）
+- [x] QR Code 簽到系統（Model + Admin，views/前端待做）
+- [x] 曲目分配（Model + Admin，LINE Bot 通知待做）
+- [x] 財務管理（Model + Admin）
+- [x] 樂譜庫存管理（Model + Admin）
+- [x] 公用財產管理 + 借用系統（Model + Admin）
+- [ ] 會員通訊錄（views/前端待做）
 
 ### Phase 3 — 進階功能
 - [ ] 會議紀錄 + Whisper 語音辨識
