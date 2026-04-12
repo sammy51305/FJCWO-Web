@@ -64,7 +64,7 @@
           <dt class="col-sm-4">PDF</dt>
           <dd class="col-sm-8">
             {% if score.file %}
-              <a href="{{ score.file.url }}" target="_blank">下載</a>
+              <a href="{% url 'scores:score_download' score.pk %}">下載</a>
             {% else %}
               <span class="text-muted">無數位版本</span>
             {% endif %}

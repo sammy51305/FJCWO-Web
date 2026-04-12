@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}校友報到申請 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-sm-10 col-md-7 col-lg-6">
+
+    <div class="text-center mb-4">
+      <i class="bi bi-person-plus fs-1 text-primary"></i>
+      <h2 class="mt-2 mb-1">校友報到申請</h2>
+      <p class="text-muted">填寫資料後，幹部審核通過即可取得帳號。</p>
+    </div>
+
+    {% if messages %}
+      {% for msg in messages %}
+        <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+          {{ msg }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <div class="card">
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+
+          <div class="mb-3">
+            <label class="form-label">姓名 <span class="text-danger">*</span></label>
+            <input type="text" name="name" class="form-control" required>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">樂器 <span class="text-danger">*</span></label>
+            <select name="instrument" class="form-select" required>
+              <option value="">— 請選擇 —</option>
+              {% for inst in instruments %}
+                <option value="{{ inst.pk }}">{{ inst.get_category_display }} — {{ inst.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">畢業年份 <span class="text-danger">*</span></label>
+            <input type="number" name="grad_year" class="form-control" min="1990" max="2099" placeholder="例：111" required>
+            <div class="form-text">填民國年份，例如 111 屆畢業填 111。</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Email <span class="text-danger">*</span></label>
+            <input type="email" name="email" class="form-control" required>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">電話</label>
+            <input type="tel" name="phone" class="form-control" placeholder="選填">
+          </div>
+
+          <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-send me-1"></i> 送出申請
+            </button>
+            <a href="{% url 'accounts:registration_status' %}" class="btn btn-outline-secondary">
+              查詢申請狀態
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

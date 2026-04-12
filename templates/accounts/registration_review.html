@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}校友報到審核 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0">校友報到審核</h2>
+  <span class="badge bg-warning text-dark fs-6">待審核 {{ pending.count }} 筆</span>
+</div>
+
+{% if messages %}
+  {% for msg in messages %}
+    <div class="alert alert-success alert-dismissible fade show">
+      {{ msg }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  {% endfor %}
+{% endif %}
+
+<!-- 待審核 -->
+{% if pending %}
+<div class="card mb-4">
+  <div class="card-header fw-semibold">待審核</div>
+  <table class="table table-hover align-middle mb-0">
+    <thead class="table-light">
+      <tr>
+        <th>姓名</th>
+        <th>樂器</th>
+        <th>屆別</th>
+        <th>Email</th>
+        <th>電話</th>
+        <th>申請時間</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for reg in pending %}
+      <tr>
+        <td class="fw-semibold">{{ reg.name }}</td>
+        <td>{{ reg.instrument.name }}</td>
+        <td>{{ reg.grad_year }} 屆</td>
+        <td class="small">{{ reg.email }}</td>
+        <td class="small text-muted">{{ reg.phone|default:"—" }}</td>
+        <td class="small text-muted">{{ reg.created_at|date:"m/d" }}</td>
+        <td>
+          <div class="d-flex gap-1">
+            <form method="post" class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="reg_id" value="{{ reg.pk }}">
+              <input type="hidden" name="action" value="approve">
+              <button class="btn btn-sm btn-success"
+                      onclick="return confirm('核准 {{ reg.name }} 的申請？')">
+                <i class="bi bi-check-lg"></i> 核准
+              </button>
+            </form>
+            <form method="post" class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="reg_id" value="{{ reg.pk }}">
+              <input type="hidden" name="action" value="reject">
+              <button class="btn btn-sm btn-outline-danger"
+                      onclick="return confirm('拒絕 {{ reg.name }} 的申請？')">
+                <i class="bi bi-x-lg"></i> 拒絕
+              </button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="alert alert-secondary">目前沒有待審核的申請。</div>
+{% endif %}
+
+<!-- 已審核 -->
+{% if reviewed %}
+<div class="card">
+  <div class="card-header fw-semibold text-muted">已審核（最近 50 筆）</div>
+  <table class="table table-sm table-hover align-middle mb-0">
+    <thead class="table-light">
+      <tr>
+        <th>姓名</th>
+        <th>樂器</th>
+        <th>屆別</th>
+        <th>狀態</th>
+        <th>審核者</th>
+        <th>審核時間</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for reg in reviewed %}
+      <tr>
+        <td>{{ reg.name }}</td>
+        <td class="small">{{ reg.instrument.name }}</td>
+        <td class="small">{{ reg.grad_year }} 屆</td>
+        <td>
+          {% if reg.status == 'approved' %}
+            <span class="badge bg-success">已核准</span>
+          {% else %}
+            <span class="badge bg-danger">已拒絕</span>
+          {% endif %}
+        </td>
+        <td class="small text-muted">{{ reg.reviewed_by.name|default:"—" }}</td>
+        <td class="small text-muted">{{ reg.reviewed_at|date:"m/d H:i"|default:"—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}

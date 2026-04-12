@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}申請狀態查詢 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-sm-10 col-md-7 col-lg-6">
+
+    <h2 class="mb-1">申請狀態查詢</h2>
+    <p class="text-muted mb-4">輸入申請時填寫的 Email 查詢狀態。</p>
+
+    {% if messages %}
+      {% for msg in messages %}
+        <div class="alert alert-info">{{ msg }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <div class="card mb-4">
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+          <div class="input-group">
+            <input type="email" name="email" class="form-control"
+                   placeholder="輸入 Email" value="{{ queried_email }}" required>
+            <button class="btn btn-primary" type="submit">查詢</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% if registrations is not None %}
+      {% if registrations %}
+        <div class="list-group">
+          {% for reg in registrations %}
+          <div class="list-group-item">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="fw-semibold">{{ reg.name }}（{{ reg.grad_year }} 屆）</div>
+                <small class="text-muted">{{ reg.instrument.name }}　申請時間：{{ reg.created_at|date:"Y/m/d" }}</small>
+              </div>
+              {% if reg.status == 'pending' %}
+                <span class="badge bg-warning text-dark">待審核</span>
+              {% elif reg.status == 'approved' %}
+                <span class="badge bg-success">已核准</span>
+              {% else %}
+                <span class="badge bg-danger">已拒絕</span>
+              {% endif %}
+            </div>
+            {% if reg.status == 'approved' %}
+              <div class="mt-2 small text-success">
+                <i class="bi bi-check-circle me-1"></i>申請已核准，請聯絡幹部取得帳號資訊。
+              </div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endif %}
+
+    <div class="text-center mt-4">
+      <a href="{% url 'accounts:registration_apply' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>回到申請頁面
+      </a>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

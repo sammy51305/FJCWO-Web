@@ -129,6 +129,18 @@ class ScoreListViewTest(TestCase):
         })
         self.assertContains(r, '天空之城（單簧管）')
 
+    def test_search_by_title(self):
+        """q 參數依曲名搜尋"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url, {'q': '天空'})
+        self.assertContains(r, '天空之城')
+
+    def test_search_no_match_shows_empty(self):
+        """搜尋無結果時顯示提示"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url, {'q': '完全不存在的曲名xyz'})
+        self.assertContains(r, '沒有符合條件的樂譜')
+
 
 class ScoreDetailViewTest(TestCase):
     """樂譜詳情頁面"""
@@ -180,3 +192,38 @@ class ScoreDetailViewTest(TestCase):
         self.client.force_login(self.member)
         r = self.client.get(self.url)
         self.assertContains(r, '無數位版本')
+
+
+class ScoreDownloadViewTest(TestCase):
+    """樂譜 PDF 下載保護"""
+
+    def setUp(self):
+        self.member = User.objects.create_user(
+            username='dl_member',
+            email='dl@test.local',
+            password='testpass123',
+            name='下載測試員',
+            role=User.Role.MEMBER,
+        )
+        self.score_no_file = Score.objects.create(
+            title='無檔案總譜', score_type=Score.ScoreType.FULL
+        )
+        self.download_url = reverse('scores:score_download', args=[self.score_no_file.pk])
+
+    def test_unauthenticated_redirects(self):
+        """未登入應導向登入頁"""
+        r = self.client.get(self.download_url)
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    def test_no_file_returns_404(self):
+        """無 PDF 的樂譜應回 404"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.download_url)
+        self.assertEqual(r.status_code, 404)
+
+    def test_invalid_pk_returns_404(self):
+        """不存在的樂譜 pk 應回 404"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('scores:score_download', args=[99999]))
+        self.assertEqual(r.status_code, 404)

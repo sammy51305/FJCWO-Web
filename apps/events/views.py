@@ -114,6 +114,13 @@ def leave_review_list(request):
             leave.reviewed_by = request.user
             leave.reviewed_at = timezone.now()
             leave.save()
+            # 同步出席紀錄：核准請假 → 標記為請假
+            attendance, _ = RehearsalAttendance.objects.get_or_create(
+                rehearsal=leave.rehearsal,
+                member=leave.member,
+            )
+            attendance.status = RehearsalAttendance.Status.LEAVE
+            attendance.save()
             messages.success(request, f'已核准 {leave.member.name} 的請假申請。')
         elif action == 'reject':
             leave.status = LeaveRequest.Status.REJECTED
@@ -190,7 +197,10 @@ def qr_generate(request, pk):
         return redirect('events:qr_manage', pk=pk)
 
     rehearsal = get_object_or_404(Rehearsal, pk=pk)
-    hours = int(request.POST.get('hours', 4))
+    try:
+        hours = max(1, min(24, int(request.POST.get('hours', 4))))
+    except (ValueError, TypeError):
+        hours = 4
     expires_at = timezone.now() + timezone.timedelta(hours=hours)
 
     existing = RehearsalQRToken.objects.filter(rehearsal=rehearsal).first()

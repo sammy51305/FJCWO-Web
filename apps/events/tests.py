@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from apps.accounts.models import User
 from apps.public.models import Venue
-from .models import LeaveRequest, PerformanceEvent, Rehearsal
+from .models import LeaveRequest, PerformanceEvent, Rehearsal, RehearsalAttendance
 
 
 class LeaveRequestTestCase(TestCase):
@@ -176,7 +176,36 @@ class LeaveRequestTestCase(TestCase):
         self.assertEqual(leave.status, LeaveRequest.Status.REJECTED)
         self.assertEqual(leave.reviewed_by, self.officer)
 
-    # ── T11 已審核區顯示 ─────────────────────────────────────
+    # ── T11 核准同步出席紀錄 ──────────────────────────────────
+
+    def test_approve_creates_leave_attendance(self):
+        """核准請假後自動建立出席紀錄並標記為請假"""
+        leave = LeaveRequest.objects.create(member=self.member, rehearsal=self.rehearsal, reason='請假')
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'leave_id': leave.pk, 'action': 'approve'})
+        attendance = RehearsalAttendance.objects.get(rehearsal=self.rehearsal, member=self.member)
+        self.assertEqual(attendance.status, RehearsalAttendance.Status.LEAVE)
+
+    def test_approve_updates_existing_attendance_to_leave(self):
+        """核准請假時若已有出席紀錄，狀態應更新為請假"""
+        RehearsalAttendance.objects.create(
+            rehearsal=self.rehearsal, member=self.member,
+            status=RehearsalAttendance.Status.ABSENT,
+        )
+        leave = LeaveRequest.objects.create(member=self.member, rehearsal=self.rehearsal, reason='請假')
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'leave_id': leave.pk, 'action': 'approve'})
+        attendance = RehearsalAttendance.objects.get(rehearsal=self.rehearsal, member=self.member)
+        self.assertEqual(attendance.status, RehearsalAttendance.Status.LEAVE)
+
+    def test_reject_does_not_change_attendance(self):
+        """拒絕請假不應影響出席紀錄"""
+        leave = LeaveRequest.objects.create(member=self.member, rehearsal=self.rehearsal, reason='請假')
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'leave_id': leave.pk, 'action': 'reject'})
+        self.assertFalse(RehearsalAttendance.objects.filter(rehearsal=self.rehearsal, member=self.member).exists())
+
+    # ── T12 已審核區顯示 ─────────────────────────────────────
 
     def test_reviewed_section_shows_after_action(self):
         """核准/拒絕後已審核區顯示對應標籤"""
@@ -394,6 +423,24 @@ class QRCodeTest(TestCase):
         self.assertIn('/accounts/login/', r['Location'])
 
     # ── T02 產生 QR Code ─────────────────────────────────────
+
+    def test_qr_generate_invalid_hours_falls_back_to_default(self):
+        """傳入非整數的 hours 不應引發 500，應回落為預設值"""
+        from .models import RehearsalQRToken
+        self.client.force_login(self.officer)
+        r = self.client.post(self.generate_url, {'hours': 'abc'})
+        self.assertRedirects(r, self.manage_url, fetch_redirect_response=False)
+        self.assertTrue(RehearsalQRToken.objects.filter(rehearsal=self.rehearsal).exists())
+
+    def test_qr_generate_hours_clamped_to_max(self):
+        """hours 超過 24 應被截斷為 24"""
+        from .models import RehearsalQRToken
+        from django.utils import timezone as tz
+        self.client.force_login(self.officer)
+        self.client.post(self.generate_url, {'hours': 999})
+        token = RehearsalQRToken.objects.get(rehearsal=self.rehearsal)
+        diff = token.expires_at - tz.now()
+        self.assertLessEqual(diff.total_seconds(), 24 * 3600 + 5)
 
     def test_qr_generate_creates_token(self):
         """POST qr_generate 應建立 RehearsalQRToken"""

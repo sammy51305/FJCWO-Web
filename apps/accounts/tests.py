@@ -271,3 +271,116 @@ class UserRoleTest(TestCase):
             username='staff_member', password='x', name='', role=User.Role.MEMBER
         )
         self.assertFalse(user.is_staff)
+
+
+class RegistrationTest(TestCase):
+    """校友報到申請系統"""
+
+    def setUp(self):
+        self.instrument = InstrumentType.objects.create(
+            name='小號', category=InstrumentType.Category.BRASS
+        )
+        self.officer = User.objects.create_user(
+            username='reg_officer',
+            email='reg_officer@test.local',
+            password='testpass123',
+            name='審核幹部',
+            role=User.Role.OFFICER,
+        )
+        self.apply_url = reverse('accounts:registration_apply')
+        self.status_url = reverse('accounts:registration_status')
+        self.review_url = reverse('accounts:registration_review')
+
+    # ── T10 申請表單（公開）──────────────────────────────────
+
+    def test_apply_page_accessible_without_login(self):
+        """申請頁面不需登入"""
+        r = self.client.get(self.apply_url)
+        self.assertEqual(r.status_code, 200)
+
+    def test_valid_apply_creates_registration(self):
+        """正確送出申請應建立 Registration 記錄"""
+        from .models import Registration
+        r = self.client.post(self.apply_url, {
+            'name': '測試申請人',
+            'instrument': self.instrument.pk,
+            'grad_year': 110,
+            'email': 'apply@test.local',
+            'phone': '0912345678',
+        })
+        self.assertRedirects(r, self.status_url, fetch_redirect_response=False)
+        self.assertEqual(Registration.objects.count(), 1)
+        reg = Registration.objects.get()
+        self.assertEqual(reg.status, Registration.Status.PENDING)
+
+    def test_duplicate_pending_apply_blocked(self):
+        """同一 Email 已有待審核申請時，再次送出應被擋下"""
+        from .models import Registration
+        Registration.objects.create(
+            name='第一次', instrument=self.instrument,
+            grad_year=110, email='dup@test.local',
+        )
+        self.client.post(self.apply_url, {
+            'name': '第二次', 'instrument': self.instrument.pk,
+            'grad_year': 110, 'email': 'dup@test.local',
+        })
+        self.assertEqual(Registration.objects.count(), 1)
+
+    # ── T11 狀態查詢（公開）──────────────────────────────────
+
+    def test_status_page_accessible_without_login(self):
+        """狀態查詢頁不需登入"""
+        r = self.client.get(self.status_url)
+        self.assertEqual(r.status_code, 200)
+
+    def test_status_query_shows_own_records(self):
+        """以 Email 查詢可看到對應申請紀錄"""
+        from .models import Registration
+        Registration.objects.create(
+            name='查詢測試', instrument=self.instrument,
+            grad_year=110, email='status@test.local',
+        )
+        r = self.client.post(self.status_url, {'email': 'status@test.local'})
+        self.assertContains(r, '查詢測試')
+
+    # ── T12 幹部審核 ─────────────────────────────────────────
+
+    def test_member_cannot_access_review(self):
+        """一般團員無法進入審核頁"""
+        member = User.objects.create_user(
+            username='reg_member', password='x', name='', role=User.Role.MEMBER
+        )
+        self.client.force_login(member)
+        r = self.client.get(self.review_url)
+        self.assertRedirects(r, reverse('accounts:member_directory'), fetch_redirect_response=False)
+
+    def test_officer_can_access_review(self):
+        """幹部可進入審核頁"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.review_url)
+        self.assertEqual(r.status_code, 200)
+
+    def test_officer_can_approve_registration(self):
+        """幹部核准後狀態變 approved"""
+        from .models import Registration
+        reg = Registration.objects.create(
+            name='待核准', instrument=self.instrument,
+            grad_year=110, email='approve@test.local',
+        )
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'reg_id': reg.pk, 'action': 'approve'})
+        reg.refresh_from_db()
+        self.assertEqual(reg.status, Registration.Status.APPROVED)
+        self.assertEqual(reg.reviewed_by, self.officer)
+
+    def test_officer_can_reject_registration(self):
+        """幹部拒絕後狀態變 rejected"""
+        from .models import Registration
+        reg = Registration.objects.create(
+            name='待拒絕', instrument=self.instrument,
+            grad_year=110, email='reject@test.local',
+        )
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'reg_id': reg.pk, 'action': 'reject'})
+        reg.refresh_from_db()
+        self.assertEqual(reg.status, Registration.Status.REJECTED)
