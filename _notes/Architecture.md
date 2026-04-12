@@ -468,10 +468,11 @@ Claude API 產生摘要與重點決議
 ## 六、專案目錄結構
 
 ```
-fjcwo/
-├── config/                 # 設定檔
+FJCWO-Web/
+├── config/                 # Django 設定檔
 │   ├── settings.py
 │   ├── urls.py
+│   ├── asgi.py
 │   └── wsgi.py
 ├── apps/
 │   ├── accounts/           # 登入、會員、角色
@@ -482,9 +483,22 @@ fjcwo/
 │   ├── notifications/      # LINE Bot 通知
 │   ├── meetings/           # 會議紀錄、AI 摘要
 │   ├── announcements/      # 公告
-│   └── public/             # 公開頁面
+│   └── public/             # 公開頁面、場地主檔
 ├── templates/              # HTML 模板
-├── static/                 # CSS、JS、圖片
+│   ├── base.html
+│   ├── accounts/
+│   ├── events/
+│   ├── public/
+│   └── registration/
+├── static/
+│   └── images/             # favicon、logo 等靜態圖檔
+├── fixtures/               # 測試用初始資料（loaddata 用）
+│   └── venues.json         # 場地 + 場地時段
+├── _notes/                 # 開發文件（不進 production）
+│   └── Architecture.md
+├── .env                    # 環境變數（不進 git）
+├── .env.example            # 環境變數範本
+├── requirements.txt
 └── manage.py
 ```
 
@@ -499,14 +513,16 @@ fjcwo/
 - [x] 把現有 Hugo 公開頁面搬進 Django templates
 
 ### Phase 2 — 核心功能
-- [x] 場地主檔管理（Model + Admin）
-- [x] 演出活動 + 排練管理（Model + Admin）
+- [x] 場地主檔管理（Model + Admin + VenueTimeSlot 多時段）
+- [x] 演出活動 + 排練管理（Model + Admin + views + templates）
 - [x] QR Code 簽到系統（Model + Admin，views/前端待做）
 - [x] 曲目分配（Model + Admin，LINE Bot 通知待做）
 - [x] 財務管理（Model + Admin）
 - [x] 樂譜庫存管理（Model + Admin）
 - [x] 公用財產管理 + 借用系統（Model + Admin）
 - [ ] 會員通訊錄（views/前端待做）
+- [ ] QR Code 簽到頁面（views/前端待做）
+- [ ] 請假申請頁面（views/前端待做）
 
 ### Phase 3 — 進階功能
 - [ ] 會議紀錄 + Whisper 語音辨識
@@ -537,21 +553,3 @@ fjcwo/
 - SSH 改用金鑰登入，關閉密碼登入
 - 定期備份資料
 
----
-
-## 九、舊版 Hugo 架構（參考用）
-
-```
-FJCWO-Web/（已棄用，遷移至 Django）
-├── content/
-│   ├── docs/
-│   │   ├── rules.md
-│   │   ├── registration.md
-│   │   └── about.md
-│   └── alumni/
-│       ├── join-us.md
-│       └── membership.md
-├── static/images/
-├── hugo.toml
-└── themes/LoveIt/
-```
