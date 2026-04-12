@@ -62,6 +62,12 @@ class User(AbstractUser):
     def __str__(self):
         return f'{self.name} ({self.username})'
 
+    def save(self, *args, **kwargs):
+        # role=admin 或 superuser 時自動取得 Django Admin 存取權
+        if self.is_superuser or self.role == self.Role.ADMIN:
+            self.is_staff = True
+        super().save(*args, **kwargs)
+
     @property
     def is_officer(self):
         return self.is_superuser or self.role in (self.Role.OFFICER, self.Role.ADMIN)
