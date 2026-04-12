@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}會員通訊錄 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">會員通訊錄</h2>
+
+{% if not user.is_officer %}
+<div class="alert alert-info">電話僅幹部可查閱。</div>
+{% endif %}
+
+{% for category, members in grouped_members %}
+<h5 class="text-muted mt-4 mb-2">{{ category }}</h5>
+<div class="table-responsive mb-3">
+  <table class="table table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>姓名</th>
+        <th>樂器</th>
+        <th>聲部</th>
+        <th>畢業年份</th>
+        {% if user.is_officer %}
+        <th>電話</th>
+        <th>Email</th>
+        {% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for member in members %}
+      <tr>
+        <td>{{ member.name }}</td>
+        <td>{{ member.instrument.name|default:"—" }}</td>
+        <td>{{ member.section.name|default:"—" }}</td>
+        <td>{{ member.grad_year|default:"—" }}</td>
+        {% if user.is_officer %}
+        <td>{{ member.phone|default:"—" }}</td>
+        <td><a href="mailto:{{ member.email }}">{{ member.email }}</a></td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% empty %}
+<p class="text-muted">目前沒有會員資料。</p>
+{% endfor %}
+{% endblock %}
