@@ -34,6 +34,11 @@
         </strong>
         <div class="text-muted small mt-1">請聯絡幹部重新產生。</div>
       </div>
+      <div class="text-center mt-3">
+        <a href="{% url 'events:event_list' %}" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-arrow-left"></i> 返回演出活動
+        </a>
+      </div>
 
     {% else %}
       <form method="post" action="{% url 'events:qr_checkin_confirm' qr_token.token %}">

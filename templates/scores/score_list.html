@@ -21,9 +21,10 @@
       <option value="part" {% if selected_type == 'part' %}selected{% endif %}>分譜</option>
     </select>
   </div>
-  {% if selected_type == 'part' or not selected_type %}
   <div class="col-auto">
-    <select name="instrument" class="form-select form-select-sm" onchange="this.form.submit()">
+    <select name="instrument" class="form-select form-select-sm"
+            onchange="this.form.submit()"
+            {% if selected_type == 'full' %}disabled title="總譜不依樂器篩選"{% endif %}>
       <option value="">所有樂器</option>
       {% for inst in instruments %}
       <option value="{{ inst.pk }}" {% if selected_instrument == inst.pk|stringformat:"s" %}selected{% endif %}>
@@ -32,7 +33,6 @@
       {% endfor %}
     </select>
   </div>
-  {% endif %}
 </form>
 
 {% if scores %}

@@ -1,5 +1,6 @@
 import base64
 import io
+import uuid
 
 import qrcode
 from django.contrib import messages
@@ -55,6 +56,7 @@ def rehearsal_detail(request, pk):
     )
     return render(request, 'events/rehearsal_detail.html', {
         'rehearsal': rehearsal,
+        'now': timezone.now(),
     })
 
 
@@ -189,19 +191,18 @@ def qr_generate(request, pk):
     hours = int(request.POST.get('hours', 4))
     expires_at = timezone.now() + timezone.timedelta(hours=hours)
 
-    qr_token, created = RehearsalQRToken.objects.get_or_create(
-        rehearsal=rehearsal,
-        defaults={'expires_at': expires_at, 'is_active': True},
-    )
-    if not created:
-        import uuid
-        qr_token.token = uuid.uuid4()
-        qr_token.expires_at = expires_at
-        qr_token.is_active = True
-        qr_token.save()
-
-    action = '已產生' if created else '已重新產生'
-    messages.success(request, f'QR Code {action}，有效期限 {hours} 小時。')
+    existing = RehearsalQRToken.objects.filter(rehearsal=rehearsal).first()
+    if existing:
+        existing.token = uuid.uuid4()
+        existing.expires_at = expires_at
+        existing.is_active = True
+        existing.save()
+        messages.success(request, f'QR Code 已重新產生，有效期限 {hours} 小時。')
+    else:
+        RehearsalQRToken.objects.create(
+            rehearsal=rehearsal, expires_at=expires_at, is_active=True,
+        )
+        messages.success(request, f'QR Code 已產生，有效期限 {hours} 小時。')
     return redirect('events:qr_manage', pk=pk)
 
 

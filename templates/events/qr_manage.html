@@ -70,12 +70,8 @@
           {% csrf_token %}
           <div class="input-group input-group-sm mb-2">
             <span class="input-group-text">有效</span>
-            <select name="hours" class="form-select">
-              <option value="2">2 小時</option>
-              <option value="4" selected>4 小時</option>
-              <option value="6">6 小時</option>
-              <option value="8">8 小時</option>
-            </select>
+            <input type="number" name="hours" class="form-control" min="1" max="24" value="4">
+            <span class="input-group-text">小時</span>
           </div>
           <button class="btn btn-primary btn-sm w-100">
             <i class="bi bi-qr-code-scan"></i>

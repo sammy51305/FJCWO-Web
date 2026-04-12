@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -49,6 +50,14 @@ class Score(models.Model):
         verbose_name = '樂譜'
         verbose_name_plural = '樂譜列表'
         ordering = ['title']
+
+    def clean(self):
+        if self.score_type == self.ScoreType.FULL:
+            if self.instrument or self.section:
+                raise ValidationError('總譜不應指定樂器或聲部。')
+        elif self.score_type == self.ScoreType.PART:
+            if not self.instrument:
+                raise ValidationError('分譜必須指定樂器。')
 
     def __str__(self):
         if self.score_type == self.ScoreType.PART and self.instrument:

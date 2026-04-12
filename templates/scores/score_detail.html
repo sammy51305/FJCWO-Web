@@ -61,10 +61,14 @@
           <dd class="col-sm-8">{{ score.get_source_display|default:"—" }}</dd>
           <dt class="col-sm-4">實體數量</dt>
           <dd class="col-sm-8">{{ score.physical_quantity }} 本</dd>
-          {% if score.file %}
           <dt class="col-sm-4">PDF</dt>
-          <dd class="col-sm-8"><a href="{{ score.file.url }}" target="_blank">下載</a></dd>
-          {% endif %}
+          <dd class="col-sm-8">
+            {% if score.file %}
+              <a href="{{ score.file.url }}" target="_blank">下載</a>
+            {% else %}
+              <span class="text-muted">無數位版本</span>
+            {% endif %}
+          </dd>
         </dl>
       </div>
     </div>

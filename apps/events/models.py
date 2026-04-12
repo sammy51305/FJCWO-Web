@@ -240,6 +240,7 @@ class LeaveRequest(models.Model):
     )
     reason = models.TextField('請假原因')
     status = models.CharField('狀態', max_length=10, choices=Status, default=Status.PENDING)
+    created_at = models.DateTimeField('申請時間', auto_now_add=True)
     reviewed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='reviewed_leaves', verbose_name='審核幹部'

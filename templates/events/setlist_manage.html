@@ -101,7 +101,7 @@
                    value="{{ next_order }}" required>
           </div>
 
-          <button class="btn btn-primary w-100">
+          <button class="btn btn-primary w-100" {% if not available_scores %}disabled{% endif %}>
             <i class="bi bi-plus-lg"></i> 加入曲目
           </button>
         </form>
