@@ -64,7 +64,7 @@ class User(AbstractUser):
 
     @property
     def is_officer(self):
-        return self.role in (self.Role.OFFICER, self.Role.ADMIN)
+        return self.is_superuser or self.role in (self.Role.OFFICER, self.Role.ADMIN)
 
     @property
     def is_admin_role(self):
