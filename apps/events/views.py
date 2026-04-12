@@ -67,7 +67,9 @@ def leave_request_create(request, rehearsal_pk):
 
     if request.method == 'POST':
         reason = request.POST.get('reason', '').strip()
-        if not reason:
+        if rehearsal.date <= timezone.now():
+            messages.error(request, '排練已結束，無法申請請假。')
+        elif not reason:
             messages.error(request, '請填寫請假原因。')
         elif existing:
             messages.error(request, '您已提交過此次排練的請假申請。')
@@ -291,7 +293,7 @@ def setlist_manage(request, pk):
             elif Setlist.objects.filter(event=event, order=order).exists():
                 messages.error(request, f'演出順序 {order} 已被使用。')
             else:
-                score = get_object_or_404(Score, pk=score_id)
+                score = get_object_or_404(Score, pk=score_id, score_type=Score.ScoreType.FULL)
                 Setlist.objects.create(event=event, score=score, order=order)
                 messages.success(request, f'已新增《{score.title}》。')
 

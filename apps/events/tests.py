@@ -447,3 +447,173 @@ class QRCodeTest(TestCase):
                 status=RehearsalAttendance.Status.PRESENT,
             ).exists()
         )
+
+    def test_qr_checkin_already_checked_in_shows_message(self):
+        """已簽到的團員再次訪問簽到頁應顯示已完成提示"""
+        from .models import RehearsalQRToken
+        self.client.force_login(self.officer)
+        self.client.post(self.generate_url, {'hours': 4})
+        token = RehearsalQRToken.objects.get(rehearsal=self.rehearsal)
+        self.client.force_login(self.member)
+        # 第一次簽到
+        self.client.post(reverse('events:qr_checkin_confirm', args=[token.token]))
+        # 再訪簽到頁
+        r = self.client.get(reverse('events:qr_checkin', args=[token.token]))
+        self.assertContains(r, '已完成簽到')
+
+    # ── T04 停用/啟用 ─────────────────────────────────────────
+
+    def test_qr_toggle_disables_active_token(self):
+        """對啟用中的 token 呼叫 toggle 應停用"""
+        from .models import RehearsalQRToken
+        self.client.force_login(self.officer)
+        self.client.post(self.generate_url, {'hours': 4})
+        token = RehearsalQRToken.objects.get(rehearsal=self.rehearsal)
+        self.assertTrue(token.is_active)
+        toggle_url = reverse('events:qr_toggle', args=[self.rehearsal.pk])
+        self.client.post(toggle_url)
+        token.refresh_from_db()
+        self.assertFalse(token.is_active)
+
+    def test_qr_toggle_reenables_inactive_token(self):
+        """對已停用的 token 呼叫 toggle 應重新啟用"""
+        from .models import RehearsalQRToken
+        self.client.force_login(self.officer)
+        self.client.post(self.generate_url, {'hours': 4})
+        token = RehearsalQRToken.objects.get(rehearsal=self.rehearsal)
+        token.is_active = False
+        token.save()
+        toggle_url = reverse('events:qr_toggle', args=[self.rehearsal.pk])
+        self.client.post(toggle_url)
+        token.refresh_from_db()
+        self.assertTrue(token.is_active)
+
+
+class SetlistManageTest(TestCase):
+    """演出曲目管理"""
+
+    def setUp(self):
+        from apps.scores.models import Score
+        self.officer = User.objects.create_user(
+            username='sl_officer',
+            email='sl_officer@test.local',
+            password='testpass123',
+            name='曲目測試幹部',
+            role=User.Role.OFFICER,
+        )
+        self.member = User.objects.create_user(
+            username='sl_member',
+            email='sl_member@test.local',
+            password='testpass123',
+            name='曲目測試團員',
+            role=User.Role.MEMBER,
+        )
+        self.venue = Venue.objects.create(name='曲目測試場地', type='rehearsal')
+        self.event = PerformanceEvent.objects.create(
+            name='曲目測試音樂會',
+            type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + timedelta(days=30),
+            performance_venue=self.venue,
+        )
+        self.full_score = Score.objects.create(
+            title='測試總譜', score_type=Score.ScoreType.FULL
+        )
+        from apps.accounts.models import InstrumentType
+        self.instrument = InstrumentType.objects.create(
+            name='長笛2', category=InstrumentType.Category.WOODWIND
+        )
+        self.part_score = Score.objects.create(
+            title='測試分譜',
+            score_type=Score.ScoreType.PART,
+            instrument=self.instrument,
+        )
+        self.url = reverse('events:setlist_manage', args=[self.event.pk])
+
+    # ── T01 存取控制 ────────────────────────────────────────
+
+    def test_member_cannot_access(self):
+        """一般團員無法進入曲目管理頁"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertRedirects(r, reverse('events:event_detail', args=[self.event.pk]), fetch_redirect_response=False)
+
+    def test_officer_can_access(self):
+        """幹部可進入曲目管理頁"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 200)
+
+    # ── T02 新增曲目 ─────────────────────────────────────────
+
+    def test_add_full_score_succeeds(self):
+        """新增總譜應成功建立 Setlist"""
+        from .models import Setlist
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'action': 'add', 'score_id': self.full_score.pk, 'order': 1
+        })
+        self.assertTrue(Setlist.objects.filter(event=self.event, score=self.full_score).exists())
+
+    def test_add_part_score_blocked(self):
+        """嘗試新增分譜應被擋下（404），不建立 Setlist"""
+        from .models import Setlist
+        self.client.force_login(self.officer)
+        r = self.client.post(self.url, {
+            'action': 'add', 'score_id': self.part_score.pk, 'order': 1
+        })
+        self.assertEqual(r.status_code, 404)
+        self.assertFalse(Setlist.objects.filter(event=self.event).exists())
+
+    def test_duplicate_order_blocked(self):
+        """演出順序重複時應顯示錯誤，不建立第二筆"""
+        from .models import Setlist
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {'action': 'add', 'score_id': self.full_score.pk, 'order': 1})
+        from apps.scores.models import Score as ScoreModel
+        score2 = ScoreModel.objects.create(title='另一首', score_type=ScoreModel.ScoreType.FULL)
+        self.client.post(self.url, {'action': 'add', 'score_id': score2.pk, 'order': 1})
+        self.assertEqual(Setlist.objects.filter(event=self.event).count(), 1)
+
+    # ── T03 移除曲目 ─────────────────────────────────────────
+
+    def test_remove_score_deletes_setlist(self):
+        """移除曲目應刪除對應 Setlist"""
+        from .models import Setlist
+        item = Setlist.objects.create(event=self.event, score=self.full_score, order=1)
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {'action': 'remove', 'item_id': item.pk})
+        self.assertFalse(Setlist.objects.filter(pk=item.pk).exists())
+
+
+class LeaveRequestPastRehearsalTest(TestCase):
+    """過期排練的請假申請 server-side 阻擋"""
+
+    def setUp(self):
+        self.member = User.objects.create_user(
+            username='past_member',
+            email='past@test.local',
+            password='testpass123',
+            name='過期測試員',
+            role=User.Role.MEMBER,
+        )
+        self.venue = Venue.objects.create(name='過期測試場地', type='rehearsal')
+        self.event = PerformanceEvent.objects.create(
+            name='過期測試音樂會',
+            type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + timedelta(days=30),
+            performance_venue=self.venue,
+        )
+        self.past_rehearsal = Rehearsal.objects.create(
+            event=self.event,
+            sequence=1,
+            date=timezone.now() - timedelta(days=1),
+            venue=self.venue,
+        )
+        self.leave_url = reverse('events:leave_request_create', args=[self.past_rehearsal.pk])
+
+    def test_post_to_past_rehearsal_is_blocked(self):
+        """直接 POST 到已結束排練的請假 URL 應被擋下，不建立資料"""
+        self.client.force_login(self.member)
+        r = self.client.post(self.leave_url, {'reason': '想繞過前端限制'})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(LeaveRequest.objects.count(), 0)

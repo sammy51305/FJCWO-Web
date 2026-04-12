@@ -1,6 +1,6 @@
 # FJCWO-Web 架構文件
 
-> 最後更新：2026-04-12（新增 VenueTimeSlot，共 23 張 Model）
+> 最後更新：2026-04-13（Phase 2 完成，QR 簽到 / 樂譜庫存 / 請假申請，共 23 張 Model）
 > 本文件記錄系統架構決策與設計規劃，供開發參考。
 
 ---
@@ -22,7 +22,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 
 | 項目 | 選擇 | 理由 |
 |------|------|------|
-| 後端框架 | Django 5.x | 內建 Auth、Admin 後台、穩定長期維護 |
+| 後端框架 | Django 6.x | 內建 Auth、Admin 後台、穩定長期維護 |
 | 資料庫 | PostgreSQL | 支援 django-tenants 的 Schema 隔離 |
 | 前端 | Bootstrap 5 | 輕量、維護簡單、無需 JS 框架 |
 | 多租戶 | django-tenants | 預留未來 SaaS 擴充空間 |
@@ -341,6 +341,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | rehearsal | 哪場排練（關聯 Rehearsal）|
 | reason | 請假原因 |
 | status | 待審核 / 核准 / 拒絕 |
+| created_at | 申請時間（自動填入）|
 | reviewed_by | 審核幹部（關聯 User）|
 | reviewed_at | 審核時間 |
 
@@ -488,13 +489,17 @@ FJCWO-Web/
 │   ├── accounts/
 │   ├── events/
 │   ├── public/
-│   └── registration/
+│   ├── registration/
+│   └── scores/
 ├── static/
 │   └── images/             # favicon、logo 等靜態圖檔
 ├── fixtures/               # 測試用初始資料（loaddata 用）
 │   └── venues.json         # 場地 + 場地時段
 ├── _notes/                 # 開發文件（不進 production）
-│   └── Architecture.md
+│   ├── Architecture.md
+│   ├── DESIGN.md
+│   ├── SETUP.md
+│   └── TESTING.md
 ├── .env                    # 環境變數（不進 git）
 ├── .env.example            # 環境變數範本
 ├── requirements.txt
@@ -514,13 +519,12 @@ FJCWO-Web/
 ### Phase 2 — 核心功能
 - [x] 場地主檔管理（Model + Admin + VenueTimeSlot 多時段）
 - [x] 演出活動 + 排練管理（Model + Admin + views + templates）
-- [x] QR Code 簽到系統（Model + Admin，views/前端待做）
+- [x] QR Code 簽到系統（Model + Admin + views + templates）
 - [x] 曲目分配（Model + Admin，LINE Bot 通知待做）
 - [x] 財務管理（Model + Admin）
-- [x] 樂譜庫存管理（Model + Admin）
+- [x] 樂譜庫存管理（Model + Admin + views + templates）
 - [x] 公用財產管理 + 借用系統（Model + Admin）
 - [x] 會員通訊錄（按樂器分組，電話/Email 幹部限定）
-- [ ] QR Code 簽到頁面（views/前端待做）
 - [x] 請假申請頁面（申請、我的紀錄、幹部審核）
 
 ### Phase 3 — 進階功能

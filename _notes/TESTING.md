@@ -51,7 +51,7 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 
 ## 目前測試總覽
 
-共 **90 個測試**，分布在 4 個 app。
+共 **100 個測試**，分布在 4 個 app。
 
 ### `apps/accounts/tests.py`（27 個）
 
@@ -68,7 +68,9 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 |-------|---------|
 | `LeaveRequestTestCase` | 請假申請的存取控制、空白原因被擋、正常送出、重複申請防止、我的紀錄、幹部審核（核准/拒絕）|
 | `EventViewsTest` | 演出活動列表/詳情、排練詳情、摘要/備註顯示、申請請假按鈕（未來啟用/過去停用）|
-| `QRCodeTest` | QR 管理頁存取控制、產生 token、重新產生換 UUID、簽到頁顯示、簽到確認建立出席紀錄 |
+| `QRCodeTest` | QR 管理頁存取控制、產生 token、重新產生換 UUID、停用/啟用 toggle、簽到頁顯示、已簽到提示、簽到確認建立出席紀錄 |
+| `SetlistManageTest` | 曲目管理存取控制、新增總譜成功、新增分譜被擋（404）、重複順序被擋、移除曲目 |
+| `LeaveRequestPastRehearsalTest` | 直接 POST 到已結束排練的請假 URL 應被 server-side 阻擋 |
 
 ### `apps/scores/tests.py`（14 個）
 
@@ -183,7 +185,6 @@ def test_invalid_state_raises(self):
 
 | App | 功能 | 說明 |
 |-----|------|------|
-| `events` | setlist_manage（曲目管理） | 新增/移除演出曲目 |
 | `finance` | 所有功能 | 僅有 Model + Admin，尚無前端 |
 | `assets` | 所有功能 | 僅有 Model + Admin，尚無前端 |
 | `announcements` | 所有功能 | 僅有 Model + Admin，尚無前端 |
