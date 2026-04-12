@@ -92,9 +92,10 @@
         <td>{{ rehearsal.date|date:"Y/m/d（D）H:i" }}</td>
         <td>{{ rehearsal.venue.name }}</td>
         <td>
-          {% if rehearsal.summary_progress %}
-          <a href="{% url 'events:rehearsal_detail' rehearsal.pk %}" class="btn btn-sm btn-outline-secondary">排練摘要</a>
-          {% endif %}
+          <a href="{% url 'events:rehearsal_detail' rehearsal.pk %}"
+             class="btn btn-sm {% if rehearsal.summary_progress %}btn-outline-secondary{% else %}btn-outline-light text-muted{% endif %}">
+            {% if rehearsal.summary_progress %}排練摘要{% else %}詳情{% endif %}
+          </a>
         </td>
       </tr>
       {% endfor %}
