@@ -185,3 +185,135 @@ class LeaveRequestTestCase(TestCase):
         self.client.post(self.review_url, {'leave_id': leave.pk, 'action': 'approve'})
         r = self.client.get(self.review_url)
         self.assertContains(r, '核准')
+
+
+class EventViewsTest(TestCase):
+    """演出活動 / 排練頁面"""
+
+    def setUp(self):
+        self.member = User.objects.create_user(
+            username='ev_member',
+            email='ev_member@test.local',
+            password='testpass123',
+            name='活動測試團員',
+            role=User.Role.MEMBER,
+        )
+        self.venue = Venue.objects.create(name='測試場地', type='rehearsal')
+        self.event = PerformanceEvent.objects.create(
+            name='2026 測試音樂會',
+            type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + timedelta(days=30),
+            performance_venue=self.venue,
+            status=PerformanceEvent.Status.CONFIRMED,
+        )
+        self.past_event = PerformanceEvent.objects.create(
+            name='2025 已結束音樂會',
+            type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() - timedelta(days=30),
+            performance_venue=self.venue,
+            status=PerformanceEvent.Status.FINISHED,
+        )
+        self.rehearsal = Rehearsal.objects.create(
+            event=self.event,
+            sequence=1,
+            date=timezone.now() + timedelta(days=7),
+            venue=self.venue,
+            summary_progress='第一樂章進度良好',
+            summary_notes='請攜帶樂器',
+        )
+
+    # ── T01 演出活動列表 ─────────────────────────────────────
+
+    def test_event_list_requires_login(self):
+        """未登入應導向登入頁"""
+        r = self.client.get(reverse('events:event_list'))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    def test_event_list_accessible(self):
+        """登入後可看到活動列表"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:event_list'))
+        self.assertEqual(r.status_code, 200)
+
+    def test_event_list_shows_upcoming(self):
+        """列表顯示即將到來的活動"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:event_list'))
+        self.assertContains(r, '2026 測試音樂會')
+
+    def test_event_list_shows_past(self):
+        """列表顯示已結束的活動"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:event_list'))
+        self.assertContains(r, '2025 已結束音樂會')
+
+    # ── T02 演出活動詳情 ─────────────────────────────────────
+
+    def test_event_detail_requires_login(self):
+        """未登入應導向登入頁"""
+        r = self.client.get(reverse('events:event_detail', args=[self.event.pk]))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    def test_event_detail_accessible(self):
+        """登入後可看到活動詳情"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:event_detail', args=[self.event.pk]))
+        self.assertEqual(r.status_code, 200)
+
+    def test_event_detail_shows_name(self):
+        """活動詳情顯示活動名稱"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:event_detail', args=[self.event.pk]))
+        self.assertContains(r, '2026 測試音樂會')
+
+    def test_event_detail_shows_rehearsals(self):
+        """活動詳情顯示排練列表"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:event_detail', args=[self.event.pk]))
+        self.assertContains(r, '第 1 次')
+
+    def test_event_detail_404_on_invalid_pk(self):
+        """不存在的活動 pk 應回 404"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:event_detail', args=[99999]))
+        self.assertEqual(r.status_code, 404)
+
+    # ── T03 排練詳情 ─────────────────────────────────────────
+
+    def test_rehearsal_detail_requires_login(self):
+        """未登入應導向登入頁"""
+        r = self.client.get(reverse('events:rehearsal_detail', args=[self.rehearsal.pk]))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    def test_rehearsal_detail_accessible(self):
+        """登入後可看到排練詳情"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:rehearsal_detail', args=[self.rehearsal.pk]))
+        self.assertEqual(r.status_code, 200)
+
+    def test_rehearsal_detail_shows_summary(self):
+        """排練詳情顯示摘要內容"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:rehearsal_detail', args=[self.rehearsal.pk]))
+        self.assertContains(r, '第一樂章進度良好')
+
+    def test_rehearsal_detail_shows_notes(self):
+        """排練詳情顯示給團員備註"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:rehearsal_detail', args=[self.rehearsal.pk]))
+        self.assertContains(r, '請攜帶樂器')
+
+    def test_rehearsal_detail_has_leave_button(self):
+        """排練詳情含申請請假按鈕"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:rehearsal_detail', args=[self.rehearsal.pk]))
+        self.assertContains(r, '申請請假')
+
+    def test_rehearsal_detail_404_on_invalid_pk(self):
+        """不存在的排練 pk 應回 404"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:rehearsal_detail', args=[99999]))
+        self.assertEqual(r.status_code, 404)
