@@ -155,6 +155,7 @@ def qr_manage(request, pk):
     qr_token = getattr(rehearsal, 'qr_token', None)
 
     qr_image = None
+    checkin_url = None
     if qr_token:
         checkin_url = request.build_absolute_uri(f'/events/checkin/{qr_token.token}/')
         qr_image = _make_qr_data_url(checkin_url)
@@ -170,6 +171,7 @@ def qr_manage(request, pk):
         'rehearsal': rehearsal,
         'qr_token': qr_token,
         'qr_image': qr_image,
+        'checkin_url': checkin_url,
         'attendances': attendances,
     })
 

@@ -26,7 +26,14 @@
           {% if qr_token.is_valid %}
             <img src="{{ qr_image }}" alt="QR Code" class="img-fluid mb-3" style="max-width:240px;">
             <div class="badge bg-success mb-2">啟用中</div>
-            <p class="text-muted small mb-3">有效至 {{ qr_token.expires_at|date:"H:i" }}（{{ qr_token.expires_at|date:"m/d" }}）</p>
+            <p class="text-muted small mb-1">有效至 {{ qr_token.expires_at|date:"H:i" }}（{{ qr_token.expires_at|date:"m/d" }}）</p>
+            <div class="input-group input-group-sm mb-3">
+              <input type="text" id="checkin-url" class="form-control form-control-sm text-muted"
+                     value="{{ checkin_url }}" readonly>
+              <button class="btn btn-outline-secondary" type="button" onclick="copyCheckinUrl()">
+                <i class="bi bi-clipboard"></i>
+              </button>
+            </div>
           {% elif not qr_token.is_active %}
             <img src="{{ qr_image }}" alt="QR Code" class="img-fluid mb-3 opacity-25" style="max-width:240px;">
             <div class="badge bg-secondary mb-2">已停用</div>
@@ -123,4 +130,17 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function copyCheckinUrl() {
+  const input = document.getElementById('checkin-url');
+  navigator.clipboard.writeText(input.value).then(() => {
+    const btn = input.nextElementSibling;
+    btn.innerHTML = '<i class="bi bi-check"></i>';
+    setTimeout(() => btn.innerHTML = '<i class="bi bi-clipboard"></i>', 2000);
+  });
+}
+</script>
 {% endblock %}
