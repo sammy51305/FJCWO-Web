@@ -1,11 +1,15 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}登入 — 輔仁百韻管樂團{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-md-5">
-    <h2 class="mb-4">團員登入</h2>
+    <div class="text-center mb-3">
+      <img src="{% static 'images/apple-icon-180x180.png' %}" alt="輔仁百韻管樂團" width="120">
+    </div>
+    <h2 class="mb-4 text-center">團員登入</h2>
     <form method="post">
       {% csrf_token %}
       {% for field in form %}
