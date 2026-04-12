@@ -317,3 +317,133 @@ class EventViewsTest(TestCase):
         self.client.force_login(self.member)
         r = self.client.get(reverse('events:rehearsal_detail', args=[99999]))
         self.assertEqual(r.status_code, 404)
+
+    def test_rehearsal_detail_leave_button_disabled_for_past(self):
+        """已結束排練的申請請假按鈕應為停用狀態"""
+        past_rehearsal = Rehearsal.objects.create(
+            event=self.event,
+            sequence=99,
+            date=timezone.now() - timedelta(days=1),
+            venue=self.venue,
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:rehearsal_detail', args=[past_rehearsal.pk]))
+        self.assertContains(r, '申請請假')
+        self.assertContains(r, 'disabled')
+
+    def test_rehearsal_detail_leave_button_active_for_future(self):
+        """未來排練的申請請假按鈕應為可用連結（不含 disabled title）"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:rehearsal_detail', args=[self.rehearsal.pk]))
+        self.assertContains(r, '申請請假')
+        self.assertNotContains(r, '排練已結束')
+
+
+class QRCodeTest(TestCase):
+    """QR Code 簽到系統"""
+
+    def setUp(self):
+        self.member = User.objects.create_user(
+            username='qr_member',
+            email='qr_member@test.local',
+            password='testpass123',
+            name='QR 測試團員',
+            role=User.Role.MEMBER,
+        )
+        self.officer = User.objects.create_user(
+            username='qr_officer',
+            email='qr_officer@test.local',
+            password='testpass123',
+            name='QR 測試幹部',
+            role=User.Role.OFFICER,
+        )
+        self.venue = Venue.objects.create(name='QR 測試場地', type='rehearsal')
+        self.event = PerformanceEvent.objects.create(
+            name='QR 測試音樂會',
+            type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + timedelta(days=30),
+            performance_venue=self.venue,
+        )
+        self.rehearsal = Rehearsal.objects.create(
+            event=self.event,
+            sequence=1,
+            date=timezone.now() + timedelta(days=7),
+            venue=self.venue,
+        )
+        self.manage_url = reverse('events:qr_manage', args=[self.rehearsal.pk])
+        self.generate_url = reverse('events:qr_generate', args=[self.rehearsal.pk])
+
+    # ── T01 存取控制 ────────────────────────────────────────
+
+    def test_member_cannot_access_qr_manage(self):
+        """一般團員無法進入 QR 管理頁"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.manage_url)
+        self.assertRedirects(r, reverse('events:event_list'), fetch_redirect_response=False)
+
+    def test_officer_can_access_qr_manage(self):
+        """幹部可進入 QR 管理頁"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.manage_url)
+        self.assertEqual(r.status_code, 200)
+
+    def test_unauthenticated_qr_manage_redirects(self):
+        """未登入應導向登入頁"""
+        r = self.client.get(self.manage_url)
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    # ── T02 產生 QR Code ─────────────────────────────────────
+
+    def test_qr_generate_creates_token(self):
+        """POST qr_generate 應建立 RehearsalQRToken"""
+        from .models import RehearsalQRToken
+        self.client.force_login(self.officer)
+        self.client.post(self.generate_url, {'hours': 4})
+        self.assertTrue(RehearsalQRToken.objects.filter(rehearsal=self.rehearsal).exists())
+
+    def test_qr_generate_token_is_active(self):
+        """新產生的 token is_active 為 True"""
+        from .models import RehearsalQRToken
+        self.client.force_login(self.officer)
+        self.client.post(self.generate_url, {'hours': 4})
+        token = RehearsalQRToken.objects.get(rehearsal=self.rehearsal)
+        self.assertTrue(token.is_active)
+
+    def test_qr_regenerate_changes_uuid(self):
+        """重新產生 QR Code 時 UUID 應改變"""
+        from .models import RehearsalQRToken
+        self.client.force_login(self.officer)
+        self.client.post(self.generate_url, {'hours': 4})
+        first_token = RehearsalQRToken.objects.get(rehearsal=self.rehearsal).token
+        self.client.post(self.generate_url, {'hours': 4})
+        second_token = RehearsalQRToken.objects.get(rehearsal=self.rehearsal).token
+        self.assertNotEqual(first_token, second_token)
+
+    # ── T03 簽到流程 ─────────────────────────────────────────
+
+    def test_qr_checkin_valid_token_shows_form(self):
+        """有效 token 的簽到頁顯示確認按鈕"""
+        from .models import RehearsalQRToken
+        self.client.force_login(self.officer)
+        self.client.post(self.generate_url, {'hours': 4})
+        token = RehearsalQRToken.objects.get(rehearsal=self.rehearsal)
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:qr_checkin', args=[token.token]))
+        self.assertContains(r, '確認簽到')
+
+    def test_qr_checkin_confirm_creates_attendance(self):
+        """POST 簽到後應建立出席紀錄"""
+        from .models import RehearsalAttendance, RehearsalQRToken
+        self.client.force_login(self.officer)
+        self.client.post(self.generate_url, {'hours': 4})
+        token = RehearsalQRToken.objects.get(rehearsal=self.rehearsal)
+        self.client.force_login(self.member)
+        self.client.post(reverse('events:qr_checkin_confirm', args=[token.token]))
+        self.assertTrue(
+            RehearsalAttendance.objects.filter(
+                rehearsal=self.rehearsal,
+                member=self.member,
+                status=RehearsalAttendance.Status.PRESENT,
+            ).exists()
+        )

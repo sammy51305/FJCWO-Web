@@ -213,3 +213,61 @@ class MemberDirectoryTest(TestCase):
         self.client.force_login(self.officer)
         r = self.client.get(self.url)
         self.assertNotContains(r, '管理員本人')
+
+
+class UserRoleTest(TestCase):
+    """User 角色與權限屬性"""
+
+    # ── T08 is_officer ───────────────────────────────────────
+
+    def test_member_is_not_officer(self):
+        """member 角色 is_officer 為 False"""
+        user = User.objects.create_user(
+            username='role_member', password='x', name='', role=User.Role.MEMBER
+        )
+        self.assertFalse(user.is_officer)
+
+    def test_officer_is_officer(self):
+        """officer 角色 is_officer 為 True"""
+        user = User.objects.create_user(
+            username='role_officer', password='x', name='', role=User.Role.OFFICER
+        )
+        self.assertTrue(user.is_officer)
+
+    def test_admin_is_officer(self):
+        """admin 角色 is_officer 為 True"""
+        user = User.objects.create_user(
+            username='role_admin', password='x', name='', role=User.Role.ADMIN
+        )
+        self.assertTrue(user.is_officer)
+
+    def test_superuser_is_officer(self):
+        """superuser 帳號 is_officer 為 True（不論 role）"""
+        user = User.objects.create_user(
+            username='role_super', password='x', name='',
+            role=User.Role.MEMBER, is_superuser=True,
+        )
+        self.assertTrue(user.is_officer)
+
+    # ── T09 is_staff 自動設定 ────────────────────────────────
+
+    def test_admin_role_sets_is_staff(self):
+        """admin 角色儲存後 is_staff 自動為 True"""
+        user = User.objects.create_user(
+            username='staff_admin', password='x', name='', role=User.Role.ADMIN
+        )
+        self.assertTrue(user.is_staff)
+
+    def test_superuser_sets_is_staff(self):
+        """superuser 儲存後 is_staff 自動為 True"""
+        user = User.objects.create_superuser(
+            username='staff_super', password='x', name=''
+        )
+        self.assertTrue(user.is_staff)
+
+    def test_member_does_not_set_is_staff(self):
+        """member 角色 is_staff 不自動設為 True"""
+        user = User.objects.create_user(
+            username='staff_member', password='x', name='', role=User.Role.MEMBER
+        )
+        self.assertFalse(user.is_staff)
