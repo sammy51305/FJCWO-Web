@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}QR 簽到管理 — {{ rehearsal }} — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'events:event_list' %}">演出活動</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'events:event_detail' rehearsal.event.pk %}">{{ rehearsal.event.name }}</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'events:rehearsal_detail' rehearsal.pk %}">第 {{ rehearsal.sequence }} 次排練</a></li>
+    <li class="breadcrumb-item active">QR 簽到管理</li>
+  </ol>
+</nav>
+
+<h2 class="mb-1">QR 簽到管理</h2>
+<p class="text-muted mb-4">{{ rehearsal.date|date:"Y/m/d（D）H:i" }}　{{ rehearsal.venue.name }}</p>
+
+<div class="row g-4">
+  <!-- QR Code 區塊 -->
+  <div class="col-md-5">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">QR Code</div>
+      <div class="card-body text-center">
+
+        {% if qr_token %}
+          {% if qr_token.is_valid %}
+            <img src="{{ qr_image }}" alt="QR Code" class="img-fluid mb-3" style="max-width:240px;">
+            <div class="badge bg-success mb-2">啟用中</div>
+            <p class="text-muted small mb-3">有效至 {{ qr_token.expires_at|date:"H:i" }}（{{ qr_token.expires_at|date:"m/d" }}）</p>
+          {% elif not qr_token.is_active %}
+            <img src="{{ qr_image }}" alt="QR Code" class="img-fluid mb-3 opacity-25" style="max-width:240px;">
+            <div class="badge bg-secondary mb-2">已停用</div>
+            <p class="text-muted small mb-3">有效至 {{ qr_token.expires_at|date:"H:i" }}（{{ qr_token.expires_at|date:"m/d" }}）</p>
+          {% else %}
+            <img src="{{ qr_image }}" alt="QR Code" class="img-fluid mb-3 opacity-25" style="max-width:240px;">
+            <div class="badge bg-danger mb-2">已過期</div>
+            <p class="text-muted small mb-3">到期時間 {{ qr_token.expires_at|date:"H:i" }}（{{ qr_token.expires_at|date:"m/d" }}）</p>
+          {% endif %}
+
+          <!-- 啟用/停用 -->
+          <form method="post" action="{% url 'events:qr_toggle' rehearsal.pk %}" class="mb-2">
+            {% csrf_token %}
+            {% if qr_token.is_active %}
+              <button class="btn btn-outline-secondary btn-sm w-100">
+                <i class="bi bi-pause-circle"></i> 停用 QR Code
+              </button>
+            {% else %}
+              <button class="btn btn-outline-success btn-sm w-100">
+                <i class="bi bi-play-circle"></i> 重新啟用
+              </button>
+            {% endif %}
+          </form>
+
+        {% else %}
+          <div class="py-4 text-muted">
+            <i class="bi bi-qr-code fs-1 d-block mb-2"></i>
+            尚未產生 QR Code
+          </div>
+        {% endif %}
+
+        <!-- 產生/重新產生 -->
+        <form method="post" action="{% url 'events:qr_generate' rehearsal.pk %}" class="mt-3">
+          {% csrf_token %}
+          <div class="input-group input-group-sm mb-2">
+            <span class="input-group-text">有效</span>
+            <select name="hours" class="form-select">
+              <option value="2">2 小時</option>
+              <option value="4" selected>4 小時</option>
+              <option value="6">6 小時</option>
+              <option value="8">8 小時</option>
+            </select>
+          </div>
+          <button class="btn btn-primary btn-sm w-100">
+            <i class="bi bi-qr-code-scan"></i>
+            {% if qr_token %}重新產生{% else %}產生 QR Code{% endif %}
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 出席名單 -->
+  <div class="col-md-7">
+    <div class="card h-100">
+      <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+        出席紀錄
+        <span class="badge bg-primary">{{ attendances.count }} 筆</span>
+      </div>
+      <div class="card-body p-0">
+        {% if attendances %}
+          <table class="table table-sm table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>姓名</th>
+                <th>狀態</th>
+                <th>簽到時間</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for a in attendances %}
+              <tr>
+                <td>{{ a.member.name }}</td>
+                <td>
+                  {% if a.status == 'present' %}
+                    <span class="badge bg-success">出席</span>
+                  {% elif a.status == 'leave' %}
+                    <span class="badge bg-warning text-dark">請假</span>
+                  {% else %}
+                    <span class="badge bg-secondary">缺席</span>
+                  {% endif %}
+                </td>
+                <td class="text-muted small">
+                  {{ a.checked_in_at|date:"H:i"|default:"—" }}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="text-muted text-center py-4 mb-0">尚無出席紀錄</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

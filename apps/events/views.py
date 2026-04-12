@@ -1,9 +1,16 @@
+import base64
+import io
+
+import qrcode
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from .models import LeaveRequest, PerformanceEvent, Rehearsal
+from .models import (
+    LeaveRequest, PerformanceEvent, Rehearsal,
+    RehearsalAttendance, RehearsalQRToken,
+)
 
 
 @login_required
@@ -126,3 +133,135 @@ def leave_review_list(request):
         'pending': pending,
         'reviewed': reviewed,
     })
+
+
+def _make_qr_data_url(url):
+    img = qrcode.make(url)
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    data = base64.b64encode(buf.getvalue()).decode()
+    return f'data:image/png;base64,{data}'
+
+
+@login_required
+def qr_manage(request, pk):
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('events:event_list')
+
+    rehearsal = get_object_or_404(Rehearsal.objects.select_related('event', 'venue'), pk=pk)
+    qr_token = getattr(rehearsal, 'qr_token', None)
+
+    qr_image = None
+    if qr_token:
+        checkin_url = request.build_absolute_uri(f'/events/checkin/{qr_token.token}/')
+        qr_image = _make_qr_data_url(checkin_url)
+
+    attendances = (
+        RehearsalAttendance.objects
+        .filter(rehearsal=rehearsal)
+        .select_related('member')
+        .order_by('member__name')
+    )
+
+    return render(request, 'events/qr_manage.html', {
+        'rehearsal': rehearsal,
+        'qr_token': qr_token,
+        'qr_image': qr_image,
+        'attendances': attendances,
+    })
+
+
+@login_required
+def qr_generate(request, pk):
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('events:event_list')
+
+    if request.method != 'POST':
+        return redirect('events:qr_manage', pk=pk)
+
+    rehearsal = get_object_or_404(Rehearsal, pk=pk)
+    hours = int(request.POST.get('hours', 4))
+    expires_at = timezone.now() + timezone.timedelta(hours=hours)
+
+    qr_token, created = RehearsalQRToken.objects.get_or_create(
+        rehearsal=rehearsal,
+        defaults={'expires_at': expires_at, 'is_active': True},
+    )
+    if not created:
+        import uuid
+        qr_token.token = uuid.uuid4()
+        qr_token.expires_at = expires_at
+        qr_token.is_active = True
+        qr_token.save()
+
+    action = '已產生' if created else '已重新產生'
+    messages.success(request, f'QR Code {action}，有效期限 {hours} 小時。')
+    return redirect('events:qr_manage', pk=pk)
+
+
+@login_required
+def qr_toggle(request, pk):
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('events:event_list')
+
+    if request.method != 'POST':
+        return redirect('events:qr_manage', pk=pk)
+
+    rehearsal = get_object_or_404(Rehearsal, pk=pk)
+    qr_token = get_object_or_404(RehearsalQRToken, rehearsal=rehearsal)
+    qr_token.is_active = not qr_token.is_active
+    qr_token.save()
+    state = '啟用' if qr_token.is_active else '停用'
+    messages.success(request, f'QR Code 已{state}。')
+    return redirect('events:qr_manage', pk=pk)
+
+
+@login_required
+def qr_checkin(request, token):
+    qr_token = get_object_or_404(RehearsalQRToken.objects.select_related('rehearsal__event', 'rehearsal__venue'), token=token)
+    rehearsal = qr_token.rehearsal
+
+    existing = RehearsalAttendance.objects.filter(
+        rehearsal=rehearsal, member=request.user
+    ).first()
+
+    already_checked_in = (
+        existing and existing.status == RehearsalAttendance.Status.PRESENT
+    )
+
+    return render(request, 'events/qr_checkin.html', {
+        'qr_token': qr_token,
+        'rehearsal': rehearsal,
+        'is_valid': qr_token.is_valid(),
+        'already_checked_in': already_checked_in,
+        'existing': existing,
+    })
+
+
+@login_required
+def qr_checkin_confirm(request, token):
+    if request.method != 'POST':
+        return redirect('events:qr_checkin', token=token)
+
+    qr_token = get_object_or_404(RehearsalQRToken, token=token)
+
+    if not qr_token.is_valid():
+        messages.error(request, 'QR Code 已失效或過期，無法簽到。')
+        return redirect('events:qr_checkin', token=token)
+
+    attendance, _ = RehearsalAttendance.objects.get_or_create(
+        rehearsal=qr_token.rehearsal,
+        member=request.user,
+    )
+    if attendance.status == RehearsalAttendance.Status.PRESENT:
+        messages.info(request, '您已完成簽到。')
+    else:
+        attendance.status = RehearsalAttendance.Status.PRESENT
+        attendance.checked_in_at = timezone.now()
+        attendance.save()
+        messages.success(request, '簽到成功！')
+
+    return redirect('events:qr_checkin', token=token)

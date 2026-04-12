@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}排練簽到 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-sm-10 col-md-6 col-lg-5">
+
+    <div class="text-center mb-4">
+      <i class="bi bi-clipboard2-check fs-1 text-primary"></i>
+      <h2 class="mt-2 mb-0">排練簽到</h2>
+      <p class="text-muted">{{ rehearsal.event.name }}</p>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-body">
+        <p class="mb-1"><i class="bi bi-calendar3 me-1"></i> {{ rehearsal.date|date:"Y/m/d（D）H:i" }}</p>
+        <p class="mb-0"><i class="bi bi-geo-alt me-1"></i> {{ rehearsal.venue.name }}</p>
+      </div>
+    </div>
+
+    {% if already_checked_in %}
+      <div class="alert alert-success text-center">
+        <i class="bi bi-check-circle-fill fs-4 d-block mb-1"></i>
+        <strong>已完成簽到</strong>
+        <div class="text-muted small mt-1">{{ existing.checked_in_at|date:"H:i" }}</div>
+      </div>
+
+    {% elif not is_valid %}
+      <div class="alert alert-danger text-center">
+        <i class="bi bi-x-circle-fill fs-4 d-block mb-1"></i>
+        <strong>
+          {% if not qr_token.is_active %}QR Code 已停用{% else %}QR Code 已過期{% endif %}
+        </strong>
+        <div class="text-muted small mt-1">請聯絡幹部重新產生。</div>
+      </div>
+
+    {% else %}
+      <form method="post" action="{% url 'events:qr_checkin_confirm' qr_token.token %}">
+        {% csrf_token %}
+        <div class="d-grid">
+          <button type="submit" class="btn btn-primary btn-lg py-3">
+            <i class="bi bi-check2-circle me-2"></i>確認簽到
+          </button>
+        </div>
+        <p class="text-muted text-center small mt-2">
+          以 <strong>{{ request.user.name }}</strong> 身份簽到
+        </p>
+      </form>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

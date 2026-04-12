@@ -11,4 +11,9 @@ urlpatterns = [
     path('rehearsal/<int:rehearsal_pk>/leave/', views.leave_request_create, name='leave_request_create'),
     path('leave/mine/', views.my_leave_requests, name='my_leave_requests'),
     path('leave/review/', views.leave_review_list, name='leave_review_list'),
+    path('rehearsal/<int:pk>/qr/', views.qr_manage, name='qr_manage'),
+    path('rehearsal/<int:pk>/qr/generate/', views.qr_generate, name='qr_generate'),
+    path('rehearsal/<int:pk>/qr/toggle/', views.qr_toggle, name='qr_toggle'),
+    path('checkin/<uuid:token>/', views.qr_checkin, name='qr_checkin'),
+    path('checkin/<uuid:token>/confirm/', views.qr_checkin_confirm, name='qr_checkin_confirm'),
 ]
