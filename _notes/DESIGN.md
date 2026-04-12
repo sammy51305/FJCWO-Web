@@ -81,11 +81,25 @@ apps/
 ```python
 @property
 def is_officer(self):
-    return self.role in (self.Role.OFFICER, self.Role.ADMIN)
+    return self.is_superuser or self.role in (self.Role.OFFICER, self.Role.ADMIN)
 ```
 
 這個設計讓 views 和 templates 不需要同時判斷 `officer` 和 `admin`，
 只要寫 `user.is_officer` 就能涵蓋兩種有管理權的角色。
+
+`self.is_superuser` 也納入，確保 Django superuser 帳號能正常使用所有幹部功能。
+
+### `User.save()` 與 `is_staff` 自動設定
+
+```python
+def save(self, *args, **kwargs):
+    if self.is_superuser or self.role == self.Role.ADMIN:
+        self.is_staff = True
+    super().save(*args, **kwargs)
+```
+
+`is_staff=True` 才能進入 `/admin/` 後台。`admin` 角色和 superuser 需要這個權限，
+所以在 `save()` 時自動設定，避免手動忘記勾選。
 
 ### 在 views 裡如何擋權限
 
@@ -423,6 +437,14 @@ elif existing:
 進頁面時先查資料庫有沒有已存在的申請，如果有，POST 時直接擋掉。
 Model 層的 `unique_together` 是最後一道防線，但 view 層先擋才能給使用者友善的錯誤訊息。
 
+#### `created_at` 欄位
+
+```python
+created_at = models.DateTimeField('申請時間', auto_now_add=True)
+```
+
+記錄申請送出的時間，方便幹部在審核頁面看到申請時序，也作為稽核軌跡。
+
 #### 審核後的狀態流程
 
 ```
@@ -468,6 +490,31 @@ class ScoreType(models.TextChoices):
 
 `instrument` 和 `section` 欄位設為 `null=True, blank=True`，
 因為總譜不需要這兩個欄位，但分譜需要。
+
+Model 層透過 `clean()` 驗證確保資料一致性：
+
+```python
+def clean(self):
+    if self.score_type == self.ScoreType.FULL:
+        if self.instrument or self.section:
+            raise ValidationError('總譜不應指定樂器或聲部。')
+    elif self.score_type == self.ScoreType.PART:
+        if not self.instrument:
+            raise ValidationError('分譜必須指定樂器。')
+```
+
+Django Admin 的表單會自動呼叫 `clean()`，確保透過後台輸入的資料也符合規則。
+
+#### Setlist 只連結總譜
+
+`Setlist.score` 外鍵指向 `Score`，view 層限制只能選 `score_type='full'` 的曲子：
+
+```python
+available_scores = Score.objects.filter(score_type=Score.ScoreType.FULL)
+```
+
+演出曲目只需要記錄「哪首曲子」，個別樂手用哪份分譜由 `PartAssignment` 負責。
+把「曲目選擇」限制在總譜層面，讓 setlist 語意明確：一首曲子一個 item，不會因為分譜數量不同而重複列出。
 
 #### 版本鏈設計
 
