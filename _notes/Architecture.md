@@ -520,9 +520,9 @@ FJCWO-Web/
 - [x] 財務管理（Model + Admin）
 - [x] 樂譜庫存管理（Model + Admin）
 - [x] 公用財產管理 + 借用系統（Model + Admin）
-- [ ] 會員通訊錄（views/前端待做）
+- [x] 會員通訊錄（按樂器分組，電話/Email 幹部限定）
 - [ ] QR Code 簽到頁面（views/前端待做）
-- [ ] 請假申請頁面（views/前端待做）
+- [x] 請假申請頁面（申請、我的紀錄、幹部審核）
 
 ### Phase 3 — 進階功能
 - [ ] 會議紀錄 + Whisper 語音辨識
