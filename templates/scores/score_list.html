@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}樂譜庫存 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">樂譜庫存</h2>
+  {% if user.is_officer %}
+  <a href="/admin/scores/score/add/" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg"></i> 新增樂譜
+  </a>
+  {% endif %}
+</div>
+
+<!-- 篩選列 -->
+<form method="get" class="row g-2 mb-4">
+  <div class="col-auto">
+    <select name="type" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="" {% if not selected_type %}selected{% endif %}>全部</option>
+      <option value="full" {% if selected_type == 'full' %}selected{% endif %}>總譜</option>
+      <option value="part" {% if selected_type == 'part' %}selected{% endif %}>分譜</option>
+    </select>
+  </div>
+  {% if selected_type == 'part' or not selected_type %}
+  <div class="col-auto">
+    <select name="instrument" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="">所有樂器</option>
+      {% for inst in instruments %}
+      <option value="{{ inst.pk }}" {% if selected_instrument == inst.pk|stringformat:"s" %}selected{% endif %}>
+        {{ inst.name }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+</form>
+
+{% if scores %}
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>曲名</th>
+        <th>作曲/編曲</th>
+        <th>類型</th>
+        <th>版權</th>
+        <th class="text-end">實體數量</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for score in scores %}
+      <tr>
+        <td>
+          {{ score.title }}
+          {% if score.parent_score %}
+            <small class="text-muted ms-1">（改版）</small>
+          {% endif %}
+        </td>
+        <td class="text-muted small">
+          {% if score.composer %}{{ score.composer }}{% endif %}
+          {% if score.composer and score.arranger %} / {% endif %}
+          {% if score.arranger %}編：{{ score.arranger }}{% endif %}
+        </td>
+        <td>
+          {% if score.score_type == 'full' %}
+            <span class="badge bg-primary">總譜</span>
+          {% else %}
+            <span class="badge bg-secondary">分譜</span>
+            {% if score.instrument %}
+              <small class="ms-1">{{ score.instrument.name }}{% if score.section %}・{{ score.section.name }}{% endif %}</small>
+            {% endif %}
+          {% endif %}
+        </td>
+        <td>
+          {% if score.copyright_status == 'public_domain' %}
+            <span class="badge bg-success">公版</span>
+          {% elif score.copyright_status == 'licensed' %}
+            <span class="badge bg-info text-dark">已授權</span>
+          {% else %}
+            <span class="badge bg-warning text-dark">有版權</span>
+          {% endif %}
+        </td>
+        <td class="text-end">
+          {% if score.physical_quantity %}{{ score.physical_quantity }} 本{% else %}<span class="text-muted">—</span>{% endif %}
+        </td>
+        <td>
+          <a href="{% url 'scores:score_detail' score.pk %}" class="btn btn-sm btn-outline-secondary">詳細</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted">沒有符合條件的樂譜。</p>
+{% endif %}
+{% endblock %}

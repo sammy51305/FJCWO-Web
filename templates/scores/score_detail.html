@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}{{ score.title }} — 樂譜庫存 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'scores:score_list' %}">樂譜庫存</a></li>
+    <li class="breadcrumb-item active">{{ score.title }}</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h2 class="mb-1">{{ score.title }}</h2>
+    <div class="d-flex gap-2 flex-wrap">
+      {% if score.score_type == 'full' %}
+        <span class="badge bg-primary">總譜</span>
+      {% else %}
+        <span class="badge bg-secondary">分譜</span>
+        {% if score.instrument %}<span class="badge bg-light text-dark border">{{ score.instrument.name }}</span>{% endif %}
+        {% if score.section %}<span class="badge bg-light text-dark border">{{ score.section.name }}</span>{% endif %}
+      {% endif %}
+      {% if score.difficulty %}
+        <span class="badge bg-light text-dark border">{{ score.get_difficulty_display }}</span>
+      {% endif %}
+    </div>
+  </div>
+  {% if user.is_officer %}
+  <a href="/admin/scores/score/{{ score.pk }}/change/" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-pencil"></i> 編輯
+  </a>
+  {% endif %}
+</div>
+
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header fw-semibold">基本資料</div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          {% if score.composer %}
+          <dt class="col-sm-4">作曲</dt>
+          <dd class="col-sm-8">{{ score.composer }}</dd>
+          {% endif %}
+          {% if score.arranger %}
+          <dt class="col-sm-4">編曲</dt>
+          <dd class="col-sm-8">{{ score.arranger }}</dd>
+          {% endif %}
+          <dt class="col-sm-4">版權</dt>
+          <dd class="col-sm-8">
+            {% if score.copyright_status == 'public_domain' %}<span class="badge bg-success">公版</span>
+            {% elif score.copyright_status == 'licensed' %}<span class="badge bg-info text-dark">已授權</span>
+            {% else %}<span class="badge bg-warning text-dark">有版權</span>{% endif %}
+          </dd>
+          {% if score.publisher %}
+          <dt class="col-sm-4">出版商</dt>
+          <dd class="col-sm-8">{{ score.publisher }}</dd>
+          {% endif %}
+          <dt class="col-sm-4">來源</dt>
+          <dd class="col-sm-8">{{ score.get_source_display|default:"—" }}</dd>
+          <dt class="col-sm-4">實體數量</dt>
+          <dd class="col-sm-8">{{ score.physical_quantity }} 本</dd>
+          {% if score.file %}
+          <dt class="col-sm-4">PDF</dt>
+          <dd class="col-sm-8"><a href="{{ score.file.url }}" target="_blank">下載</a></dd>
+          {% endif %}
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  {% if score.parent_score or versions %}
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header fw-semibold">版本資訊</div>
+      <div class="card-body">
+        {% if score.parent_score %}
+        <p class="mb-2 small text-muted">改版自：
+          <a href="{% url 'scores:score_detail' score.parent_score.pk %}">{{ score.parent_score.title }}</a>
+        </p>
+        {% endif %}
+        {% if score.version_note %}
+        <p class="small mb-2">{{ score.version_note }}</p>
+        {% endif %}
+        {% if versions %}
+        <p class="mb-1 small fw-semibold">衍生版本：</p>
+        <ul class="list-unstyled mb-0">
+          {% for v in versions %}
+          <li class="small">
+            <a href="{% url 'scores:score_detail' v.pk %}">{{ v }}</a>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

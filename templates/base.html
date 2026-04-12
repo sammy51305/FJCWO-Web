@@ -24,6 +24,7 @@
           <li class="nav-item"><a class="nav-link" href="{% url 'public:rules' %}">組織章程</a></li>
           {% if user.is_authenticated %}
           <li class="nav-item"><a class="nav-link" href="{% url 'events:event_list' %}">演出活動</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'scores:score_list' %}">樂譜庫存</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'events:my_leave_requests' %}">我的請假</a></li>
           {% endif %}
           {% if user.is_officer %}

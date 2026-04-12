@@ -7,9 +7,11 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
+from apps.scores.models import Score
+
 from .models import (
     LeaveRequest, PerformanceEvent, Rehearsal,
-    RehearsalAttendance, RehearsalQRToken,
+    RehearsalAttendance, RehearsalQRToken, Setlist,
 )
 
 
@@ -265,3 +267,48 @@ def qr_checkin_confirm(request, token):
         messages.success(request, '簽到成功！')
 
     return redirect('events:qr_checkin', token=token)
+
+
+@login_required
+def setlist_manage(request, pk):
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('events:event_detail', pk=pk)
+
+    event = get_object_or_404(PerformanceEvent, pk=pk)
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'add':
+            score_id = request.POST.get('score_id')
+            order = request.POST.get('order', '').strip()
+            if not score_id or not order:
+                messages.error(request, '請選擇曲目並填寫演出順序。')
+            elif Setlist.objects.filter(event=event, order=order).exists():
+                messages.error(request, f'演出順序 {order} 已被使用。')
+            else:
+                score = get_object_or_404(Score, pk=score_id)
+                Setlist.objects.create(event=event, score=score, order=order)
+                messages.success(request, f'已新增《{score.title}》。')
+
+        elif action == 'remove':
+            item_id = request.POST.get('item_id')
+            item = get_object_or_404(Setlist, pk=item_id, event=event)
+            title = item.score.title
+            item.delete()
+            messages.success(request, f'已移除《{title}》。')
+
+        return redirect('events:setlist_manage', pk=pk)
+
+    setlists = event.setlists.select_related('score').order_by('order')
+    available_scores = Score.objects.filter(score_type=Score.ScoreType.FULL).order_by('title')
+    used_score_ids = list(setlists.values_list('score_id', flat=True))
+
+    return render(request, 'events/setlist_manage.html', {
+        'event': event,
+        'setlists': setlists,
+        'available_scores': available_scores,
+        'used_score_ids': used_score_ids,
+        'next_order': (setlists.last().order + 1) if setlists.exists() else 1,
+    })

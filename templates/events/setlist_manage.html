@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}曲目管理 — {{ event.name }} — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'events:event_list' %}">演出活動</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'events:event_detail' event.pk %}">{{ event.name }}</a></li>
+    <li class="breadcrumb-item active">曲目管理</li>
+  </ol>
+</nav>
+
+<h2 class="mb-1">曲目管理</h2>
+<p class="text-muted mb-4">{{ event.name }}</p>
+
+<div class="row g-4">
+
+  <!-- 目前曲目列表 -->
+  <div class="col-md-7">
+    <div class="card">
+      <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+        演出曲目
+        <span class="badge bg-secondary">{{ setlists.count }} 首</span>
+      </div>
+      {% if setlists %}
+      <table class="table table-sm table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th style="width:60px">順序</th>
+            <th>曲名</th>
+            <th>作曲</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in setlists %}
+          <tr>
+            <td class="text-center">{{ item.order }}</td>
+            <td>
+              <a href="{% url 'scores:score_detail' item.score.pk %}" class="text-decoration-none">
+                {{ item.score.title }}
+              </a>
+            </td>
+            <td class="text-muted small">{{ item.score.composer|default:"—" }}</td>
+            <td class="text-end">
+              <form method="post" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="remove">
+                <input type="hidden" name="item_id" value="{{ item.pk }}">
+                <button class="btn btn-sm btn-outline-danger"
+                        onclick="return confirm('確認移除《{{ item.score.title }}》？')">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="card-body text-muted text-center py-4">尚未加入任何曲目</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 新增曲目 -->
+  <div class="col-md-5">
+    <div class="card">
+      <div class="card-header fw-semibold">新增曲目</div>
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="add">
+
+          <div class="mb-3">
+            <label class="form-label">曲目（總譜）</label>
+            <select name="score_id" class="form-select" required>
+              <option value="">— 請選擇 —</option>
+              {% for score in available_scores %}
+              <option value="{{ score.pk }}"
+                {% if score.pk in used_score_ids %}disabled{% endif %}>
+                {{ score.title }}
+                {% if score.pk in used_score_ids %}（已加入）{% endif %}
+                {% if score.composer %} ／ {{ score.composer }}{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+            {% if not available_scores %}
+            <div class="form-text text-warning">
+              樂譜庫存中尚無總譜，請先至
+              <a href="{% url 'scores:score_list' %}">樂譜庫存</a>
+              新增。
+            </div>
+            {% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">演出順序</label>
+            <input type="number" name="order" class="form-control" min="1"
+                   value="{{ next_order }}" required>
+          </div>
+
+          <button class="btn btn-primary w-100">
+            <i class="bi bi-plus-lg"></i> 加入曲目
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

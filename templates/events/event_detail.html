@@ -45,10 +45,17 @@
     </div>
   </div>
 
-  {% if setlists %}
+  {% if setlists or user.is_officer %}
   <div class="col-md-6">
     <div class="card h-100">
-      <div class="card-header fw-semibold">演出曲目</div>
+      <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+        演出曲目
+        {% if user.is_officer %}
+        <a href="{% url 'events:setlist_manage' event.pk %}" class="btn btn-outline-primary btn-sm">
+          <i class="bi bi-pencil"></i> 管理曲目
+        </a>
+        {% endif %}
+      </div>
       <ul class="list-group list-group-flush">
         {% for item in setlists %}
         <li class="list-group-item d-flex align-items-center gap-2">
@@ -58,6 +65,9 @@
         </li>
         {% endfor %}
       </ul>
+      {% if not setlists %}
+      <div class="card-body text-muted text-center py-3">尚未加入曲目</div>
+      {% endif %}
     </div>
   </div>
   {% endif %}
