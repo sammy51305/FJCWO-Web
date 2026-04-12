@@ -138,13 +138,9 @@ python manage.py runserver
 python manage.py test
 ```
 
-跑特定 app 的測試：
-
-```bash
-python manage.py test apps.events.tests
-```
-
 預期輸出：所有測試通過，最後顯示 `OK`。
+
+測試覆蓋範圍、執行選項、新增測試的慣例，詳見 [TESTING.md](TESTING.md)。
 
 ---
 
