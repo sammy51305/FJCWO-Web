@@ -129,7 +129,6 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | type | 類型：音樂會 / 比賽 / 錄音 / 聯演 |
 | performance_date | 演出日期時間 |
 | performance_venue | 演出場地（關聯 Venue）|
-| venue_time_slot | 演出時段（關聯 VenueTimeSlot，選填）|
 | status | 籌備中 / 確認 / 已結束 |
 
 ### 排練（Rehearsal）
