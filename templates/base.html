@@ -24,9 +24,11 @@
           <li class="nav-item"><a class="nav-link" href="{% url 'public:rules' %}">組織章程</a></li>
           {% if user.is_authenticated %}
           <li class="nav-item"><a class="nav-link" href="{% url 'events:event_list' %}">演出活動</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'events:my_leave_requests' %}">我的請假</a></li>
           {% endif %}
           {% if user.is_officer %}
           <li class="nav-item"><a class="nav-link" href="{% url 'accounts:member_directory' %}">通訊錄</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'events:leave_review_list' %}">請假審核</a></li>
           {% endif %}
         </ul>
         <ul class="navbar-nav">

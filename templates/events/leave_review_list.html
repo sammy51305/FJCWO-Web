@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}請假審核 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">請假審核</h2>
+
+<h5 class="text-muted mb-3">待審核</h5>
+{% if pending %}
+<div class="table-responsive mb-5">
+  <table class="table table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>申請者</th>
+        <th>演出活動</th>
+        <th>排練日期</th>
+        <th>原因</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for leave in pending %}
+      <tr>
+        <td>{{ leave.member.name }}</td>
+        <td>{{ leave.rehearsal.event.name }}</td>
+        <td>{{ leave.rehearsal.date|date:"Y/m/d（D）H:i" }}</td>
+        <td>{{ leave.reason }}</td>
+        <td>
+          <form method="post" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="leave_id" value="{{ leave.pk }}">
+            <button type="submit" name="action" value="approve" class="btn btn-sm btn-success me-1">核准</button>
+            <button type="submit" name="action" value="reject" class="btn btn-sm btn-danger">拒絕</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted mb-5">目前沒有待審核的請假申請。</p>
+{% endif %}
+
+<h5 class="text-muted mb-3">近期審核紀錄</h5>
+{% if reviewed %}
+<div class="table-responsive">
+  <table class="table table-sm align-middle text-muted">
+    <thead class="table-light">
+      <tr>
+        <th>申請者</th>
+        <th>排練日期</th>
+        <th>狀態</th>
+        <th>審核幹部</th>
+        <th>審核時間</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for leave in reviewed %}
+      <tr>
+        <td>{{ leave.member.name }}</td>
+        <td>{{ leave.rehearsal.date|date:"Y/m/d（D）" }}</td>
+        <td>
+          {% if leave.status == 'approved' %}
+            <span class="badge bg-success">{{ leave.get_status_display }}</span>
+          {% else %}
+            <span class="badge bg-danger">{{ leave.get_status_display }}</span>
+          {% endif %}
+        </td>
+        <td>{{ leave.reviewed_by.name|default:"—" }}</td>
+        <td>{{ leave.reviewed_at|date:"Y/m/d H:i"|default:"—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted">尚無審核紀錄。</p>
+{% endif %}
+{% endblock %}

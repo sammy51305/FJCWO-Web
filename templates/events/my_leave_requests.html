@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}我的請假紀錄 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">我的請假紀錄</h2>
+
+{% if leaves %}
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>演出活動</th>
+        <th>排練日期</th>
+        <th>原因</th>
+        <th>狀態</th>
+        <th>審核幹部</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for leave in leaves %}
+      <tr>
+        <td>{{ leave.rehearsal.event.name }}</td>
+        <td>{{ leave.rehearsal.date|date:"Y/m/d（D）H:i" }}</td>
+        <td>{{ leave.reason }}</td>
+        <td>
+          {% if leave.status == 'pending' %}
+            <span class="badge bg-secondary">{{ leave.get_status_display }}</span>
+          {% elif leave.status == 'approved' %}
+            <span class="badge bg-success">{{ leave.get_status_display }}</span>
+          {% else %}
+            <span class="badge bg-danger">{{ leave.get_status_display }}</span>
+          {% endif %}
+        </td>
+        <td>{{ leave.reviewed_by.name|default:"—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted">目前沒有請假紀錄。</p>
+{% endif %}
+{% endblock %}
