@@ -28,6 +28,10 @@ class PerformanceEvent(models.Model):
         related_name='performance_events', verbose_name='演出場地'
     )
     status = models.CharField('狀態', max_length=20, choices=Status, default=Status.PLANNING)
+    venue_time_slot = models.ForeignKey(
+        'band_public.VenueTimeSlot', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='performance_events', verbose_name='演出時段'
+    )
 
     class Meta:
         verbose_name = '演出活動'
@@ -56,6 +60,10 @@ class Rehearsal(models.Model):
     summary_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='rehearsal_summaries', verbose_name='填寫者'
+    )
+    time_slot = models.ForeignKey(
+        'band_public.VenueTimeSlot', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='rehearsals', verbose_name='時段'
     )
 
     class Meta:

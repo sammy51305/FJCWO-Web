@@ -18,6 +18,9 @@
         <ul class="navbar-nav me-auto">
           <li class="nav-item"><a class="nav-link" href="{% url 'public:about' %}">關於百韻</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'public:rules' %}">組織章程</a></li>
+          {% if user.is_authenticated %}
+          <li class="nav-item"><a class="nav-link" href="{% url 'events:event_list' %}">演出活動</a></li>
+          {% endif %}
         </ul>
         <ul class="navbar-nav">
           {% if user.is_authenticated %}

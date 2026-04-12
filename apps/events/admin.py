@@ -8,7 +8,7 @@ from .models import (GuestMember, LeaveRequest, PartAssignment,
 class RehearsalInline(admin.TabularInline):
     model = Rehearsal
     extra = 1
-    fields = ['sequence', 'date', 'venue']
+    fields = ['sequence', 'date', 'venue', 'time_slot']
 
 
 class SetlistInline(admin.TabularInline):
@@ -27,7 +27,7 @@ class PerformanceEventAdmin(admin.ModelAdmin):
 
 @admin.register(Rehearsal)
 class RehearsalAdmin(admin.ModelAdmin):
-    list_display = ['event', 'sequence', 'date', 'venue']
+    list_display = ['event', 'sequence', 'date', 'venue', 'time_slot']
     list_filter = ['event']
     search_fields = ['event__name']
 

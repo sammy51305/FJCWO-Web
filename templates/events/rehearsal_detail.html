@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}{{ rehearsal }} 摘要 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'events:event_list' %}">演出活動</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'events:event_detail' rehearsal.event.pk %}">{{ rehearsal.event.name }}</a></li>
+    <li class="breadcrumb-item active">第 {{ rehearsal.sequence }} 次排練摘要</li>
+  </ol>
+</nav>
+
+<h2 class="mb-1">第 {{ rehearsal.sequence }} 次排練摘要</h2>
+<p class="text-muted mb-4">
+  {{ rehearsal.date|date:"Y/m/d（D）H:i" }}　{{ rehearsal.venue.name }}
+</p>
+
+{% if rehearsal.summary_progress %}
+<div class="card mb-3">
+  <div class="card-header fw-semibold">今日進度</div>
+  <div class="card-body">{{ rehearsal.summary_progress|linebreaks }}</div>
+</div>
+{% endif %}
+
+{% if rehearsal.summary_improve %}
+<div class="card mb-3">
+  <div class="card-header fw-semibold">待改進事項</div>
+  <div class="card-body">{{ rehearsal.summary_improve|linebreaks }}</div>
+</div>
+{% endif %}
+
+{% if rehearsal.summary_next %}
+<div class="card mb-3">
+  <div class="card-header fw-semibold">下次排練重點</div>
+  <div class="card-body">{{ rehearsal.summary_next|linebreaks }}</div>
+</div>
+{% endif %}
+
+{% if rehearsal.summary_notes %}
+<div class="card mb-3 border-warning">
+  <div class="card-header fw-semibold text-warning">給團員的備註</div>
+  <div class="card-body">{{ rehearsal.summary_notes|linebreaks }}</div>
+</div>
+{% endif %}
+
+{% if rehearsal.summary_by %}
+<p class="text-muted small mt-3">填寫者：{{ rehearsal.summary_by.name }}</p>
+{% endif %}
+{% endblock %}

@@ -1,6 +1,6 @@
 # FJCWO-Web 架構文件
 
-> 最後更新：2026-04-12（資料庫設計審查，共 22 張 Model）
+> 最後更新：2026-04-12（新增 VenueTimeSlot，共 23 張 Model）
 > 本文件記錄系統架構決策與設計規劃，供開發參考。
 
 ---
@@ -109,6 +109,18 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | car_parking | 汽車可否停放（是 / 否 / 有限制）|
 | notes | 備註（其他注意事項）|
 
+### 場地時段（VenueTimeSlot）
+
+一個場地可有多個時段，各時段有獨立費用。排練或演出建立時從中選取。
+
+| 欄位 | 說明 |
+|------|------|
+| venue | 所屬場地（關聯 Venue）|
+| is_sun / is_mon / is_tue / is_wed / is_thu / is_fri / is_sat | 適用星期（各自為 Boolean，可多選）|
+| start_time | 開始時間 |
+| end_time | 結束時間 |
+| fee | 該時段費用 |
+
 ### 演出活動（PerformanceEvent）
 
 | 欄位 | 說明 |
@@ -117,6 +129,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | type | 類型：音樂會 / 比賽 / 錄音 / 聯演 |
 | performance_date | 演出日期時間 |
 | performance_venue | 演出場地（關聯 Venue）|
+| venue_time_slot | 演出時段（關聯 VenueTimeSlot，選填）|
 | status | 籌備中 / 確認 / 已結束 |
 
 ### 排練（Rehearsal）
@@ -130,6 +143,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | sequence | ✓ | 排練次數（第幾次排練，可自動依日期順序計算）|
 | date | ✓ | 排練日期時間 |
 | venue | ✓ | 排練場地（關聯 Venue）|
+| time_slot | | 使用時段（關聯 VenueTimeSlot，選填）|
 | summary_progress | | 今日進度（排了哪些曲目、哪些段落）|
 | summary_improve | | 待改進事項 |
 | summary_next | | 下次排練重點 |

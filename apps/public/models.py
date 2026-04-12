@@ -31,3 +31,39 @@ class Venue(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class VenueTimeSlot(models.Model):
+    venue = models.ForeignKey(
+        Venue, on_delete=models.CASCADE,
+        related_name='time_slots', verbose_name='場地'
+    )
+    is_sun = models.BooleanField('週日', default=False)
+    is_mon = models.BooleanField('週一', default=False)
+    is_tue = models.BooleanField('週二', default=False)
+    is_wed = models.BooleanField('週三', default=False)
+    is_thu = models.BooleanField('週四', default=False)
+    is_fri = models.BooleanField('週五', default=False)
+    is_sat = models.BooleanField('週六', default=False)
+    start_time = models.TimeField('開始時間')
+    end_time = models.TimeField('結束時間')
+    fee = models.DecimalField('費用', max_digits=8, decimal_places=0, null=True, blank=True)
+
+    class Meta:
+        verbose_name = '場地時段'
+        verbose_name_plural = '場地時段列表'
+        ordering = ['venue', 'start_time']
+
+    def weekday_display(self):
+        days = []
+        if self.is_sun: days.append('日')
+        if self.is_mon: days.append('一')
+        if self.is_tue: days.append('二')
+        if self.is_wed: days.append('三')
+        if self.is_thu: days.append('四')
+        if self.is_fri: days.append('五')
+        if self.is_sat: days.append('六')
+        return '週' + '／'.join(days) if days else '（未設定）'
+
+    def __str__(self):
+        return f'{self.venue.name}｜{self.weekday_display()}（{self.start_time.strftime("%H:%M")}–{self.end_time.strftime("%H:%M")}）'

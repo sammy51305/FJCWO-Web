@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}演出活動 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">演出活動</h2>
+
+{% if upcoming %}
+<h5 class="text-muted mb-3">即將到來</h5>
+<div class="row g-3 mb-5">
+  {% for event in upcoming %}
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <h5 class="card-title mb-0">{{ event.name }}</h5>
+          <span class="badge {% if event.status == 'confirmed' %}bg-success{% else %}bg-secondary{% endif %} ms-2">
+            {{ event.get_status_display }}
+          </span>
+        </div>
+        <p class="text-muted small mb-1">{{ event.get_type_display }}</p>
+        <p class="mb-1"><i class="bi bi-calendar-event"></i> {{ event.performance_date|date:"Y/m/d（D）H:i" }}</p>
+        <p class="mb-0 text-muted small">{{ event.performance_venue.name }}</p>
+      </div>
+      <div class="card-footer bg-transparent">
+        <a href="{% url 'events:event_detail' event.pk %}" class="btn btn-sm btn-outline-primary">查看詳情</a>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="text-muted mb-5">目前沒有即將到來的演出活動。</p>
+{% endif %}
+
+{% if past %}
+<h5 class="text-muted mb-3">過去活動</h5>
+<div class="list-group">
+  {% for event in past %}
+  <a href="{% url 'events:event_detail' event.pk %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+    <div>
+      <span class="fw-semibold">{{ event.name }}</span>
+      <small class="text-muted ms-2">{{ event.get_type_display }}</small>
+    </div>
+    <small class="text-muted">{{ event.performance_date|date:"Y/m/d" }}</small>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

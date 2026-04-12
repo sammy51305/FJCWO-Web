@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}{{ event.name }} — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'events:event_list' %}">演出活動</a></li>
+    <li class="breadcrumb-item active">{{ event.name }}</li>
+  </ol>
+</nav>
+
+<div class="d-flex align-items-center gap-2 mb-1">
+  <h2 class="mb-0">{{ event.name }}</h2>
+  <span class="badge {% if event.status == 'confirmed' %}bg-success{% elif event.status == 'finished' %}bg-secondary{% else %}bg-warning text-dark{% endif %}">
+    {{ event.get_status_display }}
+  </span>
+</div>
+<p class="text-muted mb-4">{{ event.get_type_display }}</p>
+
+<div class="row g-4 mb-5">
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">演出資訊</div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-sm-4">日期時間</dt>
+          <dd class="col-sm-8">{{ event.performance_date|date:"Y/m/d（D）H:i" }}</dd>
+          <dt class="col-sm-4">演出場地</dt>
+          <dd class="col-sm-8">{{ event.performance_venue.name }}</dd>
+          {% if event.performance_venue.address %}
+          <dt class="col-sm-4">地址</dt>
+          <dd class="col-sm-8">{{ event.performance_venue.address }}</dd>
+          {% endif %}
+          {% if event.performance_venue.google_map_url %}
+          <dt class="col-sm-4">地圖</dt>
+          <dd class="col-sm-8"><a href="{{ event.performance_venue.google_map_url }}" target="_blank">Google Maps</a></dd>
+          {% endif %}
+          {% if event.performance_venue.transportation %}
+          <dt class="col-sm-4">交通</dt>
+          <dd class="col-sm-8">{{ event.performance_venue.transportation }}</dd>
+          {% endif %}
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  {% if setlists %}
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">演出曲目</div>
+      <ul class="list-group list-group-flush">
+        {% for item in setlists %}
+        <li class="list-group-item d-flex align-items-center gap-2">
+          <span class="badge bg-secondary">{{ item.order }}</span>
+          <span>{{ item.score.title }}</span>
+          {% if item.score.composer %}<small class="text-muted ms-1">{{ item.score.composer }}</small>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<h4 class="mb-3">排練時間表</h4>
+{% if rehearsals %}
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>次數</th>
+        <th>日期時間</th>
+        <th>場地</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for rehearsal in rehearsals %}
+      <tr>
+        <td>第 {{ rehearsal.sequence }} 次</td>
+        <td>{{ rehearsal.date|date:"Y/m/d（D）H:i" }}</td>
+        <td>{{ rehearsal.venue.name }}</td>
+        <td>
+          {% if rehearsal.summary_progress %}
+          <a href="{% url 'events:rehearsal_detail' rehearsal.pk %}" class="btn btn-sm btn-outline-secondary">排練摘要</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted">尚未安排排練。</p>
+{% endif %}
+{% endblock %}

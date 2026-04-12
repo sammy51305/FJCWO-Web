@@ -1,0 +1,143 @@
+[
+{
+  "model": "band_public.venue",
+  "pk": 1,
+  "fields": {
+    "name": "世韻藝術有限公司",
+    "type": "rehearsal",
+    "address": "236新北市土城區承天路8巷2號10樓",
+    "capacity": null,
+    "phone": "0222690229",
+    "google_map_url": "https://maps.app.goo.gl/KVpP9pmV3iWxtP1d9",
+    "contact_person": "芊雅",
+    "contact_phone": "",
+    "transportation": "",
+    "motorcycle_parking": "yes",
+    "car_parking": "yes",
+    "notes": "附近有停車場"
+  }
+},
+{
+  "model": "band_public.venue",
+  "pk": 3,
+  "fields": {
+    "name": "新北市勞工活動中心",
+    "type": "performance",
+    "address": "248新北市五股區五工六路9號",
+    "capacity": null,
+    "phone": "",
+    "google_map_url": "https://maps.app.goo.gl/9Uzu19yWziJto17n7",
+    "contact_person": "",
+    "contact_phone": "0222983639",
+    "transportation": "",
+    "motorcycle_parking": "",
+    "car_parking": "",
+    "notes": ""
+  }
+},
+{
+  "model": "band_public.venue",
+  "pk": 5,
+  "fields": {
+    "name": "新北市藝文中心演藝廳",
+    "type": "performance",
+    "address": "220新北市板橋區莊敬路62號",
+    "capacity": null,
+    "phone": "",
+    "google_map_url": "https://maps.app.goo.gl/woVG1MThfu9euGqo7",
+    "contact_person": "",
+    "contact_phone": "",
+    "transportation": "",
+    "motorcycle_parking": "",
+    "car_parking": "",
+    "notes": ""
+  }
+},
+{
+  "model": "band_public.venue",
+  "pk": 4,
+  "fields": {
+    "name": "新莊文化藝術中心",
+    "type": "performance",
+    "address": "242新北市新莊區中平路133號",
+    "capacity": null,
+    "phone": "0222760182",
+    "google_map_url": "https://maps.app.goo.gl/jmSV5c7ecvVE88TW9",
+    "contact_person": "",
+    "contact_phone": "",
+    "transportation": "",
+    "motorcycle_parking": "",
+    "car_parking": "",
+    "notes": ""
+  }
+},
+{
+  "model": "band_public.venue",
+  "pk": 2,
+  "fields": {
+    "name": "蘆洲功學社音樂廳",
+    "type": "performance",
+    "address": "247新北市蘆洲區中山二路162號2樓",
+    "capacity": null,
+    "phone": "",
+    "google_map_url": "https://maps.app.goo.gl/2qpB6zqScYVMciW78",
+    "contact_person": "",
+    "contact_phone": "0222825151",
+    "transportation": "",
+    "motorcycle_parking": "yes",
+    "car_parking": "yes",
+    "notes": ""
+  }
+},
+{
+  "model": "band_public.venuetimeslot",
+  "pk": 1,
+  "fields": {
+    "venue": 1,
+    "is_sun": true,
+    "is_mon": false,
+    "is_tue": false,
+    "is_wed": false,
+    "is_thu": false,
+    "is_fri": false,
+    "is_sat": false,
+    "start_time": "08:00:00",
+    "end_time": "12:00:00",
+    "fee": "2800"
+  }
+},
+{
+  "model": "band_public.venuetimeslot",
+  "pk": 2,
+  "fields": {
+    "venue": 1,
+    "is_sun": true,
+    "is_mon": false,
+    "is_tue": false,
+    "is_wed": false,
+    "is_thu": false,
+    "is_fri": false,
+    "is_sat": false,
+    "start_time": "13:00:00",
+    "end_time": "17:00:00",
+    "fee": "4200"
+  }
+},
+{
+  "model": "band_public.venuetimeslot",
+  "pk": 3,
+  "fields": {
+    "venue": 1,
+    "is_sun": false,
+    "is_mon": true,
+    "is_tue": true,
+    "is_wed": true,
+    "is_thu": true,
+    "is_fri": true,
+    "is_sat": false,
+    "start_time": "18:00:00",
+    "end_time": "22:00:00",
+    "fee": "3200"
+  }
+}
+]
