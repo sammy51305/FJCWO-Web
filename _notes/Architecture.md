@@ -196,7 +196,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 
 ### 分譜分配（PartAssignment）
 
-系統根據樂器 + 聲部自動對應，並透過 LINE Bot 通知團員。
+記錄每位成員在特定曲目中負責的樂器與聲部。
 （一位團員可能在不同曲目擔任不同樂器或聲部，因此獨立記錄）
 
 `member` 與 `guest_member` 必須恰好填入一個，不可同時填或同時空白。
@@ -308,7 +308,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 
 ### 會費繳納紀錄（MembershipFee）
 
-逐筆追蹤每位團員每期的繳費狀況，供 LINE Bot 判斷催繳對象。
+逐筆追蹤每位團員每期的繳費狀況，幹部可透過報表查看未繳名單。
 
 | 欄位 | 說明 |
 |------|------|
@@ -482,12 +482,15 @@ leave_request_create（GET）：顯示申請表單
         ↓
 幹部進入 leave_review_list：分「待審核」與「已審核」兩區
         ↓
-幹部按「核准」
+幹部按「核准」或「拒絕」
+  → 先確認申請狀態仍為 pending，否則擋回（防止重複操作）
+        ↓
+按「核准」
   → LeaveRequest.status = approved
   → 記錄 reviewed_by / reviewed_at
   → get_or_create RehearsalAttendance，設 status = leave
         ↓
-幹部按「拒絕」
+按「拒絕」
   → LeaveRequest.status = rejected
   → 記錄 reviewed_by / reviewed_at
   → 出席紀錄不異動
@@ -529,7 +532,9 @@ FJCWO-Web/
 ├── templates/              # HTML 模板
 │   ├── base.html
 │   ├── accounts/
+│   ├── assets/
 │   ├── events/
+│   ├── finance/
 │   ├── public/
 │   ├── registration/
 │   └── scores/
@@ -539,6 +544,7 @@ FJCWO-Web/
 │   └── venues.json         # 場地 + 場地時段
 ├── _notes/                 # 開發文件（不進 production）
 │   ├── Architecture.md
+│   ├── AUDIT.md
 │   ├── DESIGN.md
 │   ├── SETUP.md
 │   └── TESTING.md

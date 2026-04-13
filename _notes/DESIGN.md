@@ -470,6 +470,9 @@ pending（待審核）
 
 核准後，`reviewed_by` 和 `reviewed_at` 會一起記錄，留下稽核軌跡。
 
+`leave_review_list` 在處理核准/拒絕動作前，會先確認申請狀態仍為 `pending`，
+防止幹部透過瀏覽器上一頁重複送出，誤將已審核的申請再次翻轉。
+
 ---
 
 ### 4.7 財務管理（finance）
@@ -670,7 +673,7 @@ if request.user.is_officer:
 
 | action | 說明 |
 |--------|------|
-| `add` | 從總譜清單選一首、填演出順序，建立 `Setlist`。同一場演出的順序號不可重複（`unique_together`）|
+| `add` | 從總譜清單選一首、填演出順序，建立 `Setlist`。同一場演出的順序號不可重複（view 層檢查），同一首曲目也不可重複加入 |
 | `remove` | 刪除指定的 `Setlist` item |
 
 #### 為什麼只能選總譜？
@@ -815,7 +818,9 @@ for member in members:
 
 ```python
 periods = MembershipFee.objects.values_list('period', flat=True).distinct().order_by('-period')
-selected_period = request.GET.get('period', '') or (periods[0] if periods else '')
+selected_period = request.GET.get('period', '')
+if not selected_period and periods:
+    selected_period = periods[0]
 ```
 
 按 `period` 字串倒序排列，`'2026 上半年'` 排在 `'2025 下半年'` 之前，
@@ -832,7 +837,8 @@ selected_period = request.GET.get('period', '') or (periods[0] if periods else '
 ```python
 from collections import defaultdict
 
-rehearsal_counts = defaultdict(lambda: {'pending': 0, 'approved': 0, 'rejected': 0})
+S = LeaveRequest.Status
+rehearsal_counts = defaultdict(lambda: {S.PENDING: 0, S.APPROVED: 0, S.REJECTED: 0})
 member_leave_map = defaultdict(list)
 
 for leave in leaves:
