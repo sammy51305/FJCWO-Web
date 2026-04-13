@@ -10,6 +10,8 @@ from django.utils import timezone
 
 from apps.scores.models import Score
 
+from apps.accounts.models import User
+
 from .models import (
     LeaveRequest, PerformanceEvent, Rehearsal,
     RehearsalAttendance, RehearsalQRToken, Setlist,
@@ -282,6 +284,61 @@ def qr_checkin_confirm(request, token):
         messages.success(request, '簽到成功！')
 
     return redirect('events:qr_checkin', token=token)
+
+
+@login_required
+def attendance_report(request, pk):
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('events:event_detail', pk=pk)
+
+    event = get_object_or_404(
+        PerformanceEvent.objects.select_related('performance_venue'), pk=pk
+    )
+    rehearsals = list(event.rehearsals.select_related('venue').order_by('sequence'))
+    members = list(
+        User.objects.filter(is_active=True)
+        .exclude(role=User.Role.ADMIN)
+        .select_related('instrument', 'section')
+        .order_by('instrument__category', 'instrument__name', 'name')
+    )
+
+    attendance_map = {
+        (a.rehearsal_id, a.member_id): a.status
+        for a in RehearsalAttendance.objects.filter(
+            rehearsal_id__in=[r.pk for r in rehearsals]
+        )
+    }
+
+    # 每場排練的統計數字
+    for rehearsal in rehearsals:
+        counts = {'present': 0, 'leave': 0, 'absent': 0}
+        for member in members:
+            s = attendance_map.get((rehearsal.pk, member.pk))
+            if s:
+                counts[s] += 1
+        counts['no_record'] = len(members) - sum(counts.values())
+        rehearsal.stats = counts
+
+    # 每位團員的橫列資料
+    member_rows = []
+    for member in members:
+        statuses = [attendance_map.get((r.pk, member.pk)) for r in rehearsals]
+        present_count = statuses.count('present')
+        total = len(rehearsals)
+        member_rows.append({
+            'member': member,
+            'statuses': statuses,
+            'present_count': present_count,
+            'total': total,
+            'rate': round(present_count / total * 100) if total else 0,
+        })
+
+    return render(request, 'events/attendance_report.html', {
+        'event': event,
+        'rehearsals': rehearsals,
+        'member_rows': member_rows,
+    })
 
 
 @login_required

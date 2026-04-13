@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}{{ event.name }} 排練出席報表 — 百韻管樂團{% endblock %}
+
+{% block extra_css %}
+<style>
+  @media print {
+    .d-print-none { display: none !important; }
+    body { font-size: 11px; }
+    .table th, .table td { padding: 3px 6px !important; }
+  }
+  .status-present  { color: #198754; font-weight: 600; }
+  .status-leave    { color: #856404; font-weight: 600; }
+  .status-absent   { color: #dc3545; font-weight: 600; }
+  .status-none     { color: #adb5bd; }
+  th.rehearsal-col { white-space: nowrap; min-width: 70px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3 d-print-none">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'events:event_list' %}">演出活動</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'events:event_detail' event.pk %}">{{ event.name }}</a></li>
+    <li class="breadcrumb-item active">排練出席報表</li>
+  </ol>
+</nav>
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="mb-0">排練出席報表</h2>
+    <p class="text-muted mb-0">{{ event.name }}</p>
+  </div>
+  <button class="btn btn-outline-secondary d-print-none" onclick="window.print()">
+    <i class="bi bi-printer"></i> 列印
+  </button>
+</div>
+
+{% if not rehearsals %}
+<p class="text-muted">此活動尚無排練紀錄。</p>
+{% else %}
+
+{# ── 每場排練統計摘要 ─────────────────────────────── #}
+<h5 class="mb-3">各場排練統計</h5>
+<div class="table-responsive mb-5">
+  <table class="table table-bordered table-sm align-middle text-center">
+    <thead class="table-light">
+      <tr>
+        <th class="text-start">排練</th>
+        <th>日期</th>
+        <th class="text-success">出席</th>
+        <th class="text-warning-emphasis">請假</th>
+        <th class="text-danger">缺席</th>
+        <th class="text-secondary">無紀錄</th>
+        <th>合計</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for rehearsal in rehearsals %}
+      <tr>
+        <td class="text-start">第 {{ rehearsal.sequence }} 次</td>
+        <td>{{ rehearsal.date|date:"m/d（D）" }}</td>
+        <td class="status-present">{{ rehearsal.stats.present }}</td>
+        <td class="status-leave">{{ rehearsal.stats.leave }}</td>
+        <td class="status-absent">{{ rehearsal.stats.absent }}</td>
+        <td class="status-none">{{ rehearsal.stats.no_record }}</td>
+        <td>{{ rehearsal.stats.present|add:rehearsal.stats.leave|add:rehearsal.stats.absent|add:rehearsal.stats.no_record }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# ── 團員 × 排練 矩陣 ─────────────────────────────── #}
+<h5 class="mb-3">個人出席紀錄</h5>
+
+<div class="mb-2 d-print-none">
+  <small class="me-3"><span class="status-present">✓</span> 出席</small>
+  <small class="me-3"><span class="status-leave">假</span> 請假</small>
+  <small class="me-3"><span class="status-absent">✗</span> 缺席</small>
+  <small><span class="status-none">—</span> 無紀錄</small>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-bordered table-sm align-middle text-center">
+    <thead class="table-light">
+      <tr>
+        <th class="text-start" style="min-width:100px;">團員</th>
+        <th class="text-start" style="min-width:80px;">樂器</th>
+        {% for rehearsal in rehearsals %}
+        <th class="rehearsal-col">
+          第{{ rehearsal.sequence }}次<br>
+          <small class="text-muted fw-normal">{{ rehearsal.date|date:"m/d" }}</small>
+        </th>
+        {% endfor %}
+        <th style="min-width:80px;">出席率</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in member_rows %}
+      <tr>
+        <td class="text-start fw-semibold">{{ row.member.name }}</td>
+        <td class="text-start text-muted small">
+          {{ row.member.instrument.name|default:"—" }}
+        </td>
+        {% for status in row.statuses %}
+        <td>
+          {% if status == 'present' %}
+            <span class="status-present">✓</span>
+          {% elif status == 'leave' %}
+            <span class="status-leave">假</span>
+          {% elif status == 'absent' %}
+            <span class="status-absent">✗</span>
+          {% else %}
+            <span class="status-none">—</span>
+          {% endif %}
+        </td>
+        {% endfor %}
+        <td>
+          {% if row.total %}
+            <span class="{% if row.rate >= 80 %}text-success{% elif row.rate >= 50 %}text-warning-emphasis{% else %}text-danger{% endif %} fw-semibold">
+              {{ row.present_count }}/{{ row.total }}
+            </span>
+            <br><small class="text-muted">{{ row.rate }}%</small>
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p class="text-muted small mt-2 d-print-none">
+  出席率僅計算 QR 簽到紀錄（出席），不含無紀錄場次。
+</p>
+
+{% endif %}
+{% endblock %}

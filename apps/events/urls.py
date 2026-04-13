@@ -17,4 +17,5 @@ urlpatterns = [
     path('checkin/<uuid:token>/', views.qr_checkin, name='qr_checkin'),
     path('checkin/<uuid:token>/confirm/', views.qr_checkin_confirm, name='qr_checkin_confirm'),
     path('<int:pk>/setlist/', views.setlist_manage, name='setlist_manage'),
+    path('<int:pk>/attendance/', views.attendance_report, name='attendance_report'),
 ]
