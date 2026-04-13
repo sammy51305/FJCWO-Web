@@ -45,14 +45,16 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 |---|---------|---------|---------|
 | 1 | 公開網站（關於、章程、活動） | 所有人 | Phase 1 |
 | 2 | 會員登入 + 角色管理 | 所有人 | Phase 1 |
-| 3 | 演出活動 + 排練管理 + QR 簽到 | 團員 / 幹部 | Phase 2 |
-| 4 | LINE Bot 通知 | 團員 / 幹部 | Phase 2 |
-| 5 | 財務管理 | 幹部 | Phase 2 |
-| 6 | 樂譜庫存管理 | 幹部（瀏覽開放團員）| Phase 2 |
-| 7 | 公用財產管理 + 借用（樂器為其中一類）| 團員 / 幹部 | Phase 2 |
-| 8 | 場地主檔管理 | 幹部 | Phase 2 |
-| 9 | 會議紀錄 + AI 語音辨識摘要 | 幹部 | Phase 3 |
-| 10 | 演出介紹手冊自動生成 | 幹部 | Phase 3 |
+| 3 | 校友報到申請（申請 / 狀態查詢 / 幹部審核） | 所有人 / 幹部 | Phase 2 ✅ |
+| 4 | 演出活動 + 排練管理 + QR 簽到 | 團員 / 幹部 | Phase 2 ✅ |
+| 5 | 財務管理 | 幹部 | Phase 2 ✅ |
+| 6 | 樂譜庫存管理 | 幹部（瀏覽開放團員）| Phase 2 ✅ |
+| 7 | 公用財產管理 + 借用（樂器為其中一類）| 團員 / 幹部 | Phase 2 ✅ |
+| 8 | 場地主檔管理 | 幹部 | Phase 2 ✅ |
+| 9 | 公告系統（Model 已建立，views 待做） | 團員 / 幹部 | Phase 2 🔲 |
+| 10 | LINE Bot 通知 | 團員 / 幹部 | Phase 2 🔲 |
+| 11 | 會議紀錄 + AI 語音辨識摘要 | 幹部 | Phase 3 |
+| 12 | 演出介紹手冊自動生成 | 幹部 | Phase 3 |
 
 ---
 
@@ -560,13 +562,16 @@ FJCWO-Web/
 - [x] 場地主檔管理（Model + Admin + VenueTimeSlot 多時段）
 - [x] 演出活動 + 排練管理（Model + Admin + views + templates）
 - [x] QR Code 簽到系統（Model + Admin + views + templates）
-- [x] 曲目分配（Model + Admin，LINE Bot 通知待做）
+- [x] 曲目分配（Model + Admin）
 - [x] 財務管理（Model + Admin）
 - [x] 樂譜庫存管理（Model + Admin + views + templates）
 - [x] 公用財產管理 + 借用系統（Model + Admin）
 - [x] 會員通訊錄（按樂器分組，電話/Email 幹部限定）
 - [x] 請假申請頁面（申請、我的紀錄、幹部審核）
+- [x] 校友報到申請（申請 / 狀態查詢 / 幹部審核）
 - [x] 報表功能（排練出席 / 財產借用現況 / 會費繳納 / 請假統計，幹部限定）
+- [ ] 公告系統前端（Announcement Model 已建立，views + templates 待做）
+- [ ] LINE Bot 通知（notifications app 尚未開始）
 
 ### Phase 3 — 進階功能
 - [ ] 會議紀錄 + Whisper 語音辨識
