@@ -31,7 +31,14 @@
           <li class="nav-item"><a class="nav-link" href="{% url 'accounts:member_directory' %}">通訊錄</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'events:leave_review_list' %}">請假審核</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'accounts:registration_review' %}">報到審核</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'assets:borrow_status_report' %}">財產借用</a></li>
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">報表</a>
+            <ul class="dropdown-menu">
+              <li><a class="dropdown-item" href="{% url 'assets:borrow_status_report' %}">財產借用現況</a></li>
+              <li><a class="dropdown-item" href="{% url 'finance:membership_fee_report' %}">會費繳納狀況</a></li>
+              <li><a class="dropdown-item" href="{% url 'events:leave_stats' %}">請假統計</a></li>
+            </ul>
+          </li>
           {% endif %}
         </ul>
         <ul class="navbar-nav">

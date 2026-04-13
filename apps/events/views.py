@@ -287,6 +287,79 @@ def qr_checkin_confirm(request, token):
 
 
 @login_required
+def leave_stats(request):
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('events:event_list')
+
+    # 選擇演出活動（預設最近一場）
+    events = PerformanceEvent.objects.order_by('-performance_date')
+    selected_event_id = request.GET.get('event', '')
+    selected_event = None
+
+    rehearsal_rows = []
+    member_rows = []
+
+    if not selected_event_id and events.exists():
+        selected_event_id = str(events.first().pk)
+
+    if selected_event_id:
+        selected_event = events.filter(pk=selected_event_id).first()
+
+    if selected_event:
+        rehearsals = list(
+            selected_event.rehearsals.order_by('sequence')
+        )
+        leaves = (
+            LeaveRequest.objects
+            .filter(rehearsal__event=selected_event)
+            .select_related('member', 'rehearsal', 'reviewed_by')
+        )
+
+        # 每場排練的申請統計
+        from collections import defaultdict
+        rehearsal_counts = defaultdict(lambda: {'pending': 0, 'approved': 0, 'rejected': 0})
+        member_leave_map = defaultdict(list)  # member_id → [LeaveRequest, ...]
+
+        for leave in leaves:
+            rehearsal_counts[leave.rehearsal_id][leave.status] += 1
+            member_leave_map[leave.member_id].append(leave)
+
+        for rehearsal in rehearsals:
+            counts = rehearsal_counts[rehearsal.pk]
+            rehearsal_rows.append({
+                'rehearsal': rehearsal,
+                'pending': counts['pending'],
+                'approved': counts['approved'],
+                'rejected': counts['rejected'],
+                'total': counts['pending'] + counts['approved'] + counts['rejected'],
+            })
+
+        # 每位有申請紀錄的團員統計，按申請次數遞減
+        for member_id, member_leaves in member_leave_map.items():
+            member = member_leaves[0].member
+            approved = sum(1 for l in member_leaves if l.status == 'approved')
+            pending = sum(1 for l in member_leaves if l.status == 'pending')
+            rejected = sum(1 for l in member_leaves if l.status == 'rejected')
+            member_rows.append({
+                'member': member,
+                'total': len(member_leaves),
+                'approved': approved,
+                'pending': pending,
+                'rejected': rejected,
+            })
+        member_rows.sort(key=lambda r: r['total'], reverse=True)
+
+    return render(request, 'events/leave_stats.html', {
+        'events': events,
+        'selected_event': selected_event,
+        'selected_event_id': selected_event_id,
+        'rehearsal_rows': rehearsal_rows,
+        'member_rows': member_rows,
+    })
+
+
+@login_required
 def attendance_report(request, pk):
     if not request.user.is_officer:
         messages.error(request, '權限不足。')

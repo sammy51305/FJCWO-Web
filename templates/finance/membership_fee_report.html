@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}會費繳納狀況 — 百韻管樂團{% endblock %}
+
+{% block extra_css %}
+<style>
+  @media print {
+    .d-print-none { display: none !important; }
+    body { font-size: 11px; }
+    .table th, .table td { padding: 3px 6px !important; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h2 class="mb-0">會費繳納狀況</h2>
+  <button class="btn btn-outline-secondary d-print-none" onclick="window.print()">
+    <i class="bi bi-printer"></i> 列印
+  </button>
+</div>
+
+{# ── 期別選擇 ─────────────────────────────────── #}
+<form method="get" class="d-flex align-items-center gap-2 mb-4 d-print-none">
+  <label class="fw-semibold text-nowrap" for="period">期別</label>
+  <select name="period" id="period" class="form-select" style="max-width:220px;" onchange="this.form.submit()">
+    {% for p in periods %}
+    <option value="{{ p }}" {% if p == selected_period %}selected{% endif %}>{{ p }}</option>
+    {% endfor %}
+  </select>
+  {% if not periods %}
+  <span class="text-muted">尚無任何期別資料</span>
+  {% endif %}
+</form>
+
+{% if selected_period %}
+<p class="text-muted d-print-block mb-3">期別：{{ selected_period }}</p>
+
+{# ── 摘要徽章 ─────────────────────────────────── #}
+<div class="d-flex flex-wrap gap-3 mb-4">
+  <div class="card text-center px-4 py-2 border-success">
+    <div class="fs-4 fw-bold text-success">{{ paid_count }}</div>
+    <div class="text-muted small">已繳費</div>
+  </div>
+  <div class="card text-center px-4 py-2 border-danger">
+    <div class="fs-4 fw-bold text-danger">{{ unpaid_count }}</div>
+    <div class="text-muted small">未繳費</div>
+  </div>
+  {% if no_record_count %}
+  <div class="card text-center px-4 py-2">
+    <div class="fs-4 fw-bold text-secondary">{{ no_record_count }}</div>
+    <div class="text-muted small">無紀錄</div>
+  </div>
+  {% endif %}
+</div>
+
+{% if not rows %}
+<p class="text-muted">無團員資料。</p>
+{% else %}
+<div class="table-responsive">
+  <table class="table table-bordered table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>姓名</th>
+        <th>樂器</th>
+        <th>繳費狀態</th>
+        <th>金額</th>
+        <th>繳費日期</th>
+        <th>收款幹部</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr {% if row.status == 'unpaid' %}class="table-warning"{% elif row.status == 'no_record' %}class="table-light text-muted"{% endif %}>
+        <td class="fw-semibold">{{ row.member.name }}</td>
+        <td class="text-muted small">{{ row.member.instrument.name|default:"—" }}</td>
+        <td>
+          {% if row.status == 'paid' %}
+            <span class="badge bg-success">已繳費</span>
+          {% elif row.status == 'unpaid' %}
+            <span class="badge bg-danger">未繳費</span>
+          {% else %}
+            <span class="badge bg-secondary">無紀錄</span>
+          {% endif %}
+        </td>
+        <td>{% if row.fee %}{{ row.fee.amount|floatformat:"0" }} 元{% else %}—{% endif %}</td>
+        <td>{% if row.fee and row.fee.paid_at %}{{ row.fee.paid_at|date:"Y/m/d" }}{% else %}—{% endif %}</td>
+        <td class="text-muted small">{% if row.fee and row.fee.collected_by %}{{ row.fee.collected_by.name }}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% else %}
+<p class="text-muted">請先在 Django Admin 建立會費繳納紀錄（MembershipFee）後，再使用此報表。</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}請假統計 — 百韻管樂團{% endblock %}
+
+{% block extra_css %}
+<style>
+  @media print {
+    .d-print-none { display: none !important; }
+    body { font-size: 11px; }
+    .table th, .table td { padding: 3px 6px !important; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h2 class="mb-0">請假統計</h2>
+  <button class="btn btn-outline-secondary d-print-none" onclick="window.print()">
+    <i class="bi bi-printer"></i> 列印
+  </button>
+</div>
+
+{# ── 演出活動選擇 ─────────────────────────────── #}
+<form method="get" class="d-flex align-items-center gap-2 mb-4 d-print-none">
+  <label class="fw-semibold text-nowrap" for="event">演出活動</label>
+  <select name="event" id="event" class="form-select" style="max-width:280px;" onchange="this.form.submit()">
+    {% for ev in events %}
+    <option value="{{ ev.pk }}" {% if ev.pk|stringformat:"s" == selected_event_id %}selected{% endif %}>
+      {{ ev.name }}（{{ ev.performance_date|date:"Y/m/d" }}）
+    </option>
+    {% endfor %}
+  </select>
+</form>
+
+{% if selected_event %}
+<p class="text-muted d-print-block mb-3">{{ selected_event.name }}</p>
+{% endif %}
+
+{% if not rehearsal_rows and selected_event %}
+<p class="text-muted">此活動尚無請假申請紀錄。</p>
+{% elif rehearsal_rows %}
+
+{# ── 各場排練請假統計 ─────────────────────────── #}
+<h5 class="mb-3">各場排練請假數</h5>
+<div class="table-responsive mb-5">
+  <table class="table table-bordered table-sm align-middle text-center">
+    <thead class="table-light">
+      <tr>
+        <th class="text-start">排練</th>
+        <th>日期</th>
+        <th class="text-warning-emphasis">待審核</th>
+        <th class="text-success">核准</th>
+        <th class="text-danger">拒絕</th>
+        <th>合計</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rehearsal_rows %}
+      <tr>
+        <td class="text-start">第 {{ row.rehearsal.sequence }} 次</td>
+        <td>{{ row.rehearsal.date|date:"m/d（D）" }}</td>
+        <td>{% if row.pending %}<span class="fw-semibold text-warning-emphasis">{{ row.pending }}</span>{% else %}<span class="text-muted">0</span>{% endif %}</td>
+        <td>{% if row.approved %}<span class="fw-semibold text-success">{{ row.approved }}</span>{% else %}<span class="text-muted">0</span>{% endif %}</td>
+        <td>{% if row.rejected %}<span class="fw-semibold text-danger">{{ row.rejected }}</span>{% else %}<span class="text-muted">0</span>{% endif %}</td>
+        <td class="fw-semibold">{{ row.total }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# ── 個人請假次數統計 ─────────────────────────── #}
+{% if member_rows %}
+<h5 class="mb-3">個人請假次數（按次數排序）</h5>
+<div class="table-responsive">
+  <table class="table table-bordered table-sm align-middle text-center">
+    <thead class="table-light">
+      <tr>
+        <th class="text-start">姓名</th>
+        <th class="text-success">核准</th>
+        <th class="text-warning-emphasis">待審核</th>
+        <th class="text-danger">拒絕</th>
+        <th>合計</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in member_rows %}
+      <tr>
+        <td class="text-start fw-semibold">{{ row.member.name }}</td>
+        <td>{% if row.approved %}<span class="text-success fw-semibold">{{ row.approved }}</span>{% else %}<span class="text-muted">0</span>{% endif %}</td>
+        <td>{% if row.pending %}<span class="text-warning-emphasis fw-semibold">{{ row.pending }}</span>{% else %}<span class="text-muted">0</span>{% endif %}</td>
+        <td>{% if row.rejected %}<span class="text-danger fw-semibold">{{ row.rejected }}</span>{% else %}<span class="text-muted">0</span>{% endif %}</td>
+        <td class="fw-semibold">{{ row.total }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% elif not events %}
+<p class="text-muted">尚無任何演出活動。</p>
+{% endif %}
+{% endblock %}
