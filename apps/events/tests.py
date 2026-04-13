@@ -632,6 +632,233 @@ class SetlistManageTest(TestCase):
         self.assertFalse(Setlist.objects.filter(pk=item.pk).exists())
 
 
+class AttendanceReportTest(TestCase):
+    """排練出席報表"""
+
+    def setUp(self):
+        self.officer = User.objects.create_user(
+            username='ar_officer', email='ar_officer@test.local',
+            password='testpass123', name='出席幹部', role=User.Role.OFFICER,
+        )
+        self.member = User.objects.create_user(
+            username='ar_member', email='ar_member@test.local',
+            password='testpass123', name='出席團員', role=User.Role.MEMBER,
+        )
+        self.venue = Venue.objects.create(name='出席測試場地', type='rehearsal')
+        self.event = PerformanceEvent.objects.create(
+            name='出席測試音樂會',
+            type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + timedelta(days=30),
+            performance_venue=self.venue,
+        )
+        self.rehearsal = Rehearsal.objects.create(
+            event=self.event, sequence=1,
+            date=timezone.now() - timedelta(days=7),
+            venue=self.venue,
+        )
+        self.url = reverse('events:attendance_report', args=[self.event.pk])
+
+    # ── T01 存取控制 ────────────────────────────────────────
+
+    def test_unauthenticated_redirects(self):
+        """未登入應導向登入頁"""
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    def test_member_redirects(self):
+        """一般團員應被導回活動詳情"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertRedirects(r, reverse('events:event_detail', args=[self.event.pk]),
+                             fetch_redirect_response=False)
+
+    def test_officer_can_access(self):
+        """幹部可進入出席報表"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 200)
+
+    def test_invalid_event_returns_404(self):
+        """不存在的活動 pk 應回 404"""
+        self.client.force_login(self.officer)
+        r = self.client.get(reverse('events:attendance_report', args=[99999]))
+        self.assertEqual(r.status_code, 404)
+
+    # ── T02 資料正確性 ──────────────────────────────────────
+
+    def test_shows_rehearsal_in_report(self):
+        """報表應顯示排練序號"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertContains(r, '第 1 次')
+
+    def test_shows_member_name(self):
+        """報表應顯示團員姓名"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertContains(r, '出席團員')
+
+    def test_present_count_correct(self):
+        """出席紀錄存在時統計數字應正確"""
+        RehearsalAttendance.objects.create(
+            rehearsal=self.rehearsal,
+            member=self.member,
+            status=RehearsalAttendance.Status.PRESENT,
+        )
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 200)
+        rehearsals = r.context['rehearsals']
+        self.assertEqual(rehearsals[0].stats['present'], 1)
+        self.assertEqual(rehearsals[0].stats['leave'], 0)
+        self.assertEqual(rehearsals[0].stats['absent'], 0)
+
+    def test_leave_status_counted_separately(self):
+        """請假與缺席各自計入不同欄位"""
+        RehearsalAttendance.objects.create(
+            rehearsal=self.rehearsal,
+            member=self.member,
+            status=RehearsalAttendance.Status.LEAVE,
+        )
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        rehearsals = r.context['rehearsals']
+        self.assertEqual(rehearsals[0].stats['leave'], 1)
+        self.assertEqual(rehearsals[0].stats['present'], 0)
+
+    def test_no_record_count_includes_members_without_attendance(self):
+        """沒有出席紀錄的團員應計入無紀錄欄位"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        rehearsals = r.context['rehearsals']
+        # member 沒有任何紀錄 → no_record 至少為 1
+        self.assertGreaterEqual(rehearsals[0].stats['no_record'], 1)
+
+    def test_member_row_rate_calculated(self):
+        """個人出席率應正確計算"""
+        RehearsalAttendance.objects.create(
+            rehearsal=self.rehearsal,
+            member=self.member,
+            status=RehearsalAttendance.Status.PRESENT,
+        )
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        member_rows = r.context['member_rows']
+        member_row = next(row for row in member_rows if row['member'] == self.member)
+        self.assertEqual(member_row['present_count'], 1)
+        self.assertEqual(member_row['total'], 1)
+        self.assertEqual(member_row['rate'], 100)
+
+
+class LeaveStatsTest(TestCase):
+    """請假統計報表"""
+
+    def setUp(self):
+        self.officer = User.objects.create_user(
+            username='ls_officer', email='ls_officer@test.local',
+            password='testpass123', name='統計幹部', role=User.Role.OFFICER,
+        )
+        self.member = User.objects.create_user(
+            username='ls_member', email='ls_member@test.local',
+            password='testpass123', name='統計團員', role=User.Role.MEMBER,
+        )
+        self.venue = Venue.objects.create(name='統計測試場地', type='rehearsal')
+        self.event = PerformanceEvent.objects.create(
+            name='統計測試音樂會',
+            type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + timedelta(days=30),
+            performance_venue=self.venue,
+        )
+        self.rehearsal = Rehearsal.objects.create(
+            event=self.event, sequence=1,
+            date=timezone.now() + timedelta(days=7),
+            venue=self.venue,
+        )
+        self.url = reverse('events:leave_stats')
+
+    # ── T01 存取控制 ────────────────────────────────────────
+
+    def test_unauthenticated_redirects(self):
+        """未登入應導向登入頁"""
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    def test_member_redirects(self):
+        """一般團員應被導回活動列表"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertRedirects(r, reverse('events:event_list'), fetch_redirect_response=False)
+
+    def test_officer_can_access(self):
+        """幹部可進入請假統計頁"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 200)
+
+    # ── T02 資料正確性 ──────────────────────────────────────
+
+    def test_defaults_to_most_recent_event(self):
+        """預設應選取最近一場演出活動"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertEqual(r.context['selected_event'], self.event)
+
+    def test_rehearsal_leave_counts_correct(self):
+        """各場排練的核准/待審請假數應正確"""
+        LeaveRequest.objects.create(
+            member=self.member, rehearsal=self.rehearsal,
+            reason='測試請假', status=LeaveRequest.Status.APPROVED,
+        )
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url, {'event': self.event.pk})
+        rehearsal_rows = r.context['rehearsal_rows']
+        self.assertEqual(len(rehearsal_rows), 1)
+        self.assertEqual(rehearsal_rows[0]['approved'], 1)
+        self.assertEqual(rehearsal_rows[0]['pending'], 0)
+
+    def test_member_leave_row_appears(self):
+        """有請假紀錄的團員應出現在個人統計區"""
+        LeaveRequest.objects.create(
+            member=self.member, rehearsal=self.rehearsal,
+            reason='測試請假', status=LeaveRequest.Status.PENDING,
+        )
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url, {'event': self.event.pk})
+        member_rows = r.context['member_rows']
+        names = [row['member'].name for row in member_rows]
+        self.assertIn('統計團員', names)
+
+    def test_member_rows_sorted_by_total_desc(self):
+        """個人統計應按請假次數遞減排序"""
+        member2 = User.objects.create_user(
+            username='ls_member2', email='ls_member2@test.local',
+            password='testpass123', name='多假團員', role=User.Role.MEMBER,
+        )
+        rehearsal2 = Rehearsal.objects.create(
+            event=self.event, sequence=2,
+            date=timezone.now() + timedelta(days=14),
+            venue=self.venue,
+        )
+        LeaveRequest.objects.create(
+            member=self.member, rehearsal=self.rehearsal,
+            reason='一次', status=LeaveRequest.Status.PENDING,
+        )
+        LeaveRequest.objects.create(
+            member=member2, rehearsal=self.rehearsal,
+            reason='一次', status=LeaveRequest.Status.PENDING,
+        )
+        LeaveRequest.objects.create(
+            member=member2, rehearsal=rehearsal2,
+            reason='兩次', status=LeaveRequest.Status.PENDING,
+        )
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url, {'event': self.event.pk})
+        member_rows = r.context['member_rows']
+        self.assertEqual(member_rows[0]['member'].name, '多假團員')
+
+
 class LeaveRequestPastRehearsalTest(TestCase):
     """過期排練的請假申請 server-side 阻擋"""
 
