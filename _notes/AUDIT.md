@@ -1,149 +1,135 @@
 # 邏輯審計紀錄
 
-本文件記錄對系統邏輯設計的審計結果，供日後維護參考。
+本文件記錄對系統邏輯設計的審計與修正，供日後維護參考。
 
-> 最後審計：2026-04-14（涵蓋 accounts / events / assets / finance / scores）
-
----
-
-## 審計範圍
-
-對以下所有 views.py 和 models.py 進行人工邏輯審查：
-
-- `apps/accounts/`
-- `apps/events/`
-- `apps/assets/`
-- `apps/finance/`
-- `apps/scores/`
-
-審查重點：存取控制、狀態轉換邏輯、型別一致性、查詢邊界、重複操作防護。
+| 欄位 | 內容 |
+|------|------|
+| 最後審計 | 2026-04-14 |
+| 涵蓋範圍 | accounts / events / assets / finance / scores |
+| 審查重點 | 存取控制、狀態轉換、型別一致性、查詢邊界、重複操作防護 |
 
 ---
 
-## 歷史修正紀錄（從 git log 整理）
+## 一、修正紀錄
 
-以下為開發過程中曾發現並修正的問題，依修正時間排序。
+### 2026-04-13
 
-### 2026-04-13 — 早期開發 Review（commits `00b95d5`、`3ea90b4`、`69c5e24`、`8b8c7c4`、`2d41963`）
+| # | 位置 | 問題摘要 |
+|---|------|---------|
+| 1 | `accounts/models.py` | `is_officer` 未含 superuser |
+| 2 | `accounts/models.py` | `is_staff` 未跟 role 同步 |
+| 3 | `events/views.py` | `setlist_manage` 未在 server-side 驗證 score_type |
+| 4 | `events/views.py` | `leave_request_create` 未在 server-side 阻擋已結束排練 |
+| 5 | `events/models.py` | `LeaveRequest` 缺少 `created_at` 欄位 |
+| 6 | `events/views.py` | `qr_generate` 初次／重新產生的成功訊息相同 |
+| 7 | `scores/models.py` | `Score.clean()` 驗證缺失 |
+| 8 | `templates/events/rehearsal_detail.html` | 排練詳情連結只在有摘要時顯示 |
 
-**`accounts/models.py` — `is_officer` 未含 superuser**
-`is_officer` 原本只檢查 `role in (OFFICER, ADMIN)`，superuser 被排除在外。
+**#1 — `is_officer` 未含 superuser**
+`is_officer` 原本只檢查 `role in (OFFICER, ADMIN)`，superuser 被排除。
 修正：加入 `or self.is_superuser` 判斷。
+（commit `00b95d5`）
 
-**`accounts/models.py` — `is_staff` 未跟 role 同步**
-`role=admin` 或 `is_superuser` 的使用者需要 `is_staff=True` 才能進 Django Admin，
-但 `save()` 未自動同步。修正：在 `save()` 中加入自動設定邏輯。
+**#2 — `is_staff` 未跟 role 同步**
+`role=admin` 或 `is_superuser` 的使用者需要 `is_staff=True` 才能進 Django Admin，但 `save()` 未自動同步。
+修正：在 `save()` 加入自動設定邏輯。
+（commit `3ea90b4`）
 
-**`events/views.py` — `setlist_manage` 未在 server-side 驗證 score_type**
-前端限制只能選總譜，但 server 端沒有驗證，直接傳入分譜的 pk 可繞過。
-修正：改用 `get_object_or_404(Score, pk=score_id, score_type=Score.ScoreType.FULL)`，
-傳入分譜時回傳 404。
+**#3 — `setlist_manage` 未驗證 score_type**
+前端限制只能選總譜，但 server 端沒有驗證，直接 POST 分譜 pk 可繞過。
+修正：改用 `get_object_or_404(Score, pk=score_id, score_type=Score.ScoreType.FULL)`。
+（commit `2d41963`）
 
-**`events/views.py` — `leave_request_create` 未在 server-side 阻擋已結束排練**
-前端會 disable 按鈕，但 server 端沒有驗證，可透過直接 POST 送出已結束排練的請假。
-修正：在 view 內加入 `if rehearsal.date <= timezone.now():` 判斷。
+**#4 — `leave_request_create` 未阻擋已結束排練**
+前端會 disable 按鈕，但可透過直接 POST 送出已結束排練的請假。
+修正：在 view 加入 `if rehearsal.date <= timezone.now():` 判斷。
+（commit `2d41963`）
 
-**`events/models.py` — `LeaveRequest` 缺少 `created_at` 欄位**
-請假申請無法追蹤送出時間。修正：新增 `created_at = DateTimeField(auto_now_add=True)`。
+**#5 — `LeaveRequest` 缺少 `created_at`**
+請假申請無法追蹤送出時間。
+修正：新增 `created_at = DateTimeField(auto_now_add=True)`（migration 0004）。
+（commit `8b8c7c4`）
 
-**`events/views.py` — `qr_generate` 成功訊息錯誤**
-無論是初次產生或重新產生，訊息都顯示「已產生」。
+**#6 — `qr_generate` 成功訊息固定顯示「已產生」**
+無論初次或重新產生，訊息皆相同，無法區分操作結果。
 修正：依是否已有 token 分別顯示「已產生」或「已重新產生」。
+（commit `8b8c7c4`）
 
-**`scores/models.py` — `Score.clean()` 驗證缺失**
-總譜（FULL）不應該有樂器/聲部欄位，分譜（PART）必須有樂器。
-原本沒有任何驗證，修正：加入 `clean()` 方法處理這兩條規則。
+**#7 — `Score.clean()` 驗證缺失**
+總譜（FULL）不應有樂器/聲部，分譜（PART）必須有樂器，原本無任何驗證。
+修正：加入 `clean()` 方法。
+（commit `8b8c7c4`）
 
-**`templates/events/rehearsal_detail.html` — 排練詳情連結只在有摘要時顯示**
-若幹部還沒填寫排練摘要，連結消失，使用者無法進入排練詳情頁。
-修正：連結改為永遠顯示，文字依摘要是否存在切換（「排練摘要」/ 「詳情」）。
-
----
-
-## 已修正的問題（2026-04-14）
-
-### 1. Open Redirect — `accounts/views.py`
-
-**問題：** `login_view` 直接 `redirect(request.GET.get('next', '/'))` 沒有驗證 URL，
-攻擊者可以構造 `?next=https://evil.com` 讓使用者登入後被導到外部網站。
-
-**修正：** 改用 Django 內建的 `url_has_allowed_host_and_scheme()` 驗證：
-
-```python
-next_url = request.GET.get('next', '/')
-if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
-    next_url = '/'
-return redirect(next_url)
-```
+**#8 — 排練詳情連結只在有摘要時顯示**
+若幹部尚未填寫排練摘要，連結消失，使用者無法進入詳情頁。
+修正：連結改為永遠顯示，文字依摘要存在與否切換（「排練摘要」／「詳情」）。
+（commit `69c5e24`）
 
 ---
 
-### 2. 請假審核缺少 PENDING 守衛 — `events/views.py`
+### 2026-04-14
 
-**問題：** `leave_review_list` 收到 POST 後直接覆寫 `leave.status`，沒有先確認狀態是否仍為
-PENDING。若幹部對已核准的申請重複送出（例如瀏覽器上一頁），可能把 REJECTED 翻為 APPROVED
-並建立重複出席紀錄。
+| # | 位置 | 問題摘要 | 嚴重度 |
+|---|------|---------|--------|
+| 9 | `accounts/views.py:20` | Open redirect — `next` 參數未驗證 | 中（安全性） |
+| 10 | `events/views.py:113` | 請假審核缺少 PENDING 狀態守衛 | 中（邏輯） |
+| 11 | `events/views.py:433` | Setlist 可重複加入同一首曲目 | 低（邏輯） |
+| 12 | `events/views.py:321` | `leave_stats` 使用硬字串比對 status | 低（維護性） |
 
-對比 `registration_review()` 有正確的 `if reg.status == PENDING:` 守衛，此處漏掉了。
+**#9 — Open redirect**
+`login_view` 直接 `redirect(request.GET.get('next', '/'))` 未驗證 URL，
+攻擊者可構造 `?next=https://evil.com` 讓登入後導向外部網站。
+修正：改用 `url_has_allowed_host_and_scheme()` 驗證後再 redirect。
+（commit `e9242ce`）
 
-**修正：** 在處理 action 前先檢查狀態：
+**#10 — 請假審核缺少 PENDING 守衛**
+`leave_review_list` 收到 POST 後直接覆寫 `leave.status`，未確認狀態是否仍為 PENDING。
+若幹部對已核准的申請重複送出（例如瀏覽器上一頁），可能把 REJECTED 翻為 APPROVED 並重建出席紀錄。
+對比 `registration_review()` 有正確守衛，此處漏掉了。
+修正：處理前加入 `if leave.status != LeaveRequest.Status.PENDING:` 檢查。
+（commit `e9242ce`）
 
-```python
-if leave.status != LeaveRequest.Status.PENDING:
-    messages.error(request, '此申請已審核，無法重複操作。')
-    return redirect('events:leave_review_list')
-```
+**#11 — Setlist 可重複加入同一首曲目**
+新增曲目時只擋重複「演出順序號碼」，未擋重複「曲目」，同一首曲子可用不同順序加入兩次。
+修正：額外加入 `Setlist.objects.filter(event=event, score_id=score_id).exists()` 檢查。
+（commit `e9242ce`）
 
----
-
-### 3. Setlist 可重複加入同一首曲目 — `events/views.py`
-
-**問題：** `setlist_manage` 新增曲目時只擋重複「演出順序號碼」，未擋重複「曲目」。
-同一首曲子可以用不同順序號碼被加入兩次。
-
-**修正：** 額外加一道曲目重複檢查：
-
-```python
-elif Setlist.objects.filter(event=event, score_id=score_id).exists():
-    messages.error(request, '此曲目已在曲目單中。')
-```
-
----
-
-### 4. `leave_stats` 使用硬字串比對 status — `events/views.py`
-
-**問題：** `defaultdict` 的 key 和 `sum(1 for l if l.status == 'approved')` 直接用
-硬字串，與 `LeaveRequest.Status.APPROVED` 等 TextChoices 常數脫鉤。
-目前值恰好一致，但 Status 值若未來異動會靜默出錯。
-
-**修正：** 改用 `S = LeaveRequest.Status` 後統一用 `S.PENDING / S.APPROVED / S.REJECTED`。
+**#12 — `leave_stats` 使用硬字串比對 status**
+`defaultdict` 的 key 與計數邏輯直接使用 `'approved'`、`'pending'`、`'rejected'` 硬字串，
+與 `LeaveRequest.Status` TextChoices 常數脫鉤。目前值恰好一致，但 Status 值若異動會靜默出錯。
+修正：改用 `S = LeaveRequest.Status`，統一使用 `S.PENDING / S.APPROVED / S.REJECTED`。
+（commit `e9242ce`）
 
 ---
 
-## 審計後確認無問題的項目
+## 二、確認無問題的項目
 
-| 疑似問題 | 實際情況 |
+審計過程中懷疑但確認正確的項目，避免日後重複誤判。
+
+| 疑似問題 | 確認結果 |
 |---------|---------|
-| `member_directory` instrument=None 會 500 | 已有 `if member.instrument else '未分類'` 守衛 |
-| `rehearsal.date` 與 `timezone.now()` 型別不符 | `date` 是 `DateTimeField`，比較正確 |
-| `finance/views.py` 空期別時 `periods[0]` IndexError | `if not selected_period and periods:` 空 queryset 為 falsy |
+| `member_directory` instrument=None 會 500 | 已有 `if member.instrument else '未分類'` 守衛（`views.py:53`） |
+| `rehearsal.date` 與 `timezone.now()` 型別不符 | `date` 是 `DateTimeField`，timezone-aware 比較正確 |
+| `finance/views.py` 空期別時 `periods[0]` IndexError | `if not selected_period and periods:` 空 queryset 為 falsy，已守衛 |
 | `setlist_manage` order 傳字串給 IntegerField | Django ORM 自動轉型，正常運作 |
-| `leave_stats` 字串比對邏輯 | TextChoices 值本身是小寫字串，與硬字串一致 |
-| QR 簽到任何人都可以簽 | 刻意設計：有 token URL 才能進入，不需角色限制 |
+| QR 簽到任何人都可以簽 | 刻意設計：持有 token URL 才能進入，不需角色限制 |
 
 ---
 
-## 已知的設計選擇（非 bug，但值得記錄）
+## 三、設計選擇備忘
 
-- **`leave_stats` 按事件篩選**：只顯示有申請記錄的團員，沒有申請過的人不出現在列表中。這是刻意的設計（避免空資料行）。
-- **出席報表包含 ADMIN role**：`attendance_report` 的 members query 排除 `role=ADMIN`，幹部本身（OFFICER）仍包含在內，這是正確的。
-- **`borrow_status_report` 逾期判斷**：`due_date < today`（不含當天），即到期當天不算逾期，符合一般直覺。
+記錄不直覺但有意為之的設計，避免日後被誤當成 bug 修掉。
+
+- **`leave_stats` 只顯示有申請記錄的團員**：沒有申請過的人不出現，避免空資料行造成誤讀。
+- **出席報表包含 OFFICER role**：`attendance_report` 排除 `role=ADMIN`，幹部（OFFICER）仍在列，符合業務需求。
+- **`borrow_status_report` 逾期判斷為 `due_date < today`**：到期當天不算逾期，符合一般直覺。
 
 ---
 
-## 建議的後續審計項目
+## 四、待評估項目（未修正）
 
-以下問題屬於 Model 層資料完整性，目前沒有 view 層會觸發，暫不修改，但可考慮加入 Model 的 `clean()` 或 migration constraint：
+以下屬於 Model 層資料完整性問題，目前沒有 view 會主動觸發，暫不修改。
+若日後資料出現異常，可優先從這裡找原因，並考慮加入 `clean()` 或 DB constraint。
 
 | 位置 | 問題描述 |
 |------|---------|
