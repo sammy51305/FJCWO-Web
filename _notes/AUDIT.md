@@ -20,6 +20,46 @@
 
 ---
 
+## 歷史修正紀錄（從 git log 整理）
+
+以下為開發過程中曾發現並修正的問題，依修正時間排序。
+
+### 2026-04-13 — 早期開發 Review（commits `00b95d5`、`3ea90b4`、`69c5e24`、`8b8c7c4`、`2d41963`）
+
+**`accounts/models.py` — `is_officer` 未含 superuser**
+`is_officer` 原本只檢查 `role in (OFFICER, ADMIN)`，superuser 被排除在外。
+修正：加入 `or self.is_superuser` 判斷。
+
+**`accounts/models.py` — `is_staff` 未跟 role 同步**
+`role=admin` 或 `is_superuser` 的使用者需要 `is_staff=True` 才能進 Django Admin，
+但 `save()` 未自動同步。修正：在 `save()` 中加入自動設定邏輯。
+
+**`events/views.py` — `setlist_manage` 未在 server-side 驗證 score_type**
+前端限制只能選總譜，但 server 端沒有驗證，直接傳入分譜的 pk 可繞過。
+修正：改用 `get_object_or_404(Score, pk=score_id, score_type=Score.ScoreType.FULL)`，
+傳入分譜時回傳 404。
+
+**`events/views.py` — `leave_request_create` 未在 server-side 阻擋已結束排練**
+前端會 disable 按鈕，但 server 端沒有驗證，可透過直接 POST 送出已結束排練的請假。
+修正：在 view 內加入 `if rehearsal.date <= timezone.now():` 判斷。
+
+**`events/models.py` — `LeaveRequest` 缺少 `created_at` 欄位**
+請假申請無法追蹤送出時間。修正：新增 `created_at = DateTimeField(auto_now_add=True)`。
+
+**`events/views.py` — `qr_generate` 成功訊息錯誤**
+無論是初次產生或重新產生，訊息都顯示「已產生」。
+修正：依是否已有 token 分別顯示「已產生」或「已重新產生」。
+
+**`scores/models.py` — `Score.clean()` 驗證缺失**
+總譜（FULL）不應該有樂器/聲部欄位，分譜（PART）必須有樂器。
+原本沒有任何驗證，修正：加入 `clean()` 方法處理這兩條規則。
+
+**`templates/events/rehearsal_detail.html` — 排練詳情連結只在有摘要時顯示**
+若幹部還沒填寫排練摘要，連結消失，使用者無法進入排練詳情頁。
+修正：連結改為永遠顯示，文字依摘要是否存在切換（「排練摘要」/ 「詳情」）。
+
+---
+
 ## 已修正的問題（2026-04-14）
 
 ### 1. Open Redirect — `accounts/views.py`
