@@ -5,6 +5,7 @@ from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from .forms import BootstrapAuthenticationForm, ProfileForm
 from .models import InstrumentType, Registration, User
@@ -17,7 +18,10 @@ def login_view(request):
     form = BootstrapAuthenticationForm(request, data=request.POST or None)
     if request.method == 'POST' and form.is_valid():
         login(request, form.get_user())
-        return redirect(request.GET.get('next', '/'))
+        next_url = request.GET.get('next', '/')
+        if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+            next_url = '/'
+        return redirect(next_url)
 
     return render(request, 'registration/login.html', {'form': form})
 

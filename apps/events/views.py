@@ -111,6 +111,9 @@ def leave_review_list(request):
         leave_id = request.POST.get('leave_id')
         action = request.POST.get('action')
         leave = get_object_or_404(LeaveRequest, pk=leave_id)
+        if leave.status != LeaveRequest.Status.PENDING:
+            messages.error(request, '此申請已審核，無法重複操作。')
+            return redirect('events:leave_review_list')
         if action == 'approve':
             leave.status = LeaveRequest.Status.APPROVED
             leave.reviewed_by = request.user
@@ -318,7 +321,8 @@ def leave_stats(request):
 
         # 每場排練的申請統計
         from collections import defaultdict
-        rehearsal_counts = defaultdict(lambda: {'pending': 0, 'approved': 0, 'rejected': 0})
+        S = LeaveRequest.Status
+        rehearsal_counts = defaultdict(lambda: {S.PENDING: 0, S.APPROVED: 0, S.REJECTED: 0})
         member_leave_map = defaultdict(list)  # member_id → [LeaveRequest, ...]
 
         for leave in leaves:
@@ -329,18 +333,18 @@ def leave_stats(request):
             counts = rehearsal_counts[rehearsal.pk]
             rehearsal_rows.append({
                 'rehearsal': rehearsal,
-                'pending': counts['pending'],
-                'approved': counts['approved'],
-                'rejected': counts['rejected'],
-                'total': counts['pending'] + counts['approved'] + counts['rejected'],
+                'pending': counts[S.PENDING],
+                'approved': counts[S.APPROVED],
+                'rejected': counts[S.REJECTED],
+                'total': counts[S.PENDING] + counts[S.APPROVED] + counts[S.REJECTED],
             })
 
         # 每位有申請紀錄的團員統計，按申請次數遞減
         for member_id, member_leaves in member_leave_map.items():
             member = member_leaves[0].member
-            approved = sum(1 for l in member_leaves if l.status == 'approved')
-            pending = sum(1 for l in member_leaves if l.status == 'pending')
-            rejected = sum(1 for l in member_leaves if l.status == 'rejected')
+            approved = sum(1 for l in member_leaves if l.status == S.APPROVED)
+            pending = sum(1 for l in member_leaves if l.status == S.PENDING)
+            rejected = sum(1 for l in member_leaves if l.status == S.REJECTED)
             member_rows.append({
                 'member': member,
                 'total': len(member_leaves),
@@ -432,6 +436,8 @@ def setlist_manage(request, pk):
                 messages.error(request, '請選擇曲目並填寫演出順序。')
             elif Setlist.objects.filter(event=event, order=order).exists():
                 messages.error(request, f'演出順序 {order} 已被使用。')
+            elif Setlist.objects.filter(event=event, score_id=score_id).exists():
+                messages.error(request, '此曲目已在曲目單中。')
             else:
                 score = get_object_or_404(Score, pk=score_id, score_type=Score.ScoreType.FULL)
                 Setlist.objects.create(event=event, score=score, order=order)
