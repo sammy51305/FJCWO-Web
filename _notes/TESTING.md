@@ -2,6 +2,8 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
+> 最後更新：2026-04-14（共 155 個測試）
+
 ---
 
 ## 執行測試
@@ -18,6 +20,8 @@ python manage.py test
 python manage.py test apps.events
 python manage.py test apps.accounts
 python manage.py test apps.scores
+python manage.py test apps.assets
+python manage.py test apps.finance
 ```
 
 ### 執行特定 Test class
@@ -38,6 +42,14 @@ python manage.py test apps.events.tests.QRCodeTest.test_qr_generate_creates_toke
 python manage.py test --verbosity=2
 ```
 
+### 自動產生測試結果報告
+
+```bash
+python manage.py test_report
+```
+
+結果輸出至 `_notes/TEST_RESULTS.md`，包含每個測試的通過狀態與執行時間。
+
 ---
 
 ## 測試資料庫
@@ -51,9 +63,9 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 
 ## 目前測試總覽
 
-共 **100 個測試**，分布在 4 個 app。
+共 **155 個測試**，分布在 6 個 app。
 
-### `apps/accounts/tests.py`（27 個）
+### `apps/accounts/tests.py`（36 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -61,24 +73,40 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 | `ProfileTest` | 個人資料頁存取控制、顯示姓名、POST 更新儲存 |
 | `MemberDirectoryTest` | 通訊錄存取控制、電話/email 可見性（member vs officer）、admin 不顯示 |
 | `UserRoleTest` | `is_officer` 各角色行為（member/officer/admin/superuser）、`is_staff` 自動設定 |
+| `RegistrationTest` | 校友報到申請（公開存取、重複申請防止、送出建立紀錄）、狀態查詢（用 email 查）、幹部審核（核准/拒絕）|
 
-### `apps/events/tests.py`（46 個）
+### `apps/events/tests.py`（73 個）
 
 | Class | 測試內容 |
 |-------|---------|
-| `LeaveRequestTestCase` | 請假申請的存取控制、空白原因被擋、正常送出、重複申請防止、我的紀錄、幹部審核（核准/拒絕）|
+| `LeaveRequestTestCase` | 請假申請的存取控制、空白/空白原因被擋、正常送出、重複申請防止、我的紀錄、幹部審核（核准/拒絕）、核准後同步出席紀錄 |
 | `EventViewsTest` | 演出活動列表/詳情、排練詳情、摘要/備註顯示、申請請假按鈕（未來啟用/過去停用）|
-| `QRCodeTest` | QR 管理頁存取控制、產生 token、重新產生換 UUID、停用/啟用 toggle、簽到頁顯示、已簽到提示、簽到確認建立出席紀錄 |
+| `QRCodeTest` | QR 管理頁存取控制、產生 token、重新產生換 UUID、小時數邊界、停用/啟用 toggle、簽到頁顯示、已簽到提示、簽到確認建立出席紀錄 |
 | `SetlistManageTest` | 曲目管理存取控制、新增總譜成功、新增分譜被擋（404）、重複順序被擋、移除曲目 |
+| `AttendanceReportTest` | 存取控制（未登入/一般團員/幹部）、404、出席/請假/無紀錄分類計數、個人出席率計算 |
+| `LeaveStatsTest` | 存取控制、預設最新活動、排練層計數（核准/待審）、個人層出現、按總次數遞減排序 |
 | `LeaveRequestPastRehearsalTest` | 直接 POST 到已結束排練的請假 URL 應被 server-side 阻擋 |
 
-### `apps/scores/tests.py`（14 個）
+### `apps/scores/tests.py`（21 個）
 
 | Class | 測試內容 |
 |-------|---------|
 | `ScoreModelValidationTest` | `clean()` 驗證：總譜不可有樂器/聲部、分譜必須有樂器 |
-| `ScoreListViewTest` | 存取控制、預設顯示全部、`type` 篩選、`instrument` 篩選 |
+| `ScoreListViewTest` | 存取控制、預設顯示全部、`type` 篩選、`instrument` 篩選、關鍵字搜尋、無結果空狀態 |
 | `ScoreDetailViewTest` | 存取控制、曲名/作曲顯示、404、無 PDF 顯示提示 |
+| `ScoreDownloadViewTest` | 存取控制、無 PDF 回 404、無效 pk 回 404 |
+
+### `apps/assets/tests.py`（9 個）
+
+| Class | 測試內容 |
+|-------|---------|
+| `BorrowStatusReportTest` | 存取控制、空狀態訊息、借出中財產顯示、已還財產不顯示、逾期標記（overdue flag）、未到期不標記、overdue_count 正確計算 |
+
+### `apps/finance/tests.py`（10 個）
+
+| Class | 測試內容 |
+|-------|---------|
+| `MembershipFeeReportTest` | 存取控制、無期別時顯示提示、預設最新期別、GET 切換期別、已繳/未繳/無紀錄三種狀態分類計數、rows 涵蓋全體活躍非 admin 團員 |
 
 ### `apps/public/tests.py`（6 個）
 
@@ -92,17 +120,18 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 
 ### 我們測什麼
 
-- **存取控制**：未登入導向登入頁、非幹部被擋並導回列表
-- **功能邏輯**：建立/更新資料庫紀錄的行為是否符合預期
+- **存取控制**：未登入導向登入頁、非幹部被擋並導回適當頁面
+- **功能邏輯**：建立/更新/查詢資料庫紀錄的行為是否符合預期
 - **UI 文字**：頁面有沒有出現應有的文字（或不該出現的文字）
 - **Model 驗證**：`clean()` 在錯誤輸入時是否拋出 `ValidationError`
+- **Context 資料**：view 傳給 template 的資料結構是否正確（統計數字、排序等）
 
 ### 我們不測什麼
 
 - **Django 框架本身**（路由解析、ORM 查詢語法等）
 - **靜態資源載入**（CSS / JS）
 - **管理後台**（Django Admin 由框架負責，不另寫測試）
-- **尚未實作前端的功能**（finance、assets、announcements）
+- **Phase 3 未實作的功能**（meetings、announcements views）
 
 ---
 
@@ -117,6 +146,8 @@ apps/
 ├── accounts/tests.py
 ├── events/tests.py
 ├── scores/tests.py
+├── assets/tests.py
+├── finance/tests.py
 └── public/tests.py
 ```
 
@@ -155,13 +186,31 @@ class MyTest(TestCase):
 ### 常用斷言
 
 ```python
-self.assertEqual(r.status_code, 200)         # 狀態碼
-self.assertRedirects(r, url)                  # 導向
-self.assertContains(r, '某段文字')             # 頁面含此文字
-self.assertNotContains(r, '某段文字')          # 頁面不含此文字
-self.assertTrue(QuerySet.exists())            # 資料存在
-self.assertRaises(ValidationError, fn)        # 拋出例外
-obj.refresh_from_db(); self.assertEqual(...)  # 驗證資料庫更新
+self.assertEqual(r.status_code, 200)           # 狀態碼
+self.assertRedirects(r, url)                    # 導向（預設也驗證目標頁 200）
+self.assertRedirects(r, url, fetch_redirect_response=False)  # 只驗導向，不跟進
+self.assertContains(r, '某段文字')               # 頁面含此文字
+self.assertNotContains(r, '某段文字')            # 頁面不含此文字
+self.assertTrue(QuerySet.exists())              # 資料存在
+self.assertFalse(QuerySet.exists())             # 資料不存在
+self.assertEqual(QuerySet.count(), N)           # 資料筆數
+self.assertRaises(ValidationError, fn)          # 拋出例外
+obj.refresh_from_db(); self.assertEqual(...)    # 驗證資料庫更新後的值
+r.context['key']                                # 直接驗證 view 傳給 template 的 context
+```
+
+### 驗證 context 資料的寫法
+
+報表類 view 的核心邏輯通常是計算 context 裡的統計數字，直接驗證比 `assertContains` 更精準：
+
+```python
+def test_present_count_correct(self):
+    RehearsalAttendance.objects.create(rehearsal=self.rehearsal, member=self.member,
+                                       status='present')
+    self.client.force_login(self.officer)
+    r = self.client.get(self.url)
+    rehearsals = r.context['rehearsals']
+    self.assertEqual(rehearsals[0].stats['present'], 1)
 ```
 
 ### 驗證 Model clean() 的寫法
@@ -185,6 +234,6 @@ def test_invalid_state_raises(self):
 
 | App | 功能 | 說明 |
 |-----|------|------|
-| `finance` | 所有功能 | 僅有 Model + Admin，尚無前端 |
-| `assets` | 所有功能 | 僅有 Model + Admin，尚無前端 |
-| `announcements` | 所有功能 | 僅有 Model + Admin，尚無前端 |
+| `announcements` | 所有功能 | 僅有 Model，尚無 views |
+| `meetings` | 所有功能 | Phase 3，尚未實作 |
+| `notifications` | 所有功能 | LINE Bot，Phase 2 待做 |

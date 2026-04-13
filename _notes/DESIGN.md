@@ -2,7 +2,7 @@
 
 > 本文件說明 Phase 1 & 2 的設計決策、資料庫結構與各系統的運作邏輯。
 > 目標讀者：接手開發或複習程式碼的人（包含自己）。
-> 最後更新：2026-04-14（補充首頁 Dashboard、報到狀態查詢、演出曲目管理、樂譜 views）
+> 最後更新：2026-04-14（補充首頁 Dashboard、報到狀態查詢、演出曲目管理、樂譜 views、四個報表 view）
 
 ---
 
@@ -25,6 +25,10 @@
    - [首頁 Dashboard（public）](#411-首頁-dashboardpublic)
    - [演出曲目管理（events）](#412-演出曲目管理events)
    - [樂譜瀏覽與下載（scores）](#413-樂譜瀏覽與下載scores)
+   - [報表：排練出席（events）](#414-報表排練出席events)
+   - [報表：財產借用現況（assets）](#415-報表財產借用現況assets)
+   - [報表：會費繳納狀況（finance）](#416-報表會費繳納狀況finance)
+   - [報表：請假統計（events）](#417-報表請假統計events)
 
 ---
 
@@ -726,6 +730,126 @@ return FileResponse(score.file.open('rb'), as_attachment=True, filename=...)
 
 沒有上傳 PDF 的樂譜，`score.file` 為空，直接回傳 404。
 用 `as_attachment=True` 讓瀏覽器觸發下載而非在 tab 內開啟。
+
+---
+
+### 4.14 報表：排練出席（events）
+
+**檔案**：`apps/events/views.py`（`attendance_report`）、路由：`/events/<pk>/attendance/`
+
+**幹部限定**，以演出活動為單位，顯示所有排練的出席狀況。
+
+#### 資料建構策略
+
+```python
+# 一次查詢建立 lookup table，避免 N+1
+attendance_map = {
+    (a.rehearsal_id, a.member_id): a.status
+    for a in RehearsalAttendance.objects.filter(rehearsal_id__in=[r.pk for r in rehearsals])
+}
+```
+
+用 `(rehearsal_id, member_id)` 為 key 的 dict，查詢複雜度 O(1)。
+不論有幾場排練、幾位團員，只需一次 DB 查詢。
+
+#### 兩層輸出
+
+| 輸出 | 說明 |
+|------|------|
+| 各場排練統計（上半部）| 每場排練的出席 / 請假 / 缺席 / 無紀錄人數 |
+| 個人橫列（下半部）| 每位團員各場排練的狀態 + 出席率（綠/黃/紅色標示）|
+
+#### 無紀錄 vs 缺席
+
+`absent`（缺席）是幹部手動標記的狀態；無紀錄（`None`）是完全沒有 `RehearsalAttendance` 的情況。
+兩者語意不同，分開計算與顯示，讓幹部知道哪些人「確認缺席」、哪些人「根本沒任何紀錄」。
+
+---
+
+### 4.15 報表：財產借用現況（assets）
+
+**檔案**：`apps/assets/views.py`（`borrow_status_report`）、路由：`/assets/borrows/`
+
+**幹部限定**，顯示所有 `returned_at IS NULL` 的借用紀錄，並標記逾期項目。
+
+```python
+today = timezone.localdate()
+active_borrows = AssetBorrow.objects.filter(returned_at__isnull=True)
+
+rows = []
+for borrow in active_borrows:
+    overdue = borrow.due_date is not None and borrow.due_date < today
+    rows.append({'borrow': borrow, 'overdue': overdue})
+```
+
+**為什麼用 `timezone.localdate()` 而非 `timezone.now().date()`？**
+`localdate()` 會依設定的 `TIME_ZONE` 轉換成本地日期，確保台灣時區的「今天」判斷正確。
+
+逾期列在 template 用 `class="table-danger"` 高亮，同時顯示逾期徽章，讓幹部一眼識別。
+
+---
+
+### 4.16 報表：會費繳納狀況（finance）
+
+**檔案**：`apps/finance/views.py`（`membership_fee_report`）、路由：`/finance/membership/`
+
+**幹部限定**，按期別顯示所有團員的繳費狀態。
+
+#### 三種狀態
+
+| status | 條件 | 說明 |
+|--------|------|------|
+| `paid` | `MembershipFee` 存在且 `paid_at` 有值 | 已繳費 |
+| `unpaid` | `MembershipFee` 存在但 `paid_at` 為空 | 建了紀錄但尚未繳費 |
+| `no_record` | 該期別完全沒有 `MembershipFee` 紀錄 | 幹部尚未建立此人的紀錄 |
+
+`no_record` 是透過比對「全體活躍團員」與「該期別 fee_map」的差集得出：
+
+```python
+fee_map = {f.member_id: f for f in MembershipFee.objects.filter(period=selected_period)}
+for member in members:
+    fee = fee_map.get(member.pk)  # None = no_record
+```
+
+#### 預設期別
+
+```python
+periods = MembershipFee.objects.values_list('period', flat=True).distinct().order_by('-period')
+selected_period = request.GET.get('period', '') or (periods[0] if periods else '')
+```
+
+按 `period` 字串倒序排列，`'2026 上半年'` 排在 `'2025 下半年'` 之前，
+符合直覺（最新期別在前）而不需要額外的日期型別。
+
+---
+
+### 4.17 報表：請假統計（events）
+
+**檔案**：`apps/events/views.py`（`leave_stats`）、路由：`/events/leave/stats/`
+
+**幹部限定**，以演出活動為單位，提供請假申請的兩層統計。
+
+```python
+from collections import defaultdict
+
+rehearsal_counts = defaultdict(lambda: {'pending': 0, 'approved': 0, 'rejected': 0})
+member_leave_map = defaultdict(list)
+
+for leave in leaves:
+    rehearsal_counts[leave.rehearsal_id][leave.status] += 1
+    member_leave_map[leave.member_id].append(leave)
+```
+
+用兩個 `defaultdict` 單次迴圈同時完成排練層與個人層的統計，不需要額外查詢。
+
+#### 兩層輸出
+
+| 輸出 | 說明 |
+|------|------|
+| 排練層（上半部）| 每場排練的待審 / 核准 / 拒絕請假數 |
+| 個人層（下半部）| 按總請假次數遞減排序，顯示各狀態細分 |
+
+個人層只顯示「有請假紀錄的團員」，零請假的人不出現，避免表格過長。
 
 ---
 
