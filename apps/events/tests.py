@@ -198,6 +198,18 @@ class LeaveRequestTestCase(TestCase):
         attendance = RehearsalAttendance.objects.get(rehearsal=self.rehearsal, member=self.member)
         self.assertEqual(attendance.status, RehearsalAttendance.Status.LEAVE)
 
+    def test_approve_does_not_overwrite_present_attendance(self):
+        """核准請假時若團員已 QR 簽到（PRESENT），出席紀錄不應被覆寫為請假"""
+        RehearsalAttendance.objects.create(
+            rehearsal=self.rehearsal, member=self.member,
+            status=RehearsalAttendance.Status.PRESENT,
+        )
+        leave = LeaveRequest.objects.create(member=self.member, rehearsal=self.rehearsal, reason='請假')
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'leave_id': leave.pk, 'action': 'approve'})
+        attendance = RehearsalAttendance.objects.get(rehearsal=self.rehearsal, member=self.member)
+        self.assertEqual(attendance.status, RehearsalAttendance.Status.PRESENT)
+
     def test_reject_does_not_change_attendance(self):
         """拒絕請假不應影響出席紀錄"""
         leave = LeaveRequest.objects.create(member=self.member, rehearsal=self.rehearsal, reason='請假')

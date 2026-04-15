@@ -4,7 +4,7 @@
 
 | 欄位 | 內容 |
 |------|------|
-| 最後審計 | 2026-04-14 |
+| 最後審計 | 2026-04-16 |
 | 涵蓋範圍 | accounts / events / assets / finance / scores |
 | 審查重點 | 存取控制、狀態轉換、型別一致性、查詢邊界、重複操作防護 |
 
@@ -99,6 +99,34 @@
 與 `LeaveRequest.Status` TextChoices 常數脫鉤。目前值恰好一致，但 Status 值若異動會靜默出錯。
 修正：改用 `S = LeaveRequest.Status`，統一使用 `S.PENDING / S.APPROVED / S.REJECTED`。
 （commit `e9242ce`）
+
+---
+
+### 2026-04-16
+
+| # | 位置 | 問題摘要 | 嚴重度 |
+|---|------|---------|--------|
+| 13 | `events/views.py` | `qr_manage` 硬編碼簽到 URL，應改用 `reverse()` | 低（維護性） |
+| 14 | `events/views.py` | 核准請假可蓋掉已 QR 簽到的 PRESENT 出席紀錄 | 中（邏輯） |
+| 15 | `events/views.py` | `from collections import defaultdict` 在函式內部 | 低（style） |
+
+**#13 — `qr_manage` 硬編碼 URL**
+```python
+checkin_url = request.build_absolute_uri(f'/events/checkin/{qr_token.token}/')
+```
+URL 路徑若異動，QR Code 產生的連結會默默失效且無任何錯誤提示。
+修正：改用 `reverse('events:qr_checkin', args=[qr_token.token])`。
+
+**#14 — 核准請假蓋掉 PRESENT 出席紀錄**
+`leave_review_list` 核准請假後使用 `get_or_create` + 直接賦值 `status = LEAVE`，
+未先判斷是否已有 PRESENT 紀錄（team member 先 QR 簽到、再補交請假，幹部事後核准）。
+這種情況下，實際已到場的出席紀錄會被覆寫為請假，導致出席報表失真。
+修正：加入 `if attendance.status != RehearsalAttendance.Status.PRESENT:` 判斷，
+已簽到者保留 PRESENT，不做覆寫。
+
+**#15 — `defaultdict` import 在函式內部**
+`leave_stats` 裡 `from collections import defaultdict` 放在函式 body 內。
+修正：移至檔案頂部，與其他 import 統一管理。
 
 ---
 

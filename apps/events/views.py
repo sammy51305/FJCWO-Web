@@ -1,16 +1,17 @@
 import base64
 import io
 import uuid
+from collections import defaultdict
 
 import qrcode
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 
-from apps.scores.models import Score
-
 from apps.accounts.models import User
+from apps.scores.models import Score
 
 from .models import (
     LeaveRequest, PerformanceEvent, Rehearsal,
@@ -120,12 +121,14 @@ def leave_review_list(request):
             leave.reviewed_at = timezone.now()
             leave.save()
             # 同步出席紀錄：核准請假 → 標記為請假
+            # 若團員已 QR 簽到（PRESENT），保留簽到紀錄不覆寫
             attendance, _ = RehearsalAttendance.objects.get_or_create(
                 rehearsal=leave.rehearsal,
                 member=leave.member,
             )
-            attendance.status = RehearsalAttendance.Status.LEAVE
-            attendance.save()
+            if attendance.status != RehearsalAttendance.Status.PRESENT:
+                attendance.status = RehearsalAttendance.Status.LEAVE
+                attendance.save()
             messages.success(request, f'已核准 {leave.member.name} 的請假申請。')
         elif action == 'reject':
             leave.status = LeaveRequest.Status.REJECTED
@@ -173,7 +176,9 @@ def qr_manage(request, pk):
     qr_image = None
     checkin_url = None
     if qr_token:
-        checkin_url = request.build_absolute_uri(f'/events/checkin/{qr_token.token}/')
+        checkin_url = request.build_absolute_uri(
+            reverse('events:qr_checkin', args=[qr_token.token])
+        )
         qr_image = _make_qr_data_url(checkin_url)
 
     attendances = (
@@ -320,7 +325,6 @@ def leave_stats(request):
         )
 
         # 每場排練的申請統計
-        from collections import defaultdict
         S = LeaveRequest.Status
         rehearsal_counts = defaultdict(lambda: {S.PENDING: 0, S.APPROVED: 0, S.REJECTED: 0})
         member_leave_map = defaultdict(list)  # member_id → [LeaveRequest, ...]
