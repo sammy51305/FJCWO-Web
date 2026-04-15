@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}{% if action == 'edit' %}編輯公告{% else %}新增公告{% endif %} — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'announcements:announcement_manage' %}">公告管理</a></li>
+    <li class="breadcrumb-item active">{% if action == 'edit' %}編輯公告{% else %}新增公告{% endif %}</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <h2 class="mb-4">{% if action == 'edit' %}編輯公告{% else %}新增公告{% endif %}</h2>
+
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">標題 <span class="text-danger">*</span></label>
+        <input type="text" name="title" class="form-control"
+               value="{{ announcement.title|default:'' }}" required>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">內容 <span class="text-danger">*</span></label>
+        <textarea name="content" class="form-control" rows="8" required>{{ announcement.content|default:'' }}</textarea>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">可見範圍 <span class="text-danger">*</span></label>
+        <select name="visibility" class="form-select" required>
+          {% for value, label in visibility_choices %}
+          <option value="{{ value }}"
+            {% if announcement.visibility == value %}selected{% endif %}>
+            {{ label }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold">活動日期 <span class="text-muted small">（選填）</span></label>
+        <input type="date" name="event_date" class="form-control"
+               value="{{ announcement.event_date|date:'Y-m-d'|default:'' }}">
+        <div class="form-text">填寫後會顯示在公告旁，方便團員快速查看。</div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">
+          {% if action == 'edit' %}儲存變更{% else %}儲存草稿{% endif %}
+        </button>
+        <a href="{% url 'announcements:announcement_manage' %}" class="btn btn-outline-secondary">取消</a>
+      </div>
+    </form>
+
+    {% if action == 'edit' and announcement.is_published %}
+    <div class="alert alert-info mt-4">
+      <i class="bi bi-info-circle"></i>
+      此公告已發布。儲存後變更將立即對讀者生效。
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

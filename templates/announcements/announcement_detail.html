@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}{{ announcement.title }} — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'announcements:announcement_list' %}">公告</a></li>
+    <li class="breadcrumb-item active">{{ announcement.title }}</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="mb-2">
+      {% if announcement.visibility == 'officer_only' %}
+        <span class="badge bg-warning text-dark">幹部限定</span>
+      {% elif announcement.visibility == 'member_only' %}
+        <span class="badge bg-info text-dark">團員限定</span>
+      {% else %}
+        <span class="badge bg-secondary">公開</span>
+      {% endif %}
+    </div>
+
+    <h2 class="mb-1">{{ announcement.title }}</h2>
+
+    <p class="text-muted small mb-3">
+      {{ announcement.published_at|date:"Y/m/d H:i" }}・{{ announcement.created_by.name }}
+      {% if announcement.event_date %}
+        ・<i class="bi bi-calendar-event"></i> 活動日期：{{ announcement.event_date|date:"Y/m/d" }}
+      {% endif %}
+    </p>
+
+    <hr>
+    <div class="lh-lg" style="white-space: pre-wrap;">{{ announcement.content }}</div>
+
+    {% if user.is_officer %}
+    <hr>
+    <div class="d-flex gap-2 mt-3">
+      <a href="{% url 'announcements:announcement_edit' announcement.pk %}" class="btn btn-sm btn-outline-primary">編輯</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

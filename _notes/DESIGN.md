@@ -2,7 +2,7 @@
 
 > 本文件說明 Phase 1 & 2 的設計決策、資料庫結構與各系統的運作邏輯。
 > 目標讀者：接手開發或複習程式碼的人（包含自己）。
-> 最後更新：2026-04-14（補充首頁 Dashboard、報到狀態查詢、演出曲目管理、樂譜 views、四個報表 view）
+> 最後更新：2026-04-16（補充公告系統 views 設計）
 
 ---
 
@@ -601,7 +601,7 @@ def is_returned(self):
 
 ### 4.10 公告（announcements）
 
-**檔案**：`apps/announcements/models.py`
+**檔案**：`apps/announcements/models.py`、`views.py`、`urls.py`
 
 #### 三層可見範圍
 
@@ -611,6 +611,16 @@ class Visibility(models.TextChoices):
     MEMBER_ONLY = 'member_only', '團員限定'  # 需登入
     OFFICER_ONLY = 'officer_only', '幹部限定' # 需幹部角色
 ```
+
+各身份可見的公告類型：
+
+| 身份 | 公開 | 團員限定 | 幹部限定 | 草稿 |
+|------|:---:|:---:|:---:|:---:|
+| 未登入 | ✅ | ✗ | ✗ | ✗ |
+| 團員 | ✅ | ✅ | ✗ | ✗ |
+| 幹部 | ✅ | ✅ | ✅ | 管理頁可見 |
+
+草稿對所有人的詳情頁都回 404，幹部只能在管理頁看到草稿清單。
 
 #### 草稿 vs 已發布
 
@@ -622,6 +632,34 @@ class Visibility(models.TextChoices):
 def is_published(self):
     return self.published_at is not None
 ```
+
+#### 可見性過濾邏輯（`_visible_announcements`）
+
+列表頁與詳情頁共用同一個 helper 函式，確保兩處規則一致、不重複：
+
+```python
+def _visible_announcements(user):
+    qs = Announcement.objects.filter(published_at__isnull=False)
+    if not user.is_authenticated:
+        return qs.filter(visibility=Announcement.Visibility.PUBLIC)
+    if user.is_officer:
+        return qs
+    return qs.exclude(visibility=Announcement.Visibility.OFFICER_ONLY)
+```
+
+詳情頁直接對這個 QuerySet 做 `get_object_or_404`，無需再重複寫可見性判斷。
+
+#### URL 結構
+
+| URL | View | 存取限制 |
+|-----|------|---------|
+| `/announcements/` | `announcement_list` | 公開 |
+| `/announcements/<pk>/` | `announcement_detail` | 依可見性 |
+| `/announcements/manage/` | `announcement_manage` | 幹部 |
+| `/announcements/create/` | `announcement_create` | 幹部 |
+| `/announcements/<pk>/edit/` | `announcement_edit` | 幹部 |
+| `/announcements/<pk>/delete/` | `announcement_delete` | 幹部（POST only）|
+| `/announcements/<pk>/publish/` | `announcement_publish` | 幹部（POST only）|
 
 ---
 

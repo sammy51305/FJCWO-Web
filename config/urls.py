@@ -10,6 +10,7 @@ urlpatterns = [
     path('scores/', include('apps.scores.urls')),
     path('assets/', include('apps.assets.urls')),
     path('finance/', include('apps.finance.urls')),
+    path('announcements/', include('apps.announcements.urls')),
     path('', include('apps.public.urls')),
 ]
 

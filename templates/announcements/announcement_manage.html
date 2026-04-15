@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}公告管理 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0">公告管理</h2>
+  <a href="{% url 'announcements:announcement_create' %}" class="btn btn-primary">
+    <i class="bi bi-plus-lg"></i> 新增公告
+  </a>
+</div>
+
+{% if announcements %}
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>標題</th>
+        <th>可見範圍</th>
+        <th>狀態</th>
+        <th>發布時間</th>
+        <th>發布者</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ann in announcements %}
+      <tr>
+        <td>
+          {% if ann.is_published %}
+            <a href="{% url 'announcements:announcement_detail' ann.pk %}">{{ ann.title }}</a>
+          {% else %}
+            {{ ann.title }}
+          {% endif %}
+        </td>
+        <td>
+          {% if ann.visibility == 'officer_only' %}
+            <span class="badge bg-warning text-dark">幹部限定</span>
+          {% elif ann.visibility == 'member_only' %}
+            <span class="badge bg-info text-dark">團員限定</span>
+          {% else %}
+            <span class="badge bg-secondary">公開</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if ann.is_published %}
+            <span class="text-success"><i class="bi bi-check-circle-fill"></i> 已發布</span>
+          {% else %}
+            <span class="text-muted"><i class="bi bi-file-earmark"></i> 草稿</span>
+          {% endif %}
+        </td>
+        <td>
+          <small class="text-muted">{{ ann.published_at|date:"Y/m/d"|default:"—" }}</small>
+        </td>
+        <td><small class="text-muted">{{ ann.created_by.name }}</small></td>
+        <td class="text-end text-nowrap">
+          <a href="{% url 'announcements:announcement_edit' ann.pk %}"
+             class="btn btn-sm btn-outline-secondary me-1">編輯</a>
+          <form method="post" action="{% url 'announcements:announcement_publish' ann.pk %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm {% if ann.is_published %}btn-outline-warning{% else %}btn-outline-success{% endif %} me-1">
+              {% if ann.is_published %}取消發布{% else %}發布{% endif %}
+            </button>
+          </form>
+          <form method="post" action="{% url 'announcements:announcement_delete' ann.pk %}" class="d-inline"
+                onsubmit="return confirm('確定刪除《{{ ann.title }}》？')">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-danger">刪除</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  <p class="text-muted">尚無任何公告。</p>
+{% endif %}
+{% endblock %}

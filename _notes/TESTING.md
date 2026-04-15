@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-04-14（共 155 個測試）
+> 最後更新：2026-04-16（共 179 個測試）
 
 ---
 
@@ -63,7 +63,7 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 
 ## 目前測試總覽
 
-共 **155 個測試**，分布在 6 個 app。
+共 **179 個測試**，分布在 7 個 app。
 
 ### `apps/accounts/tests.py`（36 個）
 
@@ -75,11 +75,11 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 | `UserRoleTest` | `is_officer` 各角色行為（member/officer/admin/superuser）、`is_staff` 自動設定 |
 | `RegistrationTest` | 校友報到申請（公開存取、重複申請防止、送出建立紀錄）、狀態查詢（用 email 查）、幹部審核（核准/拒絕）|
 
-### `apps/events/tests.py`（73 個）
+### `apps/events/tests.py`（74 個）
 
 | Class | 測試內容 |
 |-------|---------|
-| `LeaveRequestTestCase` | 請假申請的存取控制、空白/空白原因被擋、正常送出、重複申請防止、我的紀錄、幹部審核（核准/拒絕）、核准後同步出席紀錄 |
+| `LeaveRequestTestCase` | 請假申請的存取控制、空白/空白原因被擋、正常送出、重複申請防止、我的紀錄、幹部審核（核准/拒絕）、核准後同步出席紀錄、核准不覆寫已簽到的 PRESENT 紀錄 |
 | `EventViewsTest` | 演出活動列表/詳情、排練詳情、摘要/備註顯示、申請請假按鈕（未來啟用/過去停用）|
 | `QRCodeTest` | QR 管理頁存取控制、產生 token、重新產生換 UUID、小時數邊界、停用/啟用 toggle、簽到頁顯示、已簽到提示、簽到確認建立出席紀錄 |
 | `SetlistManageTest` | 曲目管理存取控制、新增總譜成功、新增分譜被擋（404）、重複順序被擋、移除曲目 |
@@ -108,6 +108,18 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 |-------|---------|
 | `MembershipFeeReportTest` | 存取控制、無期別時顯示提示、預設最新期別、GET 切換期別、已繳/未繳/無紀錄三種狀態分類計數、rows 涵蓋全體活躍非 admin 團員 |
 
+### `apps/announcements/tests.py`（23 個）
+
+| Class | 測試內容 |
+|-------|---------|
+| `AnnouncementListTest` | 未登入只見公開、團員見公開+團員限定、幹部見全部已發布、所有人看不到草稿 |
+| `AnnouncementDetailTest` | 未登入可看公開詳情、團員看幹部限定回 404、幹部可看幹部限定、草稿對所有人回 404 |
+| `AnnouncementManageTest` | 存取控制（未登入/團員/幹部）、管理頁顯示草稿 |
+| `AnnouncementCreateTest` | 幹部新增成功（預設草稿）、空標題/空內容被擋 |
+| `AnnouncementEditTest` | 幹部可編輯、無效輸入不儲存 |
+| `AnnouncementPublishTest` | 發布草稿設定 published_at、取消發布清除 published_at |
+| `AnnouncementDeleteTest` | 幹部可刪除、GET 請求不刪除 |
+
 ### `apps/public/tests.py`（6 個）
 
 | Class | 測試內容 |
@@ -131,7 +143,7 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 - **Django 框架本身**（路由解析、ORM 查詢語法等）
 - **靜態資源載入**（CSS / JS）
 - **管理後台**（Django Admin 由框架負責，不另寫測試）
-- **Phase 3 未實作的功能**（meetings、announcements views）
+- **Phase 3 未實作的功能**（meetings、notifications）
 
 ---
 
