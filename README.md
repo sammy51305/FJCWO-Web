@@ -56,10 +56,9 @@ python manage.py test --verbosity=2            # 詳細輸出
 | 文件 | 說明 |
 |------|------|
 | [`_notes/Architecture.md`](_notes/Architecture.md) | 技術決策、Model 欄位、頁面權限結構、開發階段規劃 |
-| [`_notes/DESIGN.md`](_notes/DESIGN.md) | FK 關聯圖、各系統設計邏輯與決策 |
+| [`_notes/DESIGN.md`](_notes/DESIGN.md) | FK 關聯圖、各系統設計邏輯與決策；附錄含設計選擇備忘與待評估項目 |
 | [`_notes/TESTING.md`](_notes/TESTING.md) | 測試覆蓋範圍、執行方式、新增測試的慣例 |
 | [`_notes/SETUP.md`](_notes/SETUP.md) | 從零建環境的完整步驟 |
-| [`_notes/AUDIT.md`](_notes/AUDIT.md) | 已修正的邏輯問題、設計選擇備忘、待評估項目 |
 | [`_notes/OVERVIEW.md`](_notes/OVERVIEW.md) | 功能總覽與操作流程（非技術人員版）|
 
 ## 開發進度

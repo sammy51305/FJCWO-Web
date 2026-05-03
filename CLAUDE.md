@@ -52,4 +52,4 @@ venv\Scripts\python.exe manage.py test apps.scores --verbosity=2  # 單一 app
 | `DESIGN.md` | FK 關聯圖、各系統設計邏輯與決策（4.x 節） |
 | `TESTING.md` | 測試總數、各 class 說明、未覆蓋功能 |
 | `SETUP.md` | 從零建環境步驟，含 fixtures 載入順序 |
-| `AUDIT.md` | 已修正問題、設計選擇備忘、待評估項目 |
+| `DESIGN.md` 附錄二〜四 | 確認無問題的項目、設計選擇備忘、待評估項目 |

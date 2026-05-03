@@ -1025,7 +1025,48 @@ parts = Score.objects.filter(
 
 ---
 
-## 附錄：常見 Django 概念速查
+## 附錄二：確認無問題的項目
+
+審計過程中懷疑但確認正確的項目，避免日後重複誤判。
+
+| 疑似問題 | 確認結果 |
+|---------|---------|
+| `member_directory` instrument=None 會 500 | 已有 `if member.instrument else '未分類'` 守衛（`views.py:53`） |
+| `rehearsal.date` 與 `timezone.now()` 型別不符 | `date` 是 `DateTimeField`，timezone-aware 比較正確 |
+| `finance/views.py` 空期別時 `periods[0]` IndexError | `if not selected_period and periods:` 空 queryset 為 falsy，已守衛 |
+| `setlist_manage` order 傳字串給 IntegerField | Django ORM 自動轉型，正常運作 |
+| QR 簽到任何人都可以簽 | 刻意設計：持有 token URL 才能進入，不需角色限制 |
+
+---
+
+## 附錄三：設計選擇備忘
+
+記錄不直覺但有意為之的設計，避免日後被誤當成 bug 修掉。
+
+- **`leave_stats` 只顯示有申請記錄的團員**：沒有申請過的人不出現，避免空資料行造成誤讀。
+- **出席報表包含 OFFICER role**：`attendance_report` 排除 `role=ADMIN`，幹部（OFFICER）仍在列，符合業務需求。
+- **`borrow_status_report` 逾期判斷為 `due_date < today`**：到期當天不算逾期，符合一般直覺。
+- **LINE 群組通知 silent fail**：推播失敗不中斷主流程，記 log 即可，新增排練成功比通知更重要。
+- **演出分譜下載不強制指定聲部**：指揮可能在排練中調度聲部，由團員自行選擇，系統只篩選正確樂器。
+
+---
+
+## 附錄四：待評估項目（未修正）
+
+以下屬於 Model 層資料完整性問題，目前沒有 view 會主動觸發，暫不修改。
+若日後資料出現異常，可優先從這裡找原因，並考慮加入 `clean()` 或 DB constraint。
+
+| 位置 | 問題描述 |
+|------|---------|
+| `AssetBorrow` | 無限制 `returned_at >= borrowed_at`，可建立時序不合理的記錄 |
+| `MembershipFee` | `amount` 無正數驗證，可存入 0 或負數 |
+| `FinanceRecord` | `amount` 無正數驗證 |
+| `Score` | `parent_score` self-FK 無防循環參照機制 |
+| `PartAssignment` | member / guest_member 互斥驗證只在 `clean()`，ORM 直接建立可繞過 |
+
+---
+
+## 附錄一：常見 Django 概念速查
 
 | 概念 | 說明 |
 |------|------|

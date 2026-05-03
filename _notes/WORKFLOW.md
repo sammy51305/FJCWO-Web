@@ -41,8 +41,8 @@ git push
 | 關聯圖是否加入新的 FK 連線（包含方向與 on_delete 類型）| `DESIGN.md` 三、關聯圖 |
 | ForeignKey on_delete 表格是否有新的使用案例 | `DESIGN.md` 三、ForeignKey 刪除行為 |
 | 對應系統的設計說明（4.x 節）是否更新 | `DESIGN.md` 四、各系統運作邏輯 |
-| 是否有新的設計選擇需要備忘（避免日後被誤當 bug）| `AUDIT.md` 三、設計選擇備忘 |
-| 是否有新的資料完整性問題（clean() 未涵蓋、無 DB constraint）| `AUDIT.md` 四、待評估項目 |
+| 是否有新的設計選擇需要備忘（避免日後被誤當 bug）| `DESIGN.md` 附錄三、設計選擇備忘 |
+| 是否有新的資料完整性問題（clean() 未涵蓋、無 DB constraint）| `DESIGN.md` 附錄四、待評估項目 |
 
 ---
 
