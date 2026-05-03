@@ -2,7 +2,7 @@
 
 > 本文件說明 Phase 1 & 2 的設計決策、資料庫結構與各系統的運作邏輯。
 > 目標讀者：接手開發或複習程式碼的人（包含自己）。
-> 最後更新：2026-05-03（補充分譜上傳設計、InstrumentFamily 分層、測試說明）
+> 最後更新：2026-05-04（新增 LINE 群組通知設計、演出分譜下載邏輯）
 
 ---
 
@@ -29,6 +29,8 @@
    - [報表：財產借用現況（assets）](#415-報表財產借用現況assets)
    - [報表：會費繳納狀況（finance）](#416-報表會費繳納狀況finance)
    - [報表：請假統計（events）](#417-報表請假統計events)
+   - [LINE 群組通知（notifications）](#418-line-群組通知notifications)
+   - [演出分譜下載（scores）](#419-演出分譜下載scores)
 
 ---
 
@@ -950,6 +952,76 @@ for leave in leaves:
 | 個人層（下半部）| 按總請假次數遞減排序，顯示各狀態細分 |
 
 個人層只顯示「有請假紀錄的團員」，零請假的人不出現，避免表格過長。
+
+---
+
+### 4.18 LINE 群組通知（notifications）
+
+**檔案**：`apps/notifications/utils.py`（推播工具函式）
+
+**設計方向**：Push-only，Bot 加入 LINE 群組後統一推播，不需要個人帳號綁定。
+
+#### 環境設定
+
+```
+LINE_CHANNEL_ACCESS_TOKEN=...   # Messaging API channel token
+LINE_GROUP_ID=...               # Bot 加入群組後取得，存於 .env
+```
+
+#### 核心工具函式
+
+```python
+def push_line_message(text: str) -> None:
+    """推播純文字訊息到 LINE 群組，失敗時 silent fail（記 log，不中斷主流程）"""
+```
+
+呼叫 LINE Push API（`https://api.line.me/v2/bot/message/push`），失敗不拋例外，避免通知失敗影響主要操作。
+
+#### 觸發點與訊息內容
+
+| 觸發事件 | 呼叫位置 | 訊息內容 |
+|---------|---------|---------|
+| 幹部新增排練 | `rehearsal_create` view | 排練時間、場地、所屬演出 |
+| 幹部新增演出活動 | `event_create` view | 演出名稱、類型、預定日期 |
+| 排練資訊異動 | `rehearsal_edit` view | 異動後的時間與場地 |
+| 幹部發布公告 | `announcement_publish` view | 公告標題（public / member_only，officer_only 不推）|
+| 演出曲目確定（手動觸發）| 幹部操作 | 通知團員登入網站下載分譜 |
+
+#### 設計選擇：silent fail
+
+通知失敗不應中斷主要操作（新增排練成功比通知更重要）。
+推播失敗時記錄 log，讓幹部知道通知未送出，但 view 照常 redirect。
+
+---
+
+### 4.19 演出分譜下載（scores）
+
+**檔案**：`apps/scores/views.py`（`performance_parts`）、路由：`/scores/performance/<pk>/parts/`
+
+**登入者可用**，依登入者的樂器篩選該演出的分譜。
+
+#### 資料查詢邏輯
+
+```python
+# 取得該演出 setlist 內的所有分譜，篩選符合登入者樂器
+parts = Score.objects.filter(
+    setlist__event=event,
+    score_type=Score.ScoreType.PART,
+    instrument=request.user.instrument,
+).order_by('section__name')
+```
+
+#### 顯示規則
+
+| 情況 | `section` 欄位 | 前端顯示 |
+|------|--------------|---------|
+| 同樂器只有一份 PDF（聲部合併）| `None`（空白）| 直接顯示下載按鈕 |
+| 同樂器有多份 PDF（各聲部獨立）| 各自有值（第一部、第二部…）| 列出所有聲部讓團員自行選擇 |
+
+#### 設計選擇：不強制指定聲部
+
+指揮可能在排練過程中調度聲部，事先指定每位團員的聲部會增加維護負擔。
+改由團員登入後自行判斷要下載哪個聲部，系統只負責篩選「正確樂器」的譜。
 
 ---
 
