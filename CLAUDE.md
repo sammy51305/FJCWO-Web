@@ -3,7 +3,7 @@
 ## 專案概述
 
 輔仁大學百韻管樂團（FJCWO）內部管理系統。Django 6.x + PostgreSQL + Bootstrap 5。
-Phase 2 功能幾乎完成，Phase 3（會議紀錄 AI、演出手冊）尚未開始。
+Phase 2 功能全部完成（LINE Bot 通知除外），Phase 3（會議紀錄 AI、演出手冊）尚未開始。
 
 詳細架構、Model 欄位、頁面權限結構 → `_notes/Architecture.md`
 各系統設計邏輯、關聯圖 → `_notes/DESIGN.md`
