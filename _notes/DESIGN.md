@@ -140,7 +140,9 @@ def qr_manage(request, pk):
 ### 關聯圖（簡化版）
 
 ```
-InstrumentFamily ──→ InstrumentType ←─── User ───→ SectionType
+InstrumentFamily ←─── User ───→ SectionType
+       │
+       └──→ InstrumentType
                                            │
                                            └──→ Registration（校友報到申請）
 
@@ -264,21 +266,22 @@ redirect 到 ?next= 或首頁
 
 ```python
 # 撈所有啟用中、非管理員的會員，依樂器族群分類排序
+# User.instrument 指向 InstrumentFamily（族群層級），不是 InstrumentType
 members = User.objects.filter(is_active=True).exclude(role=User.Role.ADMIN)
-          .select_related('instrument__family', 'section')
-          .order_by('instrument__family__category', 'instrument__family__name',
-                    'instrument__name', 'name')
+          .select_related('instrument', 'section')
+          .order_by('instrument__category', 'instrument__name', 'name')
 
 # 用 dict 分組（依 InstrumentFamily.category 的中文顯示值）
 grouped = {}
 for member in members:
-    category = member.instrument.family.get_category_display() if member.instrument else '未分類'
+    category = member.instrument.get_category_display() if member.instrument else '未分類'
     grouped.setdefault(category, []).append(member)
 ```
 
-`InstrumentType` 不再直接有 `category` 欄位，改透過 `InstrumentFamily` 取得：
-`instrument.family.category`。`get_category_display()` 是 Django 自動加在 `TextChoices`
-欄位上的方法，把資料庫存的英文 key（如 `woodwind`）轉成中文顯示值（如 `木管`）。
+`User.instrument` 關聯到 `InstrumentFamily`（族群），而非 `InstrumentType`（具體樂器）。
+因為團員的個人資料只需識別到族群層級（如「豎笛」），不需細分到 Bb/Eb 豎笛。
+`get_category_display()` 是 Django 自動加在 `TextChoices` 欄位上的方法，
+把資料庫存的英文 key（如 `woodwind`）轉成中文顯示值（如 `木管`）。
 
 ---
 
@@ -547,14 +550,17 @@ Score（天空之城，total）
 
 路由：`/scores/<pk>/parts/`，幹部限定。
 
-UI 為兩層式結構：
-- 第一層：樂器族群（InstrumentFamily）為群組標題
-- 第二層：每個樂器下方列出所有聲部 checkbox
+UI 為四層式結構：
+- 第一層：樂器大分類（木管／銅管／打擊／其他）為主標題 `<h4>`
+- 第二層：樂器族群（InstrumentFamily）為次標題 `<h5>`
+- 第三層：若族群只有一種樂器，直接列聲部（不重複顯示樂器名）；若有多種則再加一層樂器名
+- 第四層：每個樂器下方列出所有聲部（第一部、第二部、第三部、Solo）checkbox
 - 勾選後顯示 PDF 上傳欄位
 - 已上傳的分譜顯示「已上傳」標示與下載連結，再次上傳可替換
 
-view 在 GET 時預先建立巢狀資料結構（families_data）供 template 直接迭代，
-避免 template 內複雜的 dict 查找邏輯。
+view 在 GET 時預先建立巢狀資料結構（`categories_data`）供 template 直接迭代，
+避免 template 內複雜的 dict 查找邏輯。`categories_data` 結構為：
+`[{category_label, families: [{family, instruments: [{instrument, sections: [{section, key, existing_part}]}], single}]}]`
 
 #### 樂器族群（InstrumentFamily）
 

@@ -153,7 +153,7 @@ class MemberDirectoryTest(TestCase):
             name='通訊錄團員',
             role=User.Role.MEMBER,
             phone='0911111111',
-            instrument=self.instrument,
+            instrument=self.family,
         )
         self.officer = User.objects.create_user(
             username='dir_officer',

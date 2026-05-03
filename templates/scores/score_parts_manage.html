@@ -30,16 +30,52 @@
 <form method="post" enctype="multipart/form-data">
   {% csrf_token %}
 
-  {% for fdata in families_data %}
-  <div class="mb-4">
-    <h5 class="border-bottom pb-2 text-secondary">
-      {{ fdata.family.name }}
-      <small class="fw-normal fs-6">{{ fdata.family.get_category_display }}</small>
-    </h5>
+  {% for cdata in categories_data %}
+  <h4 class="mt-4 mb-3 text-primary border-bottom pb-2">{{ cdata.category_label }}</h4>
 
+  {% for fdata in cdata.families %}
+  <div class="mb-4 ps-2">
+    <h5 class="fw-semibold mb-2">{{ fdata.family.name }}</h5>
+
+    {% if fdata.single %}
+    {# 只有一種樂器：直接在族群名稱下列聲部，不重複顯示樂器名 #}
+    {% with idata=fdata.instruments.0 %}
+    <div class="d-flex flex-wrap gap-2 ps-2">
+      {% for sdata in idata.sections %}
+      <div class="border rounded p-2" style="min-width: 130px;">
+        <div class="form-check mb-1">
+          <input class="form-check-input part-check"
+                 type="checkbox"
+                 id="chk_{{ sdata.key }}"
+                 data-target="up_{{ sdata.key }}"
+                 {% if sdata.existing_part %}checked{% endif %}>
+          <label class="form-check-label fw-medium" for="chk_{{ sdata.key }}">
+            {{ sdata.section.name }}
+          </label>
+        </div>
+        <div id="up_{{ sdata.key }}" {% if not sdata.existing_part %}style="display:none"{% endif %}>
+          {% if sdata.existing_part and sdata.existing_part.file %}
+          <div class="mb-1">
+            <a href="{% url 'scores:score_download' sdata.existing_part.pk %}" class="text-success small">
+              <i class="bi bi-check-circle-fill"></i> 已上傳
+            </a>
+          </div>
+          {% endif %}
+          <input type="file" name="file_{{ sdata.key }}" accept=".pdf" class="form-control form-control-sm">
+          {% if sdata.existing_part and sdata.existing_part.file %}
+          <small class="text-muted">上傳新檔案以替換</small>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endwith %}
+
+    {% else %}
+    {# 多種樂器：先顯示樂器名稱，再列其聲部 #}
     {% for idata in fdata.instruments %}
     <div class="mb-3 ps-2">
-      <div class="fw-semibold mb-2">{{ idata.instrument.name }}</div>
+      <div class="text-secondary fw-medium mb-2">{{ idata.instrument.name }}</div>
       <div class="d-flex flex-wrap gap-2">
         {% for sdata in idata.sections %}
         <div class="border rounded p-2" style="min-width: 130px;">
@@ -56,16 +92,12 @@
           <div id="up_{{ sdata.key }}" {% if not sdata.existing_part %}style="display:none"{% endif %}>
             {% if sdata.existing_part and sdata.existing_part.file %}
             <div class="mb-1">
-              <a href="{% url 'scores:score_download' sdata.existing_part.pk %}"
-                 class="text-success small">
+              <a href="{% url 'scores:score_download' sdata.existing_part.pk %}" class="text-success small">
                 <i class="bi bi-check-circle-fill"></i> 已上傳
               </a>
             </div>
             {% endif %}
-            <input type="file"
-                   name="file_{{ sdata.key }}"
-                   accept=".pdf"
-                   class="form-control form-control-sm">
+            <input type="file" name="file_{{ sdata.key }}" accept=".pdf" class="form-control form-control-sm">
             {% if sdata.existing_part and sdata.existing_part.file %}
             <small class="text-muted">上傳新檔案以替換</small>
             {% endif %}
@@ -75,7 +107,10 @@
       </div>
     </div>
     {% endfor %}
+    {% endif %}
+
   </div>
+  {% endfor %}
   {% endfor %}
 
   <div class="mt-4 d-flex gap-2">

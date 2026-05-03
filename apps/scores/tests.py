@@ -419,17 +419,17 @@ class ScorePartsManageTest(TestCase):
         # 頁面上應出現錯誤提示
         self.assertContains(r, '權限不足')
 
-    def test_officer_get_full_score_returns_200_with_families_data(self):
+    def test_officer_get_full_score_returns_200_with_categories_data(self):
         """
         幹部 GET 總譜的管理頁，應正常顯示（200），
-        且 context 中包含 families_data（用於渲染樂器族群 → 樂器 → 聲部的三層清單）。
+        且 context 中包含 categories_data（用於渲染 木管/銅管/打擊/其他 → 族群 → 樂器 → 聲部的四層清單）。
         """
         self.client.force_login(self.officer)
         r = self.client.get(self.url)
         self.assertEqual(r.status_code, 200)
-        self.assertIn('families_data', r.context)
-        # families_data 至少要有一個族群（setUp 中建立了長笛族）
-        self.assertGreaterEqual(len(r.context['families_data']), 1)
+        self.assertIn('categories_data', r.context)
+        # categories_data 至少要有一個分類（setUp 中建立了木管的長笛族）
+        self.assertGreaterEqual(len(r.context['categories_data']), 1)
 
     def test_officer_get_part_score_returns_404(self):
         """

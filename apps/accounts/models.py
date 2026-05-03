@@ -58,7 +58,7 @@ class User(AbstractUser):
     email = models.EmailField('Email', unique=True)
     role = models.CharField('角色', max_length=10, choices=Role, default=Role.MEMBER)
     instrument = models.ForeignKey(
-        InstrumentType, on_delete=models.SET_NULL,
+        InstrumentFamily, on_delete=models.SET_NULL,
         null=True, blank=True, verbose_name='樂器'
     )
     section = models.ForeignKey(

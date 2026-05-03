@@ -107,31 +107,40 @@ def score_parts_manage(request, pk):
             messages.warning(request, '未偵測到上傳檔案。')
         return redirect('scores:score_parts_manage', pk=pk)
 
-    # 建立巢狀結構供 template 使用
-    families_data = []
-    for family in InstrumentFamily.objects.prefetch_related('instruments').order_by('category', 'name'):
-        instruments_data = []
-        for instrument in family.instruments.order_by('name'):
-            sections_data = []
-            for section in sections:
-                key = f'{instrument.pk}_{section.pk}'
-                sections_data.append({
-                    'section': section,
-                    'key': key,
-                    'existing_part': existing.get(key),
+    # 依分類（木管/銅管/打擊/其他）→ 族群 → 樂器 三層建立巢狀結構
+    categories_data = []
+    for cat_value, cat_label in InstrumentFamily.Category.choices:
+        families_in_cat = []
+        for family in InstrumentFamily.objects.filter(category=cat_value).prefetch_related('instruments').order_by('name'):
+            instruments_data = []
+            for instrument in family.instruments.order_by('name'):
+                sections_data = []
+                for section in sections:
+                    key = f'{instrument.pk}_{section.pk}'
+                    sections_data.append({
+                        'section': section,
+                        'key': key,
+                        'existing_part': existing.get(key),
+                    })
+                instruments_data.append({
+                    'instrument': instrument,
+                    'sections': sections_data,
                 })
-            instruments_data.append({
-                'instrument': instrument,
-                'sections': sections_data,
+            if instruments_data:
+                families_in_cat.append({
+                    'family': family,
+                    'instruments': instruments_data,
+                    'single': len(instruments_data) == 1,
+                })
+        if families_in_cat:
+            categories_data.append({
+                'category_label': cat_label,
+                'families': families_in_cat,
             })
-        families_data.append({
-            'family': family,
-            'instruments': instruments_data,
-        })
 
     return render(request, 'scores/score_parts_manage.html', {
         'score': score,
-        'families_data': families_data,
+        'categories_data': categories_data,
     })
 
 

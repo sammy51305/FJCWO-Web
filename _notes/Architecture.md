@@ -95,7 +95,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | name | 真實姓名 |
 | email | Email |
 | role | 角色：`member`（團員）/ `officer`（幹部）/ `admin`（管理員）|
-| instrument | 樂器（關聯 InstrumentType）|
+| instrument | 樂器族群（關聯 InstrumentFamily，團員層級識別用）|
 | section | 聲部（關聯 SectionType）|
 | grad_year | 畢業年份 |
 | phone | 電話（幹部限定可查）|

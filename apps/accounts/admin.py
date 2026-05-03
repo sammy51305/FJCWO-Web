@@ -37,7 +37,7 @@ class UserAdmin(BaseUserAdmin):
         }),
     )
     list_display = ['username', 'name', 'email', 'role', 'instrument', 'section']
-    list_filter = ['role', 'instrument__family__category', 'is_active']
+    list_filter = ['role', 'instrument__category', 'is_active']
     search_fields = ['username', 'name', 'email']
 
 

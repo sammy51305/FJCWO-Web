@@ -47,17 +47,14 @@ def member_directory(request):
         User.objects
         .filter(is_active=True)
         .exclude(role=User.Role.ADMIN)
-        .select_related('instrument__family', 'section')
-        .order_by('instrument__family__category', 'instrument__family__name', 'instrument__name', 'name')
+        .select_related('instrument', 'section')
+        .order_by('instrument__category', 'instrument__name', 'name')
     )
 
     # 按樂器族群分類分組
     grouped = {}
     for member in members:
-        if member.instrument:
-            category = member.instrument.family.get_category_display()
-        else:
-            category = '未分類'
+        category = member.instrument.get_category_display() if member.instrument else '未分類'
         grouped.setdefault(category, []).append(member)
 
     # 排序：木管 → 銅管 → 打擊 → 其他 → 未分類

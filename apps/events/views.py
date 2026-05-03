@@ -380,8 +380,8 @@ def attendance_report(request, pk):
     members = list(
         User.objects.filter(is_active=True)
         .exclude(role=User.Role.ADMIN)
-        .select_related('instrument__family', 'section')
-        .order_by('instrument__family__category', 'instrument__family__name', 'instrument__name', 'name')
+        .select_related('instrument', 'section')
+        .order_by('instrument__category', 'instrument__name', 'name')
     )
 
     attendance_map = {
