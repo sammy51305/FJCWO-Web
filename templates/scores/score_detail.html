@@ -27,9 +27,16 @@
     </div>
   </div>
   {% if user.is_officer %}
-  <a href="/admin/scores/score/{{ score.pk }}/change/" class="btn btn-outline-secondary btn-sm">
-    <i class="bi bi-pencil"></i> 編輯
-  </a>
+  <div class="d-flex gap-2">
+    {% if score.score_type == 'full' %}
+    <a href="{% url 'scores:score_parts_manage' score.pk %}" class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-music-note-list"></i> 管理分譜
+    </a>
+    {% endif %}
+    <a href="/admin/scores/score/{{ score.pk }}/change/" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-pencil"></i> 編輯
+    </a>
+  </div>
   {% endif %}
 </div>
 
@@ -73,6 +80,38 @@
       </div>
     </div>
   </div>
+
+  {% if score.score_type == 'full' and score.parts.exists %}
+  <div class="col-12 mt-2">
+    <div class="card">
+      <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+        分譜清單
+        {% if user.is_officer %}
+        <a href="{% url 'scores:score_parts_manage' score.pk %}" class="btn btn-outline-primary btn-sm">
+          <i class="bi bi-pencil"></i> 管理
+        </a>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        <div class="d-flex flex-wrap gap-2">
+          {% for part in score.parts.all %}
+          <div class="border rounded px-3 py-2 small">
+            <div class="fw-medium">{{ part.instrument.name }}</div>
+            {% if part.section %}<div class="text-muted">{{ part.section.name }}</div>{% endif %}
+            {% if part.file %}
+            <a href="{% url 'scores:score_download' part.pk %}" class="text-success">
+              <i class="bi bi-download"></i> 下載
+            </a>
+            {% else %}
+            <span class="text-muted">尚未上傳</span>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   {% if score.parent_score or versions %}
   <div class="col-md-6">

@@ -1,6 +1,6 @@
 # FJCWO-Web 架構文件
 
-> 最後更新：2026-04-16（公告系統完成、測試覆蓋至 179 個）
+> 最後更新：2026-05-03（InstrumentFamily 分層、分譜上傳 UI、Score.full_score FK）
 > 本文件記錄系統架構決策與設計規劃，供開發參考。
 
 ---
@@ -60,14 +60,23 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 
 ## 三、資料庫設計（Model）
 
+### 樂器族群（InstrumentFamily）
+
+樂器的上層分類，將同族群樂器（如各類豎笛）歸在一起，供上傳分譜的 UI 分組顯示。
+
+| 欄位 | 說明 |
+|------|------|
+| name | 族群名稱（如：豎笛、薩克斯風）|
+| category | 分類（木管 / 銅管 / 打擊 / 其他）|
+
 ### 樂器主檔（InstrumentType）
 
 獨立主檔，供 User、Score、PartAssignment 選取，避免自由輸入造成不一致。
 
 | 欄位 | 說明 |
 |------|------|
-| name | 樂器名稱（如：長笛、豎笛、小號）|
-| category | 分類（木管 / 銅管 / 打擊 / 其他）|
+| name | 樂器名稱（如：長笛、Bb 豎笛、小號）|
+| family | 所屬族群（關聯 InstrumentFamily）|
 
 ### 聲部主檔（SectionType）
 
@@ -236,6 +245,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | copyright_status | 公版 / 有版權 / 已授權 |
 | physical_quantity | 實體紙本數量 |
 | file | 樂譜 PDF |
+| full_score | 所屬總譜（分譜才填，關聯 Score；刪總譜時分譜一併刪除）|
 | parent_score | 基於哪個版本修改（關聯 Score，原版為空）|
 | version_note | 改版說明 |
 | source | 來源：購買 / 與他團交換 / 捐贈 |
@@ -417,7 +427,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 ├── 會員通訊錄（按樂器分組，電話幹部限定）
 ├── 校友報到審核
 ├── 請假審核
-├── 樂譜庫存管理（Model + Admin，瀏覽有前端）
+├── 樂譜庫存管理（Model + Admin，瀏覽有前端，分譜批次上傳）
 ├── 公用財產管理（Model + Admin）※ 尚無前端頁面
 ├── 公告管理（列表含草稿、新增、編輯、刪除、發布切換）
 ├── 報表
@@ -542,8 +552,10 @@ FJCWO-Web/
 │   └── scores/
 ├── static/
 │   └── images/             # favicon、logo 等靜態圖檔
-├── fixtures/               # 測試用初始資料（loaddata 用）
-│   └── venues.json         # 場地 + 場地時段
+├── fixtures/               # 初始資料（loaddata 用）
+│   ├── venues.json         # 場地 + 場地時段
+│   ├── instruments.json    # 樂器族群（12）+ 樂器（24）
+│   └── sections.json       # 聲部（第一部〜第四部、Solo）
 ├── _notes/                 # 開發文件（不進 production）
 │   ├── Architecture.md
 │   ├── AUDIT.md

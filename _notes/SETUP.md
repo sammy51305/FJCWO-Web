@@ -98,12 +98,17 @@ python manage.py migrate
 ## 步驟六：載入基礎資料（Fixtures）
 
 ```bash
+python manage.py loaddata fixtures/instruments.json
+python manage.py loaddata fixtures/sections.json
 python manage.py loaddata fixtures/venues.json
 ```
 
 內含：
-- 排練場地：世韻藝術有限公司（含 3 個時段）
-- 演出場地：輔仁大學野聲堂、台北國家音樂廳、台北中山堂、新北市藝文中心演藝廳
+- `instruments.json`：12 個樂器族群（豎笛、薩克斯風、長笛等）+ 24 種樂器（Eb 豎笛、Bb 豎笛、中音薩克斯風等）
+- `sections.json`：5 個聲部（第一部〜第四部、Solo）
+- `venues.json`：排練場地世韻藝術有限公司（含 3 個時段）、演出場地輔仁大學野聲堂等 4 處
+
+> `instruments.json` 和 `sections.json` 必須在 `score_parts_manage` 分譜上傳功能使用前載入，否則 UI 不會有任何樂器可選。
 
 ---
 

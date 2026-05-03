@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-04-16（共 179 個測試）
+> 最後更新：2026-05-03（共 193 個測試）
 
 ---
 
@@ -63,7 +63,7 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 
 ## 目前測試總覽
 
-共 **179 個測試**，分布在 7 個 app。
+共 **193 個測試**，分布在 7 個 app。
 
 ### `apps/accounts/tests.py`（36 個）
 
@@ -87,14 +87,15 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 | `LeaveStatsTest` | 存取控制、預設最新活動、排練層計數（核准/待審）、個人層出現、按總次數遞減排序 |
 | `LeaveRequestPastRehearsalTest` | 直接 POST 到已結束排練的請假 URL 應被 server-side 阻擋 |
 
-### `apps/scores/tests.py`（21 個）
+### `apps/scores/tests.py`（35 個）
 
 | Class | 測試內容 |
 |-------|---------|
-| `ScoreModelValidationTest` | `clean()` 驗證：總譜不可有樂器/聲部、分譜必須有樂器 |
+| `ScoreModelValidationTest` | `clean()` 驗證：總譜不可有樂器/聲部/full_score、分譜的 full_score 必須指向總譜；`__str__` 格式（含聲部/不含聲部/總譜） |
 | `ScoreListViewTest` | 存取控制、預設顯示全部、`type` 篩選、`instrument` 篩選、關鍵字搜尋、無結果空狀態 |
 | `ScoreDetailViewTest` | 存取控制、曲名/作曲顯示、404、無 PDF 顯示提示 |
 | `ScoreDownloadViewTest` | 存取控制、無 PDF 回 404、無效 pk 回 404 |
+| `ScorePartsManageTest` | 存取控制（未登入/一般團員/幹部）、分譜 pk 回 404、無效 pk 回 404、POST 建立分譜記錄、重複上傳不重複建立（get_or_create）、POST 無檔案顯示警告 |
 
 ### `apps/assets/tests.py`（9 個）
 
@@ -246,6 +247,7 @@ def test_invalid_state_raises(self):
 
 | App | 功能 | 說明 |
 |-----|------|------|
-| `announcements` | 所有功能 | 僅有 Model，尚無 views |
+| `scores` | `score_list` 未過濾屬於總譜的分譜 | 分譜目前仍出現在列表，無對應測試 |
+| `scores` | 上傳時的伺服器端 PDF 格式驗證 | 目前僅靠 HTML `accept=".pdf"` 限制 |
 | `meetings` | 所有功能 | Phase 3，尚未實作 |
 | `notifications` | 所有功能 | LINE Bot，Phase 2 待做 |

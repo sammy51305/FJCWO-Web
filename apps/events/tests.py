@@ -577,9 +577,12 @@ class SetlistManageTest(TestCase):
         self.full_score = Score.objects.create(
             title='測試總譜', score_type=Score.ScoreType.FULL
         )
-        from apps.accounts.models import InstrumentType
+        from apps.accounts.models import InstrumentFamily, InstrumentType
+        family = InstrumentFamily.objects.create(
+            name='長笛族2', category=InstrumentFamily.Category.WOODWIND
+        )
         self.instrument = InstrumentType.objects.create(
-            name='長笛2', category=InstrumentType.Category.WOODWIND
+            name='長笛2', family=family
         )
         self.part_score = Score.objects.create(
             title='測試分譜',

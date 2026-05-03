@@ -1,13 +1,20 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
-from .models import InstrumentType, Registration, SectionType, User
+from .models import InstrumentFamily, InstrumentType, Registration, SectionType, User
+
+
+@admin.register(InstrumentFamily)
+class InstrumentFamilyAdmin(admin.ModelAdmin):
+    list_display = ['name', 'category']
+    list_filter = ['category']
+    search_fields = ['name']
 
 
 @admin.register(InstrumentType)
 class InstrumentTypeAdmin(admin.ModelAdmin):
-    list_display = ['name', 'category']
-    list_filter = ['category']
+    list_display = ['name', 'family']
+    list_filter = ['family__category', 'family']
     search_fields = ['name']
 
 
@@ -30,7 +37,7 @@ class UserAdmin(BaseUserAdmin):
         }),
     )
     list_display = ['username', 'name', 'email', 'role', 'instrument', 'section']
-    list_filter = ['role', 'instrument__category', 'is_active']
+    list_filter = ['role', 'instrument__family__category', 'is_active']
     search_fields = ['username', 'name', 'email']
 
 

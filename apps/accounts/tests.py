@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import InstrumentType, User
+from .models import InstrumentFamily, InstrumentType, User
 
 
 class LoginLogoutTest(TestCase):
@@ -140,8 +140,11 @@ class MemberDirectoryTest(TestCase):
     """會員通訊錄"""
 
     def setUp(self):
+        self.family = InstrumentFamily.objects.create(
+            name='長笛族', category=InstrumentFamily.Category.WOODWIND
+        )
         self.instrument = InstrumentType.objects.create(
-            name='長笛', category=InstrumentType.Category.WOODWIND
+            name='長笛', family=self.family
         )
         self.member = User.objects.create_user(
             username='dir_member',
@@ -277,8 +280,11 @@ class RegistrationTest(TestCase):
     """校友報到申請系統"""
 
     def setUp(self):
+        self.family = InstrumentFamily.objects.create(
+            name='小號族', category=InstrumentFamily.Category.BRASS
+        )
         self.instrument = InstrumentType.objects.create(
-            name='小號', category=InstrumentType.Category.BRASS
+            name='小號', family=self.family
         )
         self.officer = User.objects.create_user(
             username='reg_officer',

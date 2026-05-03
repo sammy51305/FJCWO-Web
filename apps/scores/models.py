@@ -37,6 +37,11 @@ class Score(models.Model):
     copyright_status = models.CharField('版權狀態', max_length=20, choices=CopyrightStatus)
     physical_quantity = models.PositiveSmallIntegerField('實體紙本數量', default=0)
     file = models.FileField('樂譜 PDF', upload_to='scores/', blank=True)
+    full_score = models.ForeignKey(
+        'self', on_delete=models.CASCADE,
+        null=True, blank=True, related_name='parts', verbose_name='所屬總譜',
+        limit_choices_to={'score_type': 'full'}
+    )
     parent_score = models.ForeignKey(
         'self', on_delete=models.SET_NULL,
         null=True, blank=True, related_name='versions', verbose_name='基於版本'
@@ -55,13 +60,18 @@ class Score(models.Model):
         if self.score_type == self.ScoreType.FULL:
             if self.instrument or self.section:
                 raise ValidationError('總譜不應指定樂器或聲部。')
+            if self.full_score:
+                raise ValidationError('總譜不應指定所屬總譜。')
         elif self.score_type == self.ScoreType.PART:
             if not self.instrument:
                 raise ValidationError('分譜必須指定樂器。')
+            if self.full_score and self.full_score.score_type != self.ScoreType.FULL:
+                raise ValidationError('所屬總譜必須是總譜類型。')
 
     def __str__(self):
         if self.score_type == self.ScoreType.PART and self.instrument:
-            return f'{self.title}（{self.instrument.name}）'
+            section_str = f' {self.section.name}' if self.section else ''
+            return f'{self.title}（{self.instrument.name}{section_str}）'
         return self.title
 
 

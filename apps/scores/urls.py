@@ -7,5 +7,6 @@ app_name = 'scores'
 urlpatterns = [
     path('', views.score_list, name='score_list'),
     path('<int:pk>/', views.score_detail, name='score_detail'),
+    path('<int:pk>/parts/', views.score_parts_manage, name='score_parts_manage'),
     path('<int:pk>/download/', views.score_download, name='score_download'),
 ]

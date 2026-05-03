@@ -2,20 +2,36 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 
-class InstrumentType(models.Model):
+class InstrumentFamily(models.Model):
     class Category(models.TextChoices):
         WOODWIND = 'woodwind', '木管'
         BRASS = 'brass', '銅管'
         PERCUSSION = 'percussion', '打擊'
         OTHER = 'other', '其他'
 
-    name = models.CharField('樂器名稱', max_length=50, unique=True)
+    name = models.CharField('族群名稱', max_length=50, unique=True)
     category = models.CharField('分類', max_length=20, choices=Category)
+
+    class Meta:
+        verbose_name = '樂器族群'
+        verbose_name_plural = '樂器族群列表'
+        ordering = ['category', 'name']
+
+    def __str__(self):
+        return f'{self.name}（{self.get_category_display()}）'
+
+
+class InstrumentType(models.Model):
+    name = models.CharField('樂器名稱', max_length=50, unique=True)
+    family = models.ForeignKey(
+        InstrumentFamily, on_delete=models.PROTECT,
+        verbose_name='族群', related_name='instruments'
+    )
 
     class Meta:
         verbose_name = '樂器'
         verbose_name_plural = '樂器列表'
-        ordering = ['category', 'name']
+        ordering = ['family__category', 'family__name', 'name']
 
     def __str__(self):
         return self.name
