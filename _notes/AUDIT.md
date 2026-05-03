@@ -110,6 +110,20 @@
 | 14 | `events/views.py` | 核准請假可蓋掉已 QR 簽到的 PRESENT 出席紀錄 | 中（邏輯） |
 | 15 | `events/views.py` | `from collections import defaultdict` 在函式內部 | 低（style） |
 
+### 2026-05-03
+
+| # | 位置 | 問題摘要 | 嚴重度 |
+|---|------|---------|--------|
+| 16 | `accounts/models.py` | `role=admin` 儲存後只設 `is_staff`，未設 `is_superuser`，導致無法操作 Django Admin | 中（功能） |
+
+**#16 — `role=admin` 無法操作 Django Admin**
+`User.save()` 對 `role=admin` 只設 `is_staff=True`，但 `is_staff` 僅允許登入 Admin 介面，
+不會自動授予任何 model 權限。`is_superuser=False` 的 admin 使用者登入後台後會看到空白頁面（403）。
+
+設計目標是「admin 角色有完整控制權」，需要 `is_superuser=True` 才能繞過 Django 的 per-model 權限檢查。
+修正：`save()` 對 `role=admin` 同時設 `is_staff=True` 和 `is_superuser=True`。
+（commit 待 push）
+
 **#13 — `qr_manage` 硬編碼 URL**
 ```python
 checkin_url = request.build_absolute_uri(f'/events/checkin/{qr_token.token}/')

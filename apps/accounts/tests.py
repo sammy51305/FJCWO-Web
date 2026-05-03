@@ -261,6 +261,18 @@ class UserRoleTest(TestCase):
         )
         self.assertTrue(user.is_staff)
 
+    def test_admin_role_sets_is_superuser(self):
+        """
+        admin 角色儲存後 is_superuser 自動為 True。
+        is_staff 只讓使用者能登入 Django Admin，但沒有 is_superuser 的話
+        不會自動授予任何 model 權限，導致進入後台卻什麼都操作不了（403）。
+        設計目標「admin 有完整控制權」需要兩個旗標同時為 True。
+        """
+        user = User.objects.create_user(
+            username='super_admin', password='x', name='', role=User.Role.ADMIN
+        )
+        self.assertTrue(user.is_superuser)
+
     def test_superuser_sets_is_staff(self):
         """superuser 儲存後 is_staff 自動為 True"""
         user = User.objects.create_superuser(

@@ -63,16 +63,16 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 
 ## 目前測試總覽
 
-共 **193 個測試**，分布在 7 個 app。
+共 **194 個測試**，分布在 7 個 app。
 
-### `apps/accounts/tests.py`（36 個）
+### `apps/accounts/tests.py`（37 個）
 
 | Class | 測試內容 |
 |-------|---------|
 | `LoginLogoutTest` | 登入頁存取、正確/錯誤帳密、session 建立與清除、登出導向 |
 | `ProfileTest` | 個人資料頁存取控制、顯示姓名、POST 更新儲存 |
 | `MemberDirectoryTest` | 通訊錄存取控制、電話/email 可見性（member vs officer）、admin 不顯示 |
-| `UserRoleTest` | `is_officer` 各角色行為（member/officer/admin/superuser）、`is_staff` 自動設定 |
+| `UserRoleTest` | `is_officer` 各角色行為（member/officer/admin/superuser）、`is_staff` 與 `is_superuser` 自動設定 |
 | `RegistrationTest` | 校友報到申請（公開存取、重複申請防止、送出建立紀錄）、狀態查詢（用 email 查）、幹部審核（核准/拒絕）|
 
 ### `apps/events/tests.py`（74 個）
