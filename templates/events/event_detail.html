@@ -15,6 +15,11 @@
   <span class="badge {% if event.status == 'confirmed' %}bg-success{% elif event.status == 'finished' %}bg-secondary{% else %}bg-warning text-dark{% endif %}">
     {{ event.get_status_display }}
   </span>
+  {% if user.is_officer %}
+  <a href="{% url 'events:event_edit' event.pk %}" class="btn btn-outline-secondary btn-sm ms-2 d-print-none">
+    <i class="bi bi-pencil"></i> 編輯活動
+  </a>
+  {% endif %}
 </div>
 <p class="text-muted mb-4">{{ event.get_type_display }}</p>
 
@@ -76,9 +81,14 @@
 <div class="d-flex align-items-center justify-content-between mb-3">
   <h4 class="mb-0">排練時間表</h4>
   {% if user.is_officer %}
-  <a href="{% url 'events:attendance_report' event.pk %}" class="btn btn-outline-secondary btn-sm d-print-none">
-    <i class="bi bi-bar-chart"></i> 出席報表
-  </a>
+  <div class="d-flex gap-2 d-print-none">
+    <a href="{% url 'events:rehearsal_create' event.pk %}" class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-plus-lg"></i> 新增排練
+    </a>
+    <a href="{% url 'events:attendance_report' event.pk %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-bar-chart"></i> 出席報表
+    </a>
+  </div>
   {% endif %}
 </div>
 {% if rehearsals %}
@@ -98,11 +108,16 @@
         <td>第 {{ rehearsal.sequence }} 次</td>
         <td>{{ rehearsal.date|date:"Y/m/d（D）H:i" }}</td>
         <td>{{ rehearsal.venue.name }}</td>
-        <td>
+        <td class="d-flex gap-1">
           <a href="{% url 'events:rehearsal_detail' rehearsal.pk %}"
              class="btn btn-sm {% if rehearsal.summary_progress %}btn-outline-secondary{% else %}btn-outline-light text-muted{% endif %}">
             {% if rehearsal.summary_progress %}排練摘要{% else %}詳情{% endif %}
           </a>
+          {% if user.is_officer %}
+          <a href="{% url 'events:rehearsal_edit' rehearsal.pk %}" class="btn btn-sm btn-outline-secondary d-print-none">
+            <i class="bi bi-pencil"></i>
+          </a>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}

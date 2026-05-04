@@ -11,6 +11,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.notifications.utils import fmt_dt, push_line_message
+from apps.public.models import Venue
 from apps.scores.models import Score
 
 from .models import (
@@ -419,6 +421,258 @@ def attendance_report(request, pk):
         'event': event,
         'rehearsals': rehearsals,
         'member_rows': member_rows,
+    })
+
+
+@login_required
+def event_create(request):
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('events:event_list')
+
+    venues = Venue.objects.filter(type=Venue.Type.PERFORMANCE).order_by('name')
+
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        event_type = request.POST.get('type', '')
+        performance_date = request.POST.get('performance_date', '').strip()
+        venue_id = request.POST.get('performance_venue', '')
+        status = request.POST.get('status', PerformanceEvent.Status.PLANNING)
+
+        errors = []
+        if not name:
+            errors.append('請填寫活動名稱。')
+        if event_type not in PerformanceEvent.Type.values:
+            errors.append('請選擇活動類型。')
+        if not performance_date:
+            errors.append('請填寫演出日期時間。')
+        if not venue_id:
+            errors.append('請選擇演出場地。')
+        if status not in PerformanceEvent.Status.values:
+            errors.append('請選擇活動狀態。')
+
+        if not errors:
+            try:
+                dt = timezone.datetime.fromisoformat(performance_date)
+                if timezone.is_naive(dt):
+                    dt = timezone.make_aware(dt)
+            except ValueError:
+                errors.append('日期時間格式錯誤。')
+
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+        else:
+            venue = get_object_or_404(Venue, pk=venue_id)
+            event = PerformanceEvent.objects.create(
+                name=name,
+                type=event_type,
+                performance_date=dt,
+                performance_venue=venue,
+                status=status,
+            )
+            push_line_message(
+                f'🎼 新演出活動：{event.name}\n'
+                f'類型：{event.get_type_display()}\n'
+                f'預定日期：{fmt_dt(event.performance_date)}'
+            )
+            messages.success(request, f'演出活動《{name}》已建立。')
+            return redirect('events:event_detail', pk=event.pk)
+
+    return render(request, 'events/event_form.html', {
+        'action': 'create',
+        'venues': venues,
+        'type_choices': PerformanceEvent.Type.choices,
+        'status_choices': PerformanceEvent.Status.choices,
+    })
+
+
+@login_required
+def event_edit(request, pk):
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('events:event_list')
+
+    event = get_object_or_404(PerformanceEvent, pk=pk)
+    venues = Venue.objects.filter(type=Venue.Type.PERFORMANCE).order_by('name')
+
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        event_type = request.POST.get('type', '')
+        performance_date = request.POST.get('performance_date', '').strip()
+        venue_id = request.POST.get('performance_venue', '')
+        status = request.POST.get('status', '')
+
+        errors = []
+        if not name:
+            errors.append('請填寫活動名稱。')
+        if event_type not in PerformanceEvent.Type.values:
+            errors.append('請選擇活動類型。')
+        if not performance_date:
+            errors.append('請填寫演出日期時間。')
+        if not venue_id:
+            errors.append('請選擇演出場地。')
+        if status not in PerformanceEvent.Status.values:
+            errors.append('請選擇活動狀態。')
+
+        if not errors:
+            try:
+                dt = timezone.datetime.fromisoformat(performance_date)
+                if timezone.is_naive(dt):
+                    dt = timezone.make_aware(dt)
+            except ValueError:
+                errors.append('日期時間格式錯誤。')
+
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+        else:
+            venue = get_object_or_404(Venue, pk=venue_id)
+            date_changed = (dt != event.performance_date or int(venue_id) != event.performance_venue_id)
+            event.name = name
+            event.type = event_type
+            event.performance_date = dt
+            event.performance_venue = venue
+            event.status = status
+            event.save()
+            if date_changed:
+                push_line_message(
+                    f'🎼 演出活動異動：{event.name}\n'
+                    f'日期：{fmt_dt(event.performance_date)}\n'
+                    f'場地：{venue.name}'
+                )
+            messages.success(request, f'演出活動《{name}》已更新。')
+            return redirect('events:event_detail', pk=event.pk)
+
+    return render(request, 'events/event_form.html', {
+        'action': 'edit',
+        'event': event,
+        'venues': venues,
+        'type_choices': PerformanceEvent.Type.choices,
+        'status_choices': PerformanceEvent.Status.choices,
+    })
+
+
+@login_required
+def rehearsal_create(request, event_pk):
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('events:event_list')
+
+    event = get_object_or_404(PerformanceEvent, pk=event_pk)
+    venues = Venue.objects.filter(type=Venue.Type.REHEARSAL).order_by('name')
+    next_sequence = (event.rehearsals.order_by('-sequence').values_list('sequence', flat=True).first() or 0) + 1
+
+    if request.method == 'POST':
+        sequence = request.POST.get('sequence', '').strip()
+        date = request.POST.get('date', '').strip()
+        venue_id = request.POST.get('venue', '')
+
+        errors = []
+        if not sequence or not sequence.isdigit():
+            errors.append('請填寫排練次數（正整數）。')
+        if not date:
+            errors.append('請填寫排練日期時間。')
+        if not venue_id:
+            errors.append('請選擇排練場地。')
+
+        if not errors:
+            try:
+                dt = timezone.datetime.fromisoformat(date)
+                if timezone.is_naive(dt):
+                    dt = timezone.make_aware(dt)
+            except ValueError:
+                errors.append('日期時間格式錯誤。')
+
+        if not errors and Rehearsal.objects.filter(event=event, sequence=int(sequence)).exists():
+            errors.append(f'第 {sequence} 次排練已存在。')
+
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+        else:
+            venue = get_object_or_404(Venue, pk=venue_id)
+            rehearsal = Rehearsal.objects.create(
+                event=event,
+                sequence=int(sequence),
+                date=dt,
+                venue=venue,
+            )
+            push_line_message(
+                f'📋 新增排練：{rehearsal}\n'
+                f'日期：{fmt_dt(rehearsal.date)}\n'
+                f'地點：{venue.name}'
+            )
+            messages.success(request, f'第 {sequence} 次排練已新增。')
+            return redirect('events:event_detail', pk=event.pk)
+
+    return render(request, 'events/rehearsal_form.html', {
+        'action': 'create',
+        'event': event,
+        'venues': venues,
+        'next_sequence': next_sequence,
+    })
+
+
+@login_required
+def rehearsal_edit(request, pk):
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('events:event_list')
+
+    rehearsal = get_object_or_404(Rehearsal.objects.select_related('event', 'venue'), pk=pk)
+    event = rehearsal.event
+    venues = Venue.objects.filter(type=Venue.Type.REHEARSAL).order_by('name')
+
+    if request.method == 'POST':
+        sequence = request.POST.get('sequence', '').strip()
+        date = request.POST.get('date', '').strip()
+        venue_id = request.POST.get('venue', '')
+
+        errors = []
+        if not sequence or not sequence.isdigit():
+            errors.append('請填寫排練次數（正整數）。')
+        if not date:
+            errors.append('請填寫排練日期時間。')
+        if not venue_id:
+            errors.append('請選擇排練場地。')
+
+        if not errors:
+            try:
+                dt = timezone.datetime.fromisoformat(date)
+                if timezone.is_naive(dt):
+                    dt = timezone.make_aware(dt)
+            except ValueError:
+                errors.append('日期時間格式錯誤。')
+
+        if not errors and int(sequence) != rehearsal.sequence and \
+                Rehearsal.objects.filter(event=event, sequence=int(sequence)).exists():
+            errors.append(f'第 {sequence} 次排練已存在。')
+
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+        else:
+            venue = get_object_or_404(Venue, pk=venue_id)
+            date_changed = (dt != rehearsal.date or int(venue_id) != rehearsal.venue_id)
+            rehearsal.sequence = int(sequence)
+            rehearsal.date = dt
+            rehearsal.venue = venue
+            rehearsal.save()
+            if date_changed:
+                push_line_message(
+                    f'📋 排練資訊異動：{rehearsal}\n'
+                    f'日期：{fmt_dt(rehearsal.date)}\n'
+                    f'地點：{venue.name}'
+                )
+            messages.success(request, f'排練資訊已更新。')
+            return redirect('events:event_detail', pk=event.pk)
+
+    return render(request, 'events/rehearsal_form.html', {
+        'action': 'edit',
+        'event': event,
+        'rehearsal': rehearsal,
+        'venues': venues,
     })
 
 

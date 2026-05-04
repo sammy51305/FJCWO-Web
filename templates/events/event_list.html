@@ -3,7 +3,14 @@
 {% block title %}演出活動 — 百韻管樂團{% endblock %}
 
 {% block content %}
-<h2 class="mb-4">演出活動</h2>
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h2 class="mb-0">演出活動</h2>
+  {% if user.is_officer %}
+  <a href="{% url 'events:event_create' %}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg"></i> 新增演出活動
+  </a>
+  {% endif %}
+</div>
 
 {% if upcoming %}
 <h5 class="text-muted mb-3">即將到來</h5>

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}{% if action == 'create' %}新增排練{% else %}編輯排練{% endif %} — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'events:event_list' %}">演出活動</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'events:event_detail' event.pk %}">{{ event.name }}</a></li>
+    <li class="breadcrumb-item active">{% if action == 'create' %}新增排練{% else %}編輯排練{% endif %}</li>
+  </ol>
+</nav>
+
+<h2 class="mb-1">{% if action == 'create' %}新增排練{% else %}編輯排練{% endif %}</h2>
+<p class="text-muted mb-4">{{ event.name }}</p>
+
+{% if messages %}
+<div class="mb-3">
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card" style="max-width: 600px;">
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">第幾次排練 <span class="text-danger">*</span></label>
+        <input type="number" name="sequence" class="form-control" min="1"
+               value="{% if action == 'edit' %}{{ rehearsal.sequence }}{% else %}{{ next_sequence }}{% endif %}" required>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">排練日期時間 <span class="text-danger">*</span></label>
+        <input type="datetime-local" name="date" class="form-control"
+               value="{% if action == 'edit' %}{{ rehearsal.date|date:'Y-m-d\TH:i' }}{% endif %}" required>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold">排練場地 <span class="text-danger">*</span></label>
+        <select name="venue" class="form-select" required>
+          <option value="">請選擇</option>
+          {% for venue in venues %}
+          <option value="{{ venue.pk }}"
+            {% if action == 'edit' and rehearsal.venue_id == venue.pk %}selected{% endif %}>
+            {{ venue.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">
+          {% if action == 'create' %}新增排練{% else %}儲存變更{% endif %}
+        </button>
+        <a href="{% url 'events:event_detail' event.pk %}" class="btn btn-outline-secondary">取消</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

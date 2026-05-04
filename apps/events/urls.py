@@ -6,8 +6,12 @@ app_name = 'events'
 
 urlpatterns = [
     path('', views.event_list, name='event_list'),
+    path('create/', views.event_create, name='event_create'),
     path('<int:pk>/', views.event_detail, name='event_detail'),
+    path('<int:pk>/edit/', views.event_edit, name='event_edit'),
+    path('<int:event_pk>/rehearsal/create/', views.rehearsal_create, name='rehearsal_create'),
     path('rehearsal/<int:pk>/', views.rehearsal_detail, name='rehearsal_detail'),
+    path('rehearsal/<int:pk>/edit/', views.rehearsal_edit, name='rehearsal_edit'),
     path('rehearsal/<int:rehearsal_pk>/leave/', views.leave_request_create, name='leave_request_create'),
     path('leave/mine/', views.my_leave_requests, name='my_leave_requests'),
     path('leave/review/', views.leave_review_list, name='leave_review_list'),
