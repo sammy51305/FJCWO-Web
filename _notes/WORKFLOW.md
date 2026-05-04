@@ -10,7 +10,10 @@
 ```
 開發（寫程式）
     ↓
-測試（python manage.py test，確認全部通過）
+新增對應測試（與功能同一 commit，不要事後補）
+    ↓
+執行該 app 的測試（確認新功能通過）
+    python manage.py test apps.<app_name>
     ↓
 自我 Review（git diff，確認邏輯正確、無安全漏洞）
     ↓
@@ -24,6 +27,11 @@ git push
 ```
 
 **原則：文件更新必須在 commit 之前完成。不要 commit 後再補文件再 amend。**
+
+**測試原則：**
+- 每次新增功能都要同步新增對應測試，隨功能一起 commit
+- 開發中只跑該 app 的測試即可，不用每次都跑全站
+- 全站測試（`python manage.py test`）在 **Phase 完成時跑一次**，確認沒有跨 app 的 regression
 
 ---
 
@@ -68,7 +76,7 @@ git push
 
 | 確認項目 | 位置 |
 |---------|------|
-| 全站測試總數是否更新 | `TESTING.md` 目前測試總覽（標題與第一行）|
+| 全站測試總數是否更新（Phase 完成後跑全站確認）| `TESTING.md` 目前測試總覽（標題與第一行）|
 | 對應 app 的測試數量是否更新 | `TESTING.md` 對應 app 段落 |
 | 新增的 Test class 是否加入說明表格 | `TESTING.md` 對應 app 段落 |
 | 「尚未覆蓋」表格是否移除已補上的項目、或新增已知缺口 | `TESTING.md` 尚未覆蓋的功能 |
