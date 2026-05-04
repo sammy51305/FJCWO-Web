@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-05-03（共 193 個測試）
+> 最後更新：2026-05-04（共 198 個測試）
 
 ---
 
@@ -63,7 +63,7 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 
 ## 目前測試總覽
 
-共 **194 個測試**，分布在 7 個 app。
+共 **198 個測試**，分布在 8 個 app。
 
 ### `apps/accounts/tests.py`（37 個）
 
@@ -120,6 +120,12 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 | `AnnouncementEditTest` | 幹部可編輯、無效輸入不儲存 |
 | `AnnouncementPublishTest` | 發布草稿設定 published_at、取消發布清除 published_at |
 | `AnnouncementDeleteTest` | 幹部可刪除、GET 請求不刪除 |
+
+### `apps/notifications/tests.py`（4 個）
+
+| Class | 測試內容 |
+|-------|---------|
+| `PushLineMessageTest` | credentials 齊全時發出 API 請求、TOKEN 缺少時略過、GROUP_ID 缺少時略過、API 失敗時 silent fail |
 
 ### `apps/public/tests.py`（6 個）
 
@@ -250,4 +256,4 @@ def test_invalid_state_raises(self):
 | `scores` | `score_list` 未過濾屬於總譜的分譜 | 分譜目前仍出現在列表，無對應測試 |
 | `scores` | 上傳時的伺服器端 PDF 格式驗證 | 目前僅靠 HTML `accept=".pdf"` 限制 |
 | `meetings` | 所有功能 | Phase 3，尚未實作 |
-| `notifications` | 所有功能 | LINE Bot，Phase 2 待做 |
+| `notifications` | Admin 觸發通知的整合測試 | 需要 mock Admin save_model，目前僅覆蓋 utils 層 |
