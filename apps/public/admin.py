@@ -2,7 +2,7 @@ from django import forms
 from django.contrib import admin
 from django.forms.widgets import TextInput
 
-from .models import Venue, VenueTimeSlot
+from .models import AboutSection, Venue, VenueTimeSlot
 
 
 class TimeHHMMWidget(TextInput):
@@ -40,6 +40,13 @@ class VenueTimeSlotInline(admin.TabularInline):
     form = VenueTimeSlotForm
     extra = 1
     fields = ['is_sun', 'is_mon', 'is_tue', 'is_wed', 'is_thu', 'is_fri', 'is_sat', 'start_time', 'end_time', 'fee']
+
+
+@admin.register(AboutSection)
+class AboutSectionAdmin(admin.ModelAdmin):
+    list_display = ['title', 'order', 'is_visible']
+    list_editable = ['order', 'is_visible']
+    ordering = ['order']
 
 
 @admin.register(Venue)

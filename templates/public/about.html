@@ -3,7 +3,24 @@
 {% block title %}關於百韻 — 輔仁百韻管樂團{% endblock %}
 
 {% block content %}
-<h1>關於輔仁百韻管樂團</h1>
-<hr>
-<p>這裡是校友團的簡介內容...</p>
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h1 class="mb-0">關於輔仁百韻管樂團</h1>
+  {% if user.is_officer %}
+  <a href="{% url 'public:about_manage' %}" class="btn btn-outline-secondary btn-sm d-print-none">
+    <i class="bi bi-pencil"></i> 管理內容
+  </a>
+  {% endif %}
+</div>
+<hr class="mb-4">
+
+{% if sections %}
+  {% for section in sections %}
+  <section class="mb-5">
+    <h3 class="mb-3">{{ section.title }}</h3>
+    <div style="white-space: pre-wrap;">{{ section.content }}</div>
+  </section>
+  {% endfor %}
+{% else %}
+<p class="text-muted">尚未新增任何介紹內容。</p>
+{% endif %}
 {% endblock %}

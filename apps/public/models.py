@@ -1,6 +1,21 @@
 from django.db import models
 
 
+class AboutSection(models.Model):
+    title = models.CharField('標題', max_length=100)
+    content = models.TextField('內容')
+    order = models.PositiveSmallIntegerField('顯示順序', default=0)
+    is_visible = models.BooleanField('公開顯示', default=True)
+
+    class Meta:
+        verbose_name = '關於百韻區塊'
+        verbose_name_plural = '關於百韻區塊列表'
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return self.title
+
+
 class Venue(models.Model):
     class Type(models.TextChoices):
         PERFORMANCE = 'performance', '演出場地'
