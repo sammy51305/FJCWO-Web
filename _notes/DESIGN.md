@@ -31,6 +31,7 @@
    - [報表：請假統計（events）](#417-報表請假統計events)
    - [LINE 群組通知（notifications）](#418-line-群組通知notifications)
    - [演出分譜下載（scores）](#419-演出分譜下載scores)
+   - [關於百韻內容管理（public）](#420-關於百韻內容管理public)
 
 ---
 
@@ -1027,6 +1028,36 @@ parts = Score.objects.filter(
 
 指揮可能在排練過程中調度聲部，事先指定每位團員的聲部會增加維護負擔。
 改由團員登入後自行判斷要下載哪個聲部，系統只負責篩選「正確樂器」的譜。
+
+---
+
+### 4.20 關於百韻內容管理（public）
+
+**檔案**：`apps/public/models.py`（`AboutSection`）、`apps/public/views.py`
+
+#### 設計方式：多區塊（方案 B）
+
+「關於百韻」頁面由多個獨立的 `AboutSection` 區塊組成，每個區塊有標題、內文、顯示順序與公開狀態。
+幹部可新增、編輯、刪除各區塊，不需要動 HTML。
+
+選擇多區塊而非單一 Model 的理由：彈性高，未來可分區介紹樂團歷史、指導老師、各組組介等，
+不需要改 Model 或 Migration，只要新增區塊即可。
+
+#### 草稿機制
+
+`is_visible=False` 的區塊不會出現在公開頁面，但在管理頁仍可見（標示「隱藏」）。
+適合先準備好內容再決定是否公開。
+
+#### 公開頁面查詢
+
+```python
+sections = AboutSection.objects.filter(is_visible=True)
+# ordering = ['order', 'id']，同順序時依建立先後排列
+```
+
+#### 刪除設計
+
+刪除區塊無 cascade 風險（無 FK 關聯），附 `confirm()` 對話框確認即可，不需要 modal。
 
 ---
 

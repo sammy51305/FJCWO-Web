@@ -256,6 +256,7 @@ def test_invalid_state_raises(self):
 
 | App | 功能 | 說明 |
 |-----|------|------|
+| `public` | `about_manage` / `about_create` / `about_edit` / `about_delete` | 關於百韻內容管理，尚無自動測試 |
 | `scores` | `score_list` 未過濾屬於總譜的分譜 | 分譜目前仍出現在列表，無對應測試 |
 | `scores` | 上傳時的伺服器端 PDF 格式驗證 | 目前僅靠 HTML `accept=".pdf"` 限制 |
 | `meetings` | 所有功能 | Phase 3，尚未實作 |
