@@ -23,17 +23,17 @@ from .models import (
 
 @login_required
 def event_list(request):
-    upcoming = PerformanceEvent.objects.exclude(
-        status=PerformanceEvent.Status.FINISHED
-    ).select_related('performance_venue').order_by('performance_date')
+    S = PerformanceEvent.Status
+    base = PerformanceEvent.objects.select_related('performance_venue')
 
-    past = PerformanceEvent.objects.filter(
-        status=PerformanceEvent.Status.FINISHED
-    ).select_related('performance_venue').order_by('-performance_date')
+    upcoming = base.exclude(status__in=[S.FINISHED, S.CANCELLED]).order_by('performance_date')
+    past = base.filter(status=S.FINISHED).order_by('-performance_date')
+    cancelled = base.filter(status=S.CANCELLED).order_by('-performance_date') if request.user.is_superuser else None
 
     return render(request, 'events/event_list.html', {
         'upcoming': upcoming,
         'past': past,
+        'cancelled': cancelled,
     })
 
 
@@ -422,6 +422,22 @@ def attendance_report(request, pk):
         'rehearsals': rehearsals,
         'member_rows': member_rows,
     })
+
+
+@login_required
+def event_delete(request, pk):
+    if not request.user.is_superuser:
+        messages.error(request, '權限不足。')
+        return redirect('events:event_detail', pk=pk)
+
+    if request.method != 'POST':
+        return redirect('events:event_detail', pk=pk)
+
+    event = get_object_or_404(PerformanceEvent, pk=pk)
+    name = event.name
+    event.delete()
+    messages.success(request, f'演出活動《{name}》已刪除。')
+    return redirect('events:event_list')
 
 
 @login_required
