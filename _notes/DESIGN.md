@@ -2,7 +2,7 @@
 
 > 本文件說明 Phase 1 & 2 的設計決策、資料庫結構與各系統的運作邏輯。
 > 目標讀者：接手開發或複習程式碼的人（包含自己）。
-> 最後更新：2026-05-04（新增 LINE 群組通知設計、演出分譜下載邏輯）
+> 最後更新：2026-05-05（演出活動前端管理頁面、已取消狀態、管理員刪除）
 
 ---
 
@@ -333,13 +333,18 @@ PerformanceEvent（一場演出，例如「2026 年春季音樂會」）
 
 ```
 planning（籌備中）→ confirmed（確認）→ finished（已結束）
+                                    ↘ cancelled（已取消）
 ```
 
-`event_list` view 用這個狀態把活動分成「即將到來」和「已結束」兩區：
+`cancelled` 用於誤建或取消的活動，避免直接刪除造成 cascade 刪除所有排練與紀錄。
+幹部可在編輯頁切換為「已取消」，管理員（superuser）可進一步從活動詳情頁刪除。
+
+`event_list` view 將活動分成三區，已取消僅管理員可見：
 
 ```python
-upcoming = PerformanceEvent.objects.exclude(status='finished')
-past     = PerformanceEvent.objects.filter(status='finished')
+upcoming  = base.exclude(status__in=['finished', 'cancelled']).order_by('performance_date')
+past      = base.filter(status='finished').order_by('-performance_date')
+cancelled = base.filter(status='cancelled') if request.user.is_superuser else None
 ```
 
 #### `select_related` 是什麼？

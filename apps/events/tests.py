@@ -906,3 +906,265 @@ class LeaveRequestPastRehearsalTest(TestCase):
         r = self.client.post(self.leave_url, {'reason': '想繞過前端限制'})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(LeaveRequest.objects.count(), 0)
+
+
+class EventManageTest(TestCase):
+    """演出活動前端建立與編輯"""
+
+    def setUp(self):
+        self.member = User.objects.create_user(
+            username='em_member', email='em_member@test.local',
+            password='testpass123', name='活動測試團員', role=User.Role.MEMBER,
+        )
+        self.officer = User.objects.create_user(
+            username='em_officer', email='em_officer@test.local',
+            password='testpass123', name='活動測試幹部', role=User.Role.OFFICER,
+        )
+        self.perf_venue = Venue.objects.create(name='活動測試演出場地', type='performance')
+        self.create_url = reverse('events:event_create')
+
+    def _valid_post_data(self):
+        return {
+            'name': '新測試音樂會',
+            'type': PerformanceEvent.Type.CONCERT,
+            'performance_date': '2027-06-01T14:00',
+            'performance_venue': self.perf_venue.pk,
+            'status': PerformanceEvent.Status.PLANNING,
+        }
+
+    # ── T01 存取控制 ────────────────────────────────────────
+
+    def test_unauthenticated_create_redirects(self):
+        """未登入應導向登入頁"""
+        r = self.client.get(self.create_url)
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    def test_member_cannot_create(self):
+        """一般團員應被擋下並導回活動列表"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.create_url)
+        self.assertRedirects(r, reverse('events:event_list'), fetch_redirect_response=False)
+
+    def test_officer_can_view_create_form(self):
+        """幹部可看到新增活動表單"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.create_url)
+        self.assertEqual(r.status_code, 200)
+
+    # ── T02 新增演出活動 ─────────────────────────────────────
+
+    def test_valid_post_creates_event(self):
+        """正確 POST 建立 PerformanceEvent 並導向詳情頁"""
+        self.client.force_login(self.officer)
+        r = self.client.post(self.create_url, self._valid_post_data())
+        self.assertEqual(PerformanceEvent.objects.count(), 1)
+        event = PerformanceEvent.objects.get()
+        self.assertRedirects(r, reverse('events:event_detail', args=[event.pk]),
+                             fetch_redirect_response=False)
+
+    def test_empty_name_blocked(self):
+        """空名稱應被擋下，不建立活動"""
+        self.client.force_login(self.officer)
+        data = self._valid_post_data()
+        data['name'] = ''
+        r = self.client.post(self.create_url, data)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(PerformanceEvent.objects.count(), 0)
+
+    def test_cancelled_event_excluded_from_upcoming(self):
+        """已取消的活動不應出現在 upcoming 列表"""
+        PerformanceEvent.objects.create(
+            name='已取消音樂會', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + timedelta(days=30),
+            performance_venue=self.perf_venue,
+            status=PerformanceEvent.Status.CANCELLED,
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:event_list'))
+        self.assertNotContains(r, '已取消音樂會')
+
+    # ── T03 編輯演出活動 ─────────────────────────────────────
+
+    def test_officer_can_edit_event(self):
+        """幹部可編輯活動，資料庫正確更新"""
+        event = PerformanceEvent.objects.create(
+            name='舊名稱', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + timedelta(days=30),
+            performance_venue=self.perf_venue,
+        )
+        self.client.force_login(self.officer)
+        data = self._valid_post_data()
+        data['name'] = '新名稱'
+        self.client.post(reverse('events:event_edit', args=[event.pk]), data)
+        event.refresh_from_db()
+        self.assertEqual(event.name, '新名稱')
+
+    def test_edit_invalid_pk_returns_404(self):
+        """不存在的 pk 應回 404"""
+        self.client.force_login(self.officer)
+        r = self.client.get(reverse('events:event_edit', args=[99999]))
+        self.assertEqual(r.status_code, 404)
+
+
+class EventDeleteTest(TestCase):
+    """演出活動刪除（管理員限定）"""
+
+    def setUp(self):
+        self.member = User.objects.create_user(
+            username='del_member', email='del_member@test.local',
+            password='testpass123', name='刪除測試團員', role=User.Role.MEMBER,
+        )
+        self.officer = User.objects.create_user(
+            username='del_officer', email='del_officer@test.local',
+            password='testpass123', name='刪除測試幹部', role=User.Role.OFFICER,
+        )
+        self.admin = User.objects.create_user(
+            username='del_admin', email='del_admin@test.local',
+            password='testpass123', name='刪除測試管理員', role=User.Role.ADMIN,
+        )
+        self.venue = Venue.objects.create(name='刪除測試演出場地', type='performance')
+        self.rehearsal_venue = Venue.objects.create(name='刪除測試排練場地', type='rehearsal')
+        self.event = PerformanceEvent.objects.create(
+            name='待刪除音樂會', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + timedelta(days=30),
+            performance_venue=self.venue,
+        )
+        self.delete_url = reverse('events:event_delete', args=[self.event.pk])
+
+    # ── T01 存取控制 ────────────────────────────────────────
+
+    def test_member_cannot_delete(self):
+        """一般團員無法刪除活動，活動仍存在"""
+        self.client.force_login(self.member)
+        self.client.post(self.delete_url)
+        self.assertTrue(PerformanceEvent.objects.filter(pk=self.event.pk).exists())
+
+    def test_officer_cannot_delete(self):
+        """幹部無法刪除活動，活動仍存在"""
+        self.client.force_login(self.officer)
+        self.client.post(self.delete_url)
+        self.assertTrue(PerformanceEvent.objects.filter(pk=self.event.pk).exists())
+
+    def test_get_request_does_not_delete(self):
+        """管理員 GET 請求不刪除活動"""
+        self.client.force_login(self.admin)
+        self.client.get(self.delete_url)
+        self.assertTrue(PerformanceEvent.objects.filter(pk=self.event.pk).exists())
+
+    # ── T02 刪除功能 ─────────────────────────────────────────
+
+    def test_admin_post_deletes_event(self):
+        """管理員 POST 後活動從資料庫移除，並導回列表"""
+        self.client.force_login(self.admin)
+        r = self.client.post(self.delete_url)
+        self.assertFalse(PerformanceEvent.objects.filter(pk=self.event.pk).exists())
+        self.assertRedirects(r, reverse('events:event_list'), fetch_redirect_response=False)
+
+    def test_delete_cascades_rehearsals(self):
+        """刪除活動應一併刪除所有排練"""
+        Rehearsal.objects.create(
+            event=self.event, sequence=1,
+            date=timezone.now() + timedelta(days=7),
+            venue=self.rehearsal_venue,
+        )
+        self.client.force_login(self.admin)
+        self.client.post(self.delete_url)
+        self.assertEqual(Rehearsal.objects.filter(event=self.event).count(), 0)
+
+
+class RehearsalManageTest(TestCase):
+    """排練前端建立與編輯"""
+
+    def setUp(self):
+        self.member = User.objects.create_user(
+            username='rm_member', email='rm_member@test.local',
+            password='testpass123', name='排練測試團員', role=User.Role.MEMBER,
+        )
+        self.officer = User.objects.create_user(
+            username='rm_officer', email='rm_officer@test.local',
+            password='testpass123', name='排練測試幹部', role=User.Role.OFFICER,
+        )
+        self.perf_venue = Venue.objects.create(name='排練測試演出場地', type='performance')
+        self.rehearsal_venue = Venue.objects.create(name='排練測試排練場地', type='rehearsal')
+        self.event = PerformanceEvent.objects.create(
+            name='排練測試音樂會', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + timedelta(days=60),
+            performance_venue=self.perf_venue,
+        )
+        self.create_url = reverse('events:rehearsal_create', args=[self.event.pk])
+
+    def _valid_post_data(self):
+        return {
+            'sequence': 1,
+            'date': '2027-05-01T19:00',
+            'venue': self.rehearsal_venue.pk,
+        }
+
+    # ── T01 存取控制 ────────────────────────────────────────
+
+    def test_unauthenticated_create_redirects(self):
+        """未登入應導向登入頁"""
+        r = self.client.get(self.create_url)
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    def test_member_cannot_create_rehearsal(self):
+        """一般團員應被擋下並導回活動列表"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.create_url)
+        self.assertRedirects(r, reverse('events:event_list'), fetch_redirect_response=False)
+
+    def test_officer_can_view_create_form(self):
+        """幹部可看到新增排練表單"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.create_url)
+        self.assertEqual(r.status_code, 200)
+
+    # ── T02 新增排練 ─────────────────────────────────────────
+
+    def test_valid_post_creates_rehearsal(self):
+        """正確 POST 建立 Rehearsal 並導向活動詳情頁"""
+        self.client.force_login(self.officer)
+        r = self.client.post(self.create_url, self._valid_post_data())
+        self.assertEqual(Rehearsal.objects.filter(event=self.event).count(), 1)
+        self.assertRedirects(r, reverse('events:event_detail', args=[self.event.pk]),
+                             fetch_redirect_response=False)
+
+    def test_duplicate_sequence_blocked(self):
+        """重複的排練次數應被擋下，不建立第二筆"""
+        Rehearsal.objects.create(
+            event=self.event, sequence=1,
+            date=timezone.now() + timedelta(days=7),
+            venue=self.rehearsal_venue,
+        )
+        self.client.force_login(self.officer)
+        r = self.client.post(self.create_url, self._valid_post_data())
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(Rehearsal.objects.filter(event=self.event).count(), 1)
+
+    def test_empty_date_blocked(self):
+        """空日期應被擋下，不建立排練"""
+        self.client.force_login(self.officer)
+        data = self._valid_post_data()
+        data['date'] = ''
+        r = self.client.post(self.create_url, data)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(Rehearsal.objects.filter(event=self.event).count(), 0)
+
+    # ── T03 編輯排練 ─────────────────────────────────────────
+
+    def test_officer_can_edit_rehearsal(self):
+        """幹部可編輯排練，sequence 正確更新至資料庫"""
+        rehearsal = Rehearsal.objects.create(
+            event=self.event, sequence=1,
+            date=timezone.now() + timedelta(days=7),
+            venue=self.rehearsal_venue,
+        )
+        self.client.force_login(self.officer)
+        self.client.post(
+            reverse('events:rehearsal_edit', args=[rehearsal.pk]),
+            {'sequence': 2, 'date': '2027-05-15T19:00', 'venue': self.rehearsal_venue.pk},
+        )
+        rehearsal.refresh_from_db()
+        self.assertEqual(rehearsal.sequence, 2)

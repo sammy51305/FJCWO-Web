@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-05-04（共 198 個測試）
+> 最後更新：2026-05-05（共 218 個測試）
 
 ---
 
@@ -63,7 +63,7 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 
 ## 目前測試總覽
 
-共 **198 個測試**，分布在 8 個 app。
+共 **218 個測試**，分布在 8 個 app。
 
 ### `apps/accounts/tests.py`（37 個）
 
@@ -75,7 +75,7 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 | `UserRoleTest` | `is_officer` 各角色行為（member/officer/admin/superuser）、`is_staff` 與 `is_superuser` 自動設定 |
 | `RegistrationTest` | 校友報到申請（公開存取、重複申請防止、送出建立紀錄）、狀態查詢（用 email 查）、幹部審核（核准/拒絕）|
 
-### `apps/events/tests.py`（74 個）
+### `apps/events/tests.py`（94 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -86,6 +86,9 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 | `AttendanceReportTest` | 存取控制（未登入/一般團員/幹部）、404、出席/請假/無紀錄分類計數、個人出席率計算 |
 | `LeaveStatsTest` | 存取控制、預設最新活動、排練層計數（核准/待審）、個人層出現、按總次數遞減排序 |
 | `LeaveRequestPastRehearsalTest` | 直接 POST 到已結束排練的請假 URL 應被 server-side 阻擋 |
+| `EventManageTest` | 存取控制（未登入/團員/幹部）、新增演出活動成功、空名稱被擋、已取消活動不出現在列表、編輯活動更新資料庫、不存在 pk 回 404 |
+| `EventDeleteTest` | 團員/幹部無法刪除、GET 不刪除、管理員 POST 刪除並導回列表、刪除 cascade 排練 |
+| `RehearsalManageTest` | 存取控制（未登入/團員/幹部）、新增排練成功、重複 sequence 被擋、空日期被擋、編輯排練更新 sequence |
 
 ### `apps/scores/tests.py`（35 個）
 
@@ -253,9 +256,6 @@ def test_invalid_state_raises(self):
 
 | App | 功能 | 說明 |
 |-----|------|------|
-| `events` | `event_create` / `event_edit` | 前端演出活動建立與編輯，尚無自動測試 |
-| `events` | `event_delete` | 管理員刪除演出活動，尚無自動測試 |
-| `events` | `rehearsal_create` / `rehearsal_edit` | 前端排練建立與編輯，尚無自動測試 |
 | `scores` | `score_list` 未過濾屬於總譜的分譜 | 分譜目前仍出現在列表，無對應測試 |
 | `scores` | 上傳時的伺服器端 PDF 格式驗證 | 目前僅靠 HTML `accept=".pdf"` 限制 |
 | `meetings` | 所有功能 | Phase 3，尚未實作 |
