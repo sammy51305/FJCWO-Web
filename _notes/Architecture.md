@@ -581,8 +581,9 @@ FJCWO-Web/
 │   └── sections.json       # 聲部（第一部〜第四部、Solo）
 ├── _notes/                 # 開發文件（不進 production）
 │   ├── Architecture.md
-│   ├── AUDIT.md
 │   ├── DESIGN.md
+│   ├── GUIDE.md
+│   ├── OVERVIEW.md
 │   ├── SETUP.md
 │   ├── TESTING.md
 │   └── WORKFLOW.md
