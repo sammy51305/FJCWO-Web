@@ -1,6 +1,17 @@
 from django.db import models
 
 
+class CharterContent(models.Model):
+    content = models.TextField('章程內容', blank=True)
+    updated_at = models.DateTimeField('最後更新', auto_now=True)
+
+    class Meta:
+        verbose_name = '組織章程'
+
+    def __str__(self):
+        return '組織章程'
+
+
 class AboutSection(models.Model):
     title = models.CharField('標題', max_length=100)
     content = models.TextField('內容')

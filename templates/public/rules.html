@@ -3,7 +3,29 @@
 {% block title %}組織章程 — 輔仁百韻管樂團{% endblock %}
 
 {% block content %}
-<h1>組織章程</h1>
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="mb-0">組織章程</h1>
+  {% if user.is_authenticated and user.is_officer %}
+  <a href="{% url 'public:rules_edit' %}" class="btn btn-outline-secondary btn-sm">編輯章程</a>
+  {% endif %}
+</div>
 <hr>
-<p>章程...</p>
+
+{% if messages %}
+<div class="mb-3">
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if charter and charter.content %}
+  <div class="charter-content">{{ charter.content|linebreaksbr }}</div>
+  <p class="text-muted small mt-4">最後更新：{{ charter.updated_at|date:"Y 年 n 月 j 日" }}</p>
+{% else %}
+  <p class="text-muted">章程內容尚未建立。</p>
+{% endif %}
 {% endblock %}

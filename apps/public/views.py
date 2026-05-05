@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from .models import AboutSection
+from .models import AboutSection, CharterContent
 
 
 def index(request):
@@ -40,7 +40,26 @@ def about(request):
 
 
 def rules(request):
-    return render(request, 'public/rules.html')
+    charter = CharterContent.objects.first()
+    return render(request, 'public/rules.html', {'charter': charter})
+
+
+@login_required
+def rules_edit(request):
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('public:rules')
+
+    charter, _ = CharterContent.objects.get_or_create(pk=1)
+
+    if request.method == 'POST':
+        content = request.POST.get('content', '').strip()
+        charter.content = content
+        charter.save()
+        messages.success(request, '組織章程已更新。')
+        return redirect('public:rules')
+
+    return render(request, 'public/rules_edit.html', {'charter': charter})
 
 
 @login_required
