@@ -28,7 +28,8 @@ def event_list(request):
 
     upcoming = base.exclude(status__in=[S.FINISHED, S.CANCELLED]).order_by('performance_date')
     past = base.filter(status=S.FINISHED).order_by('-performance_date')
-    cancelled = base.filter(status=S.CANCELLED).order_by('-performance_date') if request.user.is_superuser else None
+    can_view_cancelled = request.user.is_superuser or request.user.is_admin_role
+    cancelled = base.filter(status=S.CANCELLED).order_by('-performance_date') if can_view_cancelled else None
 
     return render(request, 'events/event_list.html', {
         'upcoming': upcoming,

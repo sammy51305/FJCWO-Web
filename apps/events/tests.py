@@ -1005,6 +1005,22 @@ class EventManageTest(TestCase):
         r = self.client.get(reverse('events:event_list'))
         self.assertNotContains(r, '已取消音樂會')
 
+    def test_admin_role_can_view_cancelled_events(self):
+        """role=admin（非 superuser）也應看得到已取消活動清單，跟 event_delete 的權限一致"""
+        admin = User.objects.create_user(
+            username='em_admin', email='em_admin@test.local',
+            password='testpass123', name='活動測試管理員', role=User.Role.ADMIN,
+        )
+        PerformanceEvent.objects.create(
+            name='管理員可見的已取消活動', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + timedelta(days=30),
+            performance_venue=self.perf_venue,
+            status=PerformanceEvent.Status.CANCELLED,
+        )
+        self.client.force_login(admin)
+        r = self.client.get(reverse('events:event_list'))
+        self.assertContains(r, '管理員可見的已取消活動')
+
     # ── T03 編輯演出活動 ─────────────────────────────────────
 
     def test_officer_can_edit_event(self):

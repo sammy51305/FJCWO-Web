@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-07-12（共 312 個測試）
+> 最後更新：2026-07-12（共 313 個測試）
 
 ---
 
@@ -63,7 +63,7 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 
 ## 目前測試總覽
 
-共 **312 個測試**，分布在 8 個 app。
+共 **313 個測試**，分布在 8 個 app。
 
 ### `apps/accounts/tests.py`（90 個）
 
@@ -81,7 +81,7 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 | `MemberCreateTest` | 存取控制（未登入/一般團員/幹部）、POST 新增團員成功（角色固定 member）、帳號依 Email 自動產生、Email 重複不建立記錄、寄送臨時密碼信件 |
 | `ForcePasswordChangeTest` | `must_change_password` 使用者任何頁面都被導向設定密碼頁、一般使用者不受影響、設定密碼頁本身不被攔截、成功設定後清除 flag 並可用新密碼登入、密碼不一致/太弱被擋、臨時密碼登入後仍被導向設定密碼頁（含錯誤密碼登入失敗的驗證）|
 
-### `apps/events/tests.py`（96 個）
+### `apps/events/tests.py`（97 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -92,7 +92,7 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 | `AttendanceReportTest` | 存取控制（未登入/一般團員/幹部）、404、出席/請假/無紀錄分類計數、個人出席率計算 |
 | `LeaveStatsTest` | 存取控制、預設最新活動、排練層計數（核准/待審）、個人層出現、按總次數遞減排序 |
 | `LeaveRequestPastRehearsalTest` | 直接 POST 到已結束排練的請假 URL 應被 server-side 阻擋 |
-| `EventManageTest` | 存取控制（未登入/團員/幹部）、新增演出活動成功、空名稱被擋、已取消活動不出現在列表、編輯活動更新資料庫、不存在 pk 回 404 |
+| `EventManageTest` | 存取控制（未登入/團員/幹部）、新增演出活動成功、空名稱被擋、已取消活動不出現在列表（role=admin 仍看得到）、編輯活動更新資料庫、不存在 pk 回 404 |
 | `EventDeleteTest` | 團員/幹部無法刪除、GET 不刪除、管理員 POST 刪除並導回列表、刪除 cascade 排練 |
 | `RehearsalManageTest` | 存取控制（未登入/團員/幹部）、新增排練成功、重複 sequence 被擋、空日期被擋、編輯排練更新 sequence |
 

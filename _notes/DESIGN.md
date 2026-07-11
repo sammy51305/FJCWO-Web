@@ -589,15 +589,15 @@ planning（籌備中）→ confirmed（確認）→ finished（已結束）
 `event_list` view 將活動分成三區，已取消僅管理員可見：
 
 ```python
+can_view_cancelled = request.user.is_superuser or request.user.is_admin_role
 upcoming  = base.exclude(status__in=['finished', 'cancelled']).order_by('performance_date')
 past      = base.filter(status='finished').order_by('-performance_date')
-cancelled = base.filter(status='cancelled') if request.user.is_superuser else None
+cancelled = base.filter(status='cancelled') if can_view_cancelled else None
 ```
 
-> **已知不一致**：這裡的「已取消」清單過濾只檢查 `is_superuser`，沒有一併檢查 `is_admin_role`，
-> 跟 `event_delete` 的權限判斷不完全對稱（`role=admin` 帳號因為 `User.save()` 會自動設定
-> `is_superuser=True`，實務上兩者等價，暫不影響行為，但程式碼語意上不一致）。
-> 之後若有需要可以一併改成 `request.user.is_superuser or request.user.is_admin_role`。
+跟 `event_delete` 的權限判斷（`is_superuser or is_admin_role`）保持一致——曾經有一版只檢查
+`is_superuser`，因為 `role=admin` 帳號在 `User.save()` 時會自動設定 `is_superuser=True`，
+實務上行為沒有差異，但寫法上跟其他「管理員限定」功能不對稱，已經統一。
 
 #### `select_related` 是什麼？
 
