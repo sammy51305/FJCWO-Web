@@ -12,9 +12,20 @@
 
 <div class="d-flex align-items-center gap-2 mb-1">
   <h2 class="mb-0">{{ event.name }}</h2>
-  <span class="badge {% if event.status == 'confirmed' %}bg-success{% elif event.status == 'finished' %}bg-secondary{% else %}bg-warning text-dark{% endif %}">
+  <span class="badge {% if event.status == 'confirmed' %}bg-success{% elif event.status == 'finished' %}bg-secondary{% elif event.status == 'cancelled' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
     {{ event.get_status_display }}
   </span>
+  {% if user.is_officer %}
+  <a href="{% url 'events:event_edit' event.pk %}" class="btn btn-outline-secondary btn-sm ms-2 d-print-none">
+    <i class="bi bi-pencil"></i> 編輯活動
+  </a>
+  {% endif %}
+  {% if user.is_superuser %}
+  <button type="button" class="btn btn-outline-danger btn-sm d-print-none"
+          data-bs-toggle="modal" data-bs-target="#deleteModal">
+    <i class="bi bi-trash"></i> 刪除
+  </button>
+  {% endif %}
 </div>
 <p class="text-muted mb-4">{{ event.get_type_display }}</p>
 
@@ -76,9 +87,14 @@
 <div class="d-flex align-items-center justify-content-between mb-3">
   <h4 class="mb-0">排練時間表</h4>
   {% if user.is_officer %}
-  <a href="{% url 'events:attendance_report' event.pk %}" class="btn btn-outline-secondary btn-sm d-print-none">
-    <i class="bi bi-bar-chart"></i> 出席報表
-  </a>
+  <div class="d-flex gap-2 d-print-none">
+    <a href="{% url 'events:rehearsal_create' event.pk %}" class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-plus-lg"></i> 新增排練
+    </a>
+    <a href="{% url 'events:attendance_report' event.pk %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-bar-chart"></i> 出席報表
+    </a>
+  </div>
   {% endif %}
 </div>
 {% if rehearsals %}
@@ -98,11 +114,16 @@
         <td>第 {{ rehearsal.sequence }} 次</td>
         <td>{{ rehearsal.date|date:"Y/m/d（D）H:i" }}</td>
         <td>{{ rehearsal.venue.name }}</td>
-        <td>
+        <td class="d-flex gap-1">
           <a href="{% url 'events:rehearsal_detail' rehearsal.pk %}"
              class="btn btn-sm {% if rehearsal.summary_progress %}btn-outline-secondary{% else %}btn-outline-light text-muted{% endif %}">
             {% if rehearsal.summary_progress %}排練摘要{% else %}詳情{% endif %}
           </a>
+          {% if user.is_officer %}
+          <a href="{% url 'events:rehearsal_edit' rehearsal.pk %}" class="btn btn-sm btn-outline-secondary d-print-none">
+            <i class="bi bi-pencil"></i>
+          </a>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
@@ -111,5 +132,29 @@
 </div>
 {% else %}
 <p class="text-muted">尚未安排排練。</p>
+{% endif %}
+
+{% if user.is_superuser %}
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">確認刪除</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        確定要刪除演出活動《<strong>{{ event.name }}</strong>》嗎？<br>
+        <span class="text-danger small">此操作將一併刪除所有相關排練、出席紀錄與曲目單，無法復原。</span>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <form method="post" action="{% url 'events:event_delete' event.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger">確認刪除</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
 {% endif %}
 {% endblock %}

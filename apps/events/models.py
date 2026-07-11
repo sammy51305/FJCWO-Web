@@ -19,6 +19,7 @@ class PerformanceEvent(models.Model):
         PLANNING = 'planning', '籌備中'
         CONFIRMED = 'confirmed', '確認'
         FINISHED = 'finished', '已結束'
+        CANCELLED = 'cancelled', '已取消'
 
     name = models.CharField('活動名稱', max_length=100)
     type = models.CharField('類型', max_length=20, choices=Type)

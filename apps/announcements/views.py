@@ -3,6 +3,8 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
+from apps.notifications.utils import push_line_message
+
 from .models import Announcement
 
 
@@ -159,4 +161,6 @@ def announcement_publish(request, pk):
         announcement.published_at = timezone.now()
         announcement.save()
         messages.success(request, f'公告《{announcement.title}》已發布。')
+        if announcement.visibility != announcement.Visibility.OFFICER_ONLY:
+            push_line_message(f'📢 新公告：{announcement.title}\n請登入系統查看詳情。')
     return redirect('announcements:announcement_manage')

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}編輯組織章程 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'public:rules' %}">組織章程</a></li>
+    <li class="breadcrumb-item active">編輯章程</li>
+  </ol>
+</nav>
+
+<h2 class="mb-4">編輯組織章程</h2>
+
+{% if messages %}
+<div class="mb-3">
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card" style="max-width: 800px;">
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+      <div class="mb-4">
+        <label class="form-label fw-semibold">章程內容</label>
+        <textarea name="content" class="form-control" rows="20">{{ charter.content }}</textarea>
+        <div class="form-text">換行會直接顯示在頁面上。</div>
+      </div>
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">儲存變更</button>
+        <a href="{% url 'public:rules' %}" class="btn btn-outline-secondary">取消</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

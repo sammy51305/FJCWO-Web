@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}管理「關於百韻」內容 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h2 class="mb-0">管理「關於百韻」內容</h2>
+  <div class="d-flex gap-2">
+    <a href="{% url 'public:about_create' %}" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-lg"></i> 新增區塊
+    </a>
+    <a href="{% url 'public:about' %}" class="btn btn-outline-secondary btn-sm">
+      預覽頁面
+    </a>
+  </div>
+</div>
+
+{% if messages %}
+<div class="mb-3">
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if sections %}
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th style="width: 60px;">順序</th>
+        <th>標題</th>
+        <th style="width: 80px;">狀態</th>
+        <th style="width: 120px;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for section in sections %}
+      <tr>
+        <td class="text-muted">{{ section.order }}</td>
+        <td>{{ section.title }}</td>
+        <td>
+          {% if section.is_visible %}
+          <span class="badge bg-success">公開</span>
+          {% else %}
+          <span class="badge bg-secondary">隱藏</span>
+          {% endif %}
+        </td>
+        <td>
+          <div class="d-flex gap-1">
+            <a href="{% url 'public:about_edit' section.pk %}" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <form method="post" action="{% url 'public:about_delete' section.pk %}"
+                  onsubmit="return confirm('確定要刪除《{{ section.title }}》嗎？')">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted">尚未新增任何區塊。</p>
+{% endif %}
+{% endblock %}

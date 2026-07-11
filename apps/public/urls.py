@@ -7,5 +7,10 @@ app_name = 'public'
 urlpatterns = [
     path('', views.index, name='index'),
     path('about/', views.about, name='about'),
+    path('about/manage/', views.about_manage, name='about_manage'),
+    path('about/create/', views.about_create, name='about_create'),
+    path('about/<int:pk>/edit/', views.about_edit, name='about_edit'),
+    path('about/<int:pk>/delete/', views.about_delete, name='about_delete'),
     path('rules/', views.rules, name='rules'),
+    path('rules/edit/', views.rules_edit, name='rules_edit'),
 ]

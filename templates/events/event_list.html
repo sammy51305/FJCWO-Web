@@ -3,7 +3,14 @@
 {% block title %}演出活動 — 百韻管樂團{% endblock %}
 
 {% block content %}
-<h2 class="mb-4">演出活動</h2>
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h2 class="mb-0">演出活動</h2>
+  {% if user.is_officer %}
+  <a href="{% url 'events:event_create' %}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg"></i> 新增演出活動
+  </a>
+  {% endif %}
+</div>
 
 {% if upcoming %}
 <h5 class="text-muted mb-3">即將到來</h5>
@@ -35,7 +42,7 @@
 
 {% if past %}
 <h5 class="text-muted mb-3">過去活動</h5>
-<div class="list-group">
+<div class="list-group mb-5">
   {% for event in past %}
   <a href="{% url 'events:event_detail' event.pk %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
     <div>
@@ -43,6 +50,21 @@
       <small class="text-muted ms-2">{{ event.get_type_display }}</small>
     </div>
     <small class="text-muted">{{ event.performance_date|date:"Y/m/d" }}</small>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if cancelled %}
+<h5 class="text-danger mb-3">已取消活動</h5>
+<div class="list-group">
+  {% for event in cancelled %}
+  <a href="{% url 'events:event_detail' event.pk %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+    <div>
+      <span class="fw-semibold text-muted text-decoration-line-through">{{ event.name }}</span>
+      <small class="text-muted ms-2">{{ event.get_type_display }}</small>
+    </div>
+    <span class="badge bg-danger">已取消</span>
   </a>
   {% endfor %}
 </div>
