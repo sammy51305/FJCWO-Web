@@ -321,6 +321,27 @@ class EventViewsTest(TestCase):
         r = self.client.get(reverse('events:event_detail', args=[99999]))
         self.assertEqual(r.status_code, 404)
 
+    def test_event_detail_has_leave_shortcut_for_future_rehearsal(self):
+        """
+        活動詳情頁的排練列表應直接提供請假捷徑連結，
+        不需要先點進排練詳情頁才能申請請假。
+        """
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:event_detail', args=[self.event.pk]))
+        self.assertContains(r, reverse('events:leave_request_create', args=[self.rehearsal.pk]))
+
+    def test_event_detail_leave_shortcut_disabled_for_past_rehearsal(self):
+        """已結束排練的請假捷徑應為停用狀態，不可點擊申請"""
+        past_rehearsal = Rehearsal.objects.create(
+            event=self.event,
+            sequence=99,
+            date=timezone.now() - timedelta(days=1),
+            venue=self.venue,
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:event_detail', args=[self.event.pk]))
+        self.assertNotContains(r, reverse('events:leave_request_create', args=[past_rehearsal.pk]))
+
     # ── T03 排練詳情 ─────────────────────────────────────────
 
     def test_rehearsal_detail_requires_login(self):

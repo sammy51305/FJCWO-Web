@@ -50,6 +50,7 @@ def event_detail(request, pk):
         'event': event,
         'rehearsals': rehearsals,
         'setlists': setlists,
+        'now': timezone.now(),
     })
 
 

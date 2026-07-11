@@ -469,6 +469,21 @@ elif existing:
 進頁面時先查資料庫有沒有已存在的申請，如果有，POST 時直接擋掉。
 Model 層的 `unique_together` 是最後一道防線，但 view 層先擋才能給使用者友善的錯誤訊息。
 
+#### 請假入口：event_detail 直接提供捷徑
+
+原本申請請假必須「演出活動列表 → 活動詳情 → 排練詳情 → 申請請假」共三層，
+只有「下次排練」有首頁 Dashboard 的捷徑（見 §4.11），其餘排練仍要逐層點選。
+
+`event_detail` 的排練列表每一列現在直接附上「請假」連結，省去進 `rehearsal_detail` 這一層：
+
+```python
+# event_detail view 額外傳入 now，供 template 判斷排練是否已結束
+'now': timezone.now(),
+```
+
+按鈕邏輯與 `rehearsal_detail.html` 完全一致（`rehearsal.date > now` 才可點擊，
+已結束顯示停用狀態），未做角色區分——幹部本身也是團員，一樣可能需要請假。
+
 #### `created_at` 欄位
 
 ```python
