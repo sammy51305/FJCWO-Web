@@ -468,6 +468,25 @@ return False
 才允許 `member.delete()`。用 `Collector` 而非手動列出每張表的好處是，以後新增別的 app 參照 `User`
 時，這裡不需要跟著改。
 
+#### 管理員可以強制刪除，跳過關聯紀錄檢查
+
+一般幹部受 `_user_has_related_records()` 限制，但管理員（`role=admin` 或 `is_superuser`）可以直接
+跳過這層檢查，方便清掉開發／測試過程中不小心產生、卻已經牽連測試資料的帳號：
+
+```python
+can_force_delete = request.user.is_superuser or request.user.is_admin_role
+...
+elif not can_force_delete and _user_has_related_records(member):
+    ...擋下...
+else:
+    member.delete()   # 管理員：CASCADE/SET_NULL 一律放行
+```
+
+即使是管理員，`PROTECT` 關聯（例如這個帳號發布過公告）仍是資料庫層級的硬限制，`member.delete()`
+一樣會拋出 `ProtectedError`——這不是權限問題，是資料完整性問題，管理員也必須先處理該筆關聯資料
+（例如到 Django Admin 改公告的發布者或刪除該公告）才能刪除帳號。這裡用 `try/except ProtectedError`
+包起來顯示友善錯誤訊息，而不是讓它變成 500。
+
 #### fast_deletes 的坑：CASCADE 反向關聯不一定出現在 collector.data
 
 開發時原本以為「CASCADE 關聯會出現在 `collector.data`，SET_NULL 出現在 `collector.field_updates`」，

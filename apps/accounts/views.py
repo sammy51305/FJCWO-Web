@@ -302,26 +302,36 @@ def member_reactivate(request, pk):
 @login_required
 def member_delete(request, pk):
     """
-    刪除團員帳號。只有完全沒有任何關聯紀錄（出席/請假/借用/財務…）的帳號才允許真的刪除，
+    刪除團員帳號。一般幹部只有完全沒有任何關聯紀錄（出席/請假/借用/財務…）的帳號才允許真的刪除，
     通常對應「剛新增就發現打錯」的情境；已經有歷史紀錄的帳號一律擋下，改請使用「退團」。
+    管理員（admin 角色或 superuser）可以強制刪除，跳過關聯紀錄檢查，方便清除測試/除錯帳號；
+    但 PROTECT 關聯（如發過公告）仍是資料庫層級的硬限制，管理員也無法繞過，只能先處理該筆關聯資料。
     """
     member = get_object_or_404(User, pk=pk)
     if not request.user.is_officer:
         messages.error(request, '權限不足。')
         return redirect('accounts:member_directory')
 
+    can_force_delete = request.user.is_superuser or request.user.is_admin_role
+
     if request.method == 'POST':
         if member.pk == request.user.pk:
             messages.error(request, '不能刪除自己的帳號。')
-        elif _user_has_related_records(member):
+        elif not can_force_delete and _user_has_related_records(member):
             messages.error(
                 request,
                 f'{member.name} 已有相關紀錄（出席／請假／借用／財務等），無法直接刪除，請改用「退團」。'
             )
         else:
             name = member.name
-            member.delete()
-            messages.success(request, f'已刪除 {name} 的帳號。')
+            try:
+                member.delete()
+                messages.success(request, f'已刪除 {name} 的帳號。')
+            except ProtectedError:
+                messages.error(
+                    request,
+                    f'{name} 有無法自動處理的關聯資料（如發布過的公告），請先於 Django Admin 處理該筆資料後再刪除。'
+                )
     return redirect('accounts:member_directory')
 
 

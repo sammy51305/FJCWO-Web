@@ -474,6 +474,70 @@ class MemberDeleteTest(TestCase):
         self.client.post(reverse('accounts:member_delete', args=[self.member.pk]))
         self.assertTrue(User.objects.filter(pk=self.member.pk).exists())
 
+    # ── 管理員強制刪除 ────────────────────────────────────
+    # 一般幹部受限於「無關聯紀錄才能刪」，但管理員（admin 角色或 superuser）
+    # 可以跳過這層限制，方便清除測試/除錯過程中產生、卻已牽連其他資料的帳號。
+
+    def test_admin_can_force_delete_member_with_related_records(self):
+        """管理員可強制刪除已有關聯紀錄（如出席紀錄）的帳號，一般幹部做不到這件事"""
+        from apps.events.models import PerformanceEvent, Rehearsal, RehearsalAttendance
+        from apps.public.models import Venue
+
+        admin = User.objects.create_user(
+            username='del_admin', password='x', name='刪除管理員',
+            email='del_admin@test.local', role=User.Role.ADMIN,
+        )
+        venue = Venue.objects.create(name='測試場地2', type='rehearsal')
+        event = PerformanceEvent.objects.create(
+            name='測試演出2', type='concert', performance_date=timezone.now(), performance_venue=venue,
+        )
+        rehearsal = Rehearsal.objects.create(event=event, sequence=1, date=timezone.now(), venue=venue)
+        RehearsalAttendance.objects.create(rehearsal=rehearsal, member=self.member, status='present')
+
+        self.client.force_login(admin)
+        self.client.post(reverse('accounts:member_delete', args=[self.member.pk]))
+        self.assertFalse(User.objects.filter(pk=self.member.pk).exists())
+
+    def test_superuser_can_force_delete_member_with_related_records(self):
+        """superuser 一樣可以強制刪除有關聯紀錄的帳號"""
+        from apps.events.models import PerformanceEvent, Rehearsal, RehearsalAttendance
+        from apps.public.models import Venue
+
+        superuser = User.objects.create_superuser(
+            username='del_super', password='x', name='刪除超級管理員', email='del_super@test.local',
+        )
+        venue = Venue.objects.create(name='測試場地3', type='rehearsal')
+        event = PerformanceEvent.objects.create(
+            name='測試演出3', type='concert', performance_date=timezone.now(), performance_venue=venue,
+        )
+        rehearsal = Rehearsal.objects.create(event=event, sequence=1, date=timezone.now(), venue=venue)
+        RehearsalAttendance.objects.create(rehearsal=rehearsal, member=self.member, status='present')
+
+        self.client.force_login(superuser)
+        self.client.post(reverse('accounts:member_delete', args=[self.member.pk]))
+        self.assertFalse(User.objects.filter(pk=self.member.pk).exists())
+
+    def test_admin_cannot_bypass_protected_relation(self):
+        """
+        即使是管理員，PROTECT 關聯（如發布過公告）是資料庫層級的硬限制，無法繞過，
+        應顯示友善錯誤訊息並保留資料，而不是讓伺服器噴 500。
+        """
+        from apps.announcements.models import Announcement
+
+        admin = User.objects.create_user(
+            username='del_admin2', password='x', name='刪除管理員2',
+            email='del_admin2@test.local', role=User.Role.ADMIN,
+        )
+        Announcement.objects.create(
+            title='測試公告', content='內容', visibility=Announcement.Visibility.PUBLIC,
+            created_by=self.member,
+        )
+
+        self.client.force_login(admin)
+        r = self.client.post(reverse('accounts:member_delete', args=[self.member.pk]), follow=True)
+        self.assertTrue(User.objects.filter(pk=self.member.pk).exists())
+        self.assertContains(r, '無法自動處理的關聯資料')
+
 
 class UserRoleTest(TestCase):
     """User 角色與權限屬性"""
