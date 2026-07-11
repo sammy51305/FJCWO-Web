@@ -20,6 +20,15 @@
     <i class="bi bi-pencil"></i> 編輯活動
   </a>
   {% endif %}
+  {% if user.is_superuser or user.is_admin_role %}
+  <form method="post" action="{% url 'events:event_delete' event.pk %}" class="d-inline d-print-none">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-outline-danger btn-sm"
+            onclick="return confirm('確定要刪除演出活動《{{ event.name }}》嗎？此操作將一併刪除所有相關排練、出席紀錄與曲目單，無法復原。')">
+      <i class="bi bi-trash"></i> 刪除
+    </button>
+  </form>
+  {% endif %}
 </div>
 <p class="text-muted mb-4">{{ event.get_type_display }}</p>
 

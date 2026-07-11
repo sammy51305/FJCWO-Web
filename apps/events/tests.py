@@ -1124,9 +1124,15 @@ class EventDeleteTest(TestCase):
         r = self.client.get(reverse('events:event_list'))
         self.assertNotContains(r, self.delete_url)
 
-    def test_delete_button_removed_from_event_detail(self):
-        """刪除功能已搬到列表頁，詳情頁不應再出現刪除表單"""
+    def test_delete_form_appears_in_event_detail_for_admin(self):
+        """管理員在詳情頁也應看到刪除表單，不是只能在列表頁操作"""
         self.client.force_login(self.admin)
+        r = self.client.get(reverse('events:event_detail', args=[self.event.pk]))
+        self.assertContains(r, self.delete_url)
+
+    def test_delete_form_not_appears_in_event_detail_for_officer(self):
+        """一般幹部在詳情頁不應看到刪除表單"""
+        self.client.force_login(self.officer)
         r = self.client.get(reverse('events:event_detail', args=[self.event.pk]))
         self.assertNotContains(r, self.delete_url)
 

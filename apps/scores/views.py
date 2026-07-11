@@ -13,7 +13,7 @@ from .models import Score
 
 @login_required
 def score_list(request):
-    scores = Score.objects.select_related('instrument', 'section', 'parent_score')
+    scores = Score.objects.select_related('instrument', 'section', 'parent_score', 'full_score')
 
     score_type = request.GET.get('type', '')
     instrument_id = request.GET.get('instrument', '')

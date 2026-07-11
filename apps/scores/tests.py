@@ -176,6 +176,14 @@ class ScoreListViewTest(TestCase):
             name='樂譜測試員',
             role=User.Role.MEMBER,
         )
+        self.officer = User.objects.create_user(
+            username='score_list_officer', password='x', name='列表幹部',
+            email='score_list_officer@test.local', role=User.Role.OFFICER,
+        )
+        self.admin = User.objects.create_user(
+            username='score_list_admin', password='x', name='列表管理員',
+            email='score_list_admin@test.local', role=User.Role.ADMIN,
+        )
         family = InstrumentFamily.objects.create(
             name='豎笛族', category=InstrumentFamily.Category.WOODWIND
         )
@@ -187,6 +195,12 @@ class ScoreListViewTest(TestCase):
         )
         self.part_score = Score.objects.create(
             title='天空之城（單簧管）',
+            score_type=Score.ScoreType.PART,
+            instrument=self.instrument,
+            full_score=self.full_score,
+        )
+        self.unbound_part_score = Score.objects.create(
+            title='孤立分譜（單簧管）',
             score_type=Score.ScoreType.PART,
             instrument=self.instrument,
         )
@@ -248,6 +262,41 @@ class ScoreListViewTest(TestCase):
         self.client.force_login(self.member)
         r = self.client.get(self.url, {'q': '完全不存在的曲名xyz'})
         self.assertContains(r, '沒有符合條件的樂譜')
+
+    # ── T03 分譜顯示所屬總譜 ─────────────────────────────────
+
+    def test_part_score_shows_bound_full_score(self):
+        """已綁定 full_score 的分譜，列表應顯示所屬總譜名稱"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertContains(r, '屬於')
+        self.assertContains(r, self.full_score.title)
+
+    def test_unbound_part_score_shows_hint(self):
+        """未綁定 full_score 的分譜，列表應顯示未綁定提示"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertContains(r, '未綁定總譜')
+
+    # ── T04 刪除按鈕：限管理員 ───────────────────────────────
+
+    def test_delete_form_appears_for_admin(self):
+        """管理員在列表頁應看到指向 score_delete 的刪除表單"""
+        self.client.force_login(self.admin)
+        r = self.client.get(self.url)
+        self.assertContains(r, reverse('scores:score_delete', args=[self.full_score.pk]))
+
+    def test_delete_form_not_appears_for_officer(self):
+        """一般幹部在列表頁不應看到刪除表單"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertNotContains(r, reverse('scores:score_delete', args=[self.full_score.pk]))
+
+    def test_delete_form_not_appears_for_member(self):
+        """一般團員在列表頁不應看到刪除表單"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertNotContains(r, reverse('scores:score_delete', args=[self.full_score.pk]))
 
 
 class ScoreDetailViewTest(TestCase):
