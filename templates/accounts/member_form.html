@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}新增團員 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'accounts:member_directory' %}">會員通訊錄</a></li>
+    <li class="breadcrumb-item active">新增團員</li>
+  </ol>
+</nav>
+
+{% if messages %}
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+{% endif %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <h2 class="mb-2">新增團員</h2>
+    <p class="text-muted small mb-4">
+      只需填寫基本資料，帳號會依 Email 自動產生，系統會寄送帳號與臨時密碼給本人，
+      對方登入後會被要求自行設定新密碼。
+    </p>
+
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="row">
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">姓名 <span class="text-danger">*</span></label>
+          <input type="text" name="name" class="form-control" value="{{ request.POST.name }}" required>
+        </div>
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">Email <span class="text-danger">*</span></label>
+          <input type="email" name="email" class="form-control" value="{{ request.POST.email }}" required>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">樂器族群 <span class="text-muted small">（選填）</span></label>
+          <select name="instrument" class="form-select">
+            <option value="">未指定</option>
+            {% for inst in instruments %}
+            <option value="{{ inst.pk }}" {% if request.POST.instrument == inst.pk|stringformat:"s" %}selected{% endif %}>
+              {{ inst.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">聲部 <span class="text-muted small">（選填）</span></label>
+          <select name="section" class="form-select">
+            <option value="">未指定</option>
+            {% for sec in sections %}
+            <option value="{{ sec.pk }}" {% if request.POST.section == sec.pk|stringformat:"s" %}selected{% endif %}>
+              {{ sec.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">畢業年份 <span class="text-muted small">（選填）</span></label>
+          <input type="number" name="grad_year" class="form-control" value="{{ request.POST.grad_year }}">
+        </div>
+        <div class="col-sm-6 mb-4">
+          <label class="form-label fw-semibold">電話 <span class="text-muted small">（選填）</span></label>
+          <input type="text" name="phone" class="form-control" value="{{ request.POST.phone }}">
+        </div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">新增團員</button>
+        <a href="{% url 'accounts:member_directory' %}" class="btn btn-outline-secondary">取消</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

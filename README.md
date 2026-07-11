@@ -46,7 +46,7 @@ python manage.py runserver
 ## 執行測試
 
 ```bash
-python manage.py test                          # 全部（236 個）
+python manage.py test                          # 全部（253 個）
 python manage.py test apps.events              # 單一 app
 python manage.py test --verbosity=2            # 詳細輸出
 ```

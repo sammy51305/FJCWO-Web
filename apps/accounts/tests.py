@@ -1,3 +1,4 @@
+from django.core import mail
 from django.test import TestCase
 from django.urls import reverse
 
@@ -391,6 +392,59 @@ class RegistrationTest(TestCase):
         self.assertEqual(reg.status, Registration.Status.APPROVED)
         self.assertEqual(reg.reviewed_by, self.officer)
 
+    def test_approve_creates_user_account(self):
+        """
+        核准申請時應真的建立對應的 User 帳號（而不只是改申請狀態），
+        姓名/Email/畢業年份/電話需與申請資料一致，樂器對應到族群（InstrumentFamily）。
+        """
+        from .models import Registration
+        reg = Registration.objects.create(
+            name='新會員', instrument=self.instrument,
+            grad_year=115, email='newuser@test.local', phone='0911222333',
+        )
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'reg_id': reg.pk, 'action': 'approve'})
+
+        user = User.objects.get(email='newuser@test.local')
+        self.assertEqual(user.name, '新會員')
+        self.assertEqual(user.grad_year, 115)
+        self.assertEqual(user.phone, '0911222333')
+        self.assertEqual(user.instrument, self.family)
+        self.assertEqual(user.role, User.Role.MEMBER)
+        # 帳號用臨時密碼建立，必須強制對方登入後自行改密碼
+        self.assertTrue(user.must_change_password)
+
+    def test_approve_sends_temp_password_email(self):
+        """核准申請後應寄送一封含帳號密碼的信到申請者 Email"""
+        from .models import Registration
+        reg = Registration.objects.create(
+            name='收信測試', instrument=self.instrument,
+            grad_year=115, email='mail_test@test.local',
+        )
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'reg_id': reg.pk, 'action': 'approve'})
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('mail_test@test.local', mail.outbox[0].to)
+
+    def test_approve_with_existing_email_does_not_create_duplicate(self):
+        """Email 已被其他帳號使用時，核准應被擋下，不建立重複帳號，申請狀態維持 pending"""
+        from .models import Registration
+        User.objects.create_user(
+            username='existing', password='x', name='已存在的人',
+            email='dupemail@test.local', role=User.Role.MEMBER,
+        )
+        reg = Registration.objects.create(
+            name='撞 Email 的人', instrument=self.instrument,
+            grad_year=110, email='dupemail@test.local',
+        )
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'reg_id': reg.pk, 'action': 'approve'})
+
+        reg.refresh_from_db()
+        self.assertEqual(reg.status, Registration.Status.PENDING)
+        self.assertEqual(User.objects.filter(email='dupemail@test.local').count(), 1)
+
     def test_officer_can_reject_registration(self):
         """幹部拒絕後狀態變 rejected"""
         from .models import Registration
@@ -402,3 +456,171 @@ class RegistrationTest(TestCase):
         self.client.post(self.review_url, {'reg_id': reg.pk, 'action': 'reject'})
         reg.refresh_from_db()
         self.assertEqual(reg.status, Registration.Status.REJECTED)
+
+
+class MemberCreateTest(TestCase):
+    """幹部手動新增團員帳號（不透過校友報到申請）"""
+
+    def setUp(self):
+        self.family = InstrumentFamily.objects.create(
+            name='豎笛族', category=InstrumentFamily.Category.WOODWIND
+        )
+        self.officer = User.objects.create_user(
+            username='mc_officer', password='x', name='新增團員幹部',
+            email='mc_officer@test.local', role=User.Role.OFFICER,
+        )
+        self.member = User.objects.create_user(
+            username='mc_member', password='x', name='一般團員',
+            email='mc_member@test.local', role=User.Role.MEMBER,
+        )
+        self.url = reverse('accounts:member_create')
+
+    # ── 存取控制 ────────────────────────────────────────
+
+    def test_unauthenticated_redirects_to_login(self):
+        """未登入應導向登入頁"""
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    def test_member_redirects_with_error_message(self):
+        """一般團員應被導回通訊錄並顯示權限不足"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url, follow=True)
+        self.assertRedirects(r, reverse('accounts:member_directory'))
+        self.assertContains(r, '權限不足')
+
+    def test_officer_get_returns_200(self):
+        """幹部 GET 應正常顯示表單"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 200)
+
+    # ── POST 新增團員 ────────────────────────────────────
+    # 表單不收帳號/密碼/角色欄位：帳號由 Email 自動產生、密碼是隨機臨時密碼、
+    # 角色固定為 MEMBER（幹部不能透過這個表單直接開幹部/管理員帳號）。
+
+    def test_officer_post_creates_member(self):
+        """幹部送出有效資料應成功建立帳號（角色固定 member），並導向通訊錄"""
+        self.client.force_login(self.officer)
+        r = self.client.post(self.url, {
+            'name': '手動新增的人',
+            'email': 'manual@test.local',
+            'instrument': self.family.pk,
+        })
+        self.assertRedirects(r, reverse('accounts:member_directory'))
+        user = User.objects.get(email='manual@test.local')
+        self.assertEqual(user.name, '手動新增的人')
+        self.assertEqual(user.instrument, self.family)
+        self.assertEqual(user.role, User.Role.MEMBER)
+        self.assertTrue(user.must_change_password)
+
+    def test_created_username_derived_from_email(self):
+        """帳號應依 Email 前綴自動產生，不需要幹部手動輸入"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'name': '帳號產生測試',
+            'email': 'autoname@test.local',
+        })
+        user = User.objects.get(email='autoname@test.local')
+        self.assertEqual(user.username, 'autoname')
+
+    def test_duplicate_email_does_not_create_record(self):
+        """Email 已被使用時應擋下，不建立記錄"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'name': '重複 Email 測試',
+            'email': self.officer.email,  # 與既有幹部帳號的 email 重複
+        })
+        self.assertEqual(User.objects.filter(email=self.officer.email).count(), 1)
+
+    def test_post_sends_temp_password_email(self):
+        """建立帳號後應寄送一封含帳號密碼的信到指定 Email"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'name': '收信測試',
+            'email': 'member_mail_test@test.local',
+        })
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('member_mail_test@test.local', mail.outbox[0].to)
+
+
+class ForcePasswordChangeTest(TestCase):
+    """强制設定新密碼流程（must_change_password + middleware + change_password view）"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='needs_reset', password='temp12345', name='待改密碼團員',
+            email='needs_reset@test.local', role=User.Role.MEMBER,
+            must_change_password=True,
+        )
+        self.normal_user = User.objects.create_user(
+            username='normal_user', password='pass12345', name='正常團員',
+            email='normal_user@test.local', role=User.Role.MEMBER,
+        )
+        self.change_url = reverse('accounts:change_password')
+
+    def test_must_change_password_user_redirected_to_change_password(self):
+        """must_change_password=True 的使用者訪問任何頁面都會被導向設定密碼頁"""
+        self.client.force_login(self.user)
+        r = self.client.get(reverse('accounts:member_directory'))
+        self.assertRedirects(r, self.change_url, fetch_redirect_response=False)
+
+    def test_normal_user_not_redirected(self):
+        """一般使用者（must_change_password=False）不受影響，正常瀏覽"""
+        self.client.force_login(self.normal_user)
+        r = self.client.get(reverse('accounts:member_directory'))
+        self.assertEqual(r.status_code, 200)
+
+    def test_change_password_page_itself_is_exempt(self):
+        """避免無限重導向：設定密碼頁本身不會被 middleware 再次攔截"""
+        self.client.force_login(self.user)
+        r = self.client.get(self.change_url)
+        self.assertEqual(r.status_code, 200)
+
+    def test_successful_change_clears_flag_and_updates_password(self):
+        """成功設定新密碼後，must_change_password 應變 False，且新密碼可用來登入"""
+        self.client.force_login(self.user)
+        r = self.client.post(self.change_url, {
+            'new_password1': 'brandnewpass456',
+            'new_password2': 'brandnewpass456',
+        })
+        self.assertRedirects(r, '/', fetch_redirect_response=False)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.must_change_password)
+        self.assertTrue(self.user.check_password('brandnewpass456'))
+
+    def test_mismatched_passwords_rejected(self):
+        """兩次輸入不一致應被擋下，flag 維持 True"""
+        self.client.force_login(self.user)
+        self.client.post(self.change_url, {
+            'new_password1': 'brandnewpass456',
+            'new_password2': 'somethingelse789',
+        })
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.must_change_password)
+
+    def test_weak_password_rejected(self):
+        """太弱的密碼（Django 內建驗證器擋下）應被拒絕，flag 維持 True"""
+        self.client.force_login(self.user)
+        self.client.post(self.change_url, {
+            'new_password1': '12345678',
+            'new_password2': '12345678',
+        })
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.must_change_password)
+
+    def test_redirected_user_still_reaches_change_password_after_login(self):
+        """
+        整合情境：使用臨時密碼登入 → 任何頁面都被導向設定密碼頁 → 完成後恢復正常瀏覽。
+        確認「登入需要真正的密碼」這道防線存在——沒帶對密碼一樣登入失敗。
+        """
+        r = self.client.post(reverse('accounts:login'), {
+            'username': 'needs_reset', 'password': 'wrong-password',
+        })
+        self.assertEqual(r.status_code, 200)  # 沒有導向，代表登入失敗，留在登入頁
+
+        r = self.client.post(reverse('accounts:login'), {
+            'username': 'needs_reset', 'password': 'temp12345',
+        }, follow=True)
+        self.assertRedirects(r, self.change_url)

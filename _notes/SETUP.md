@@ -116,6 +116,28 @@ DB_PORT=5432
 
 ---
 
+## 選用：設定寄信（Email）
+
+幹部核准校友報到申請、或手動新增團員時，系統會寄送帳號與臨時密碼給本人。
+`.env` 的 `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` **本機開發可以留空**：
+[config/settings.py](../config/settings.py) 偵測到沒填時會自動改用 console backend，
+信件內容直接印在終端機，不需要申請真的 SMTP 帳號。
+
+若要在本機實際測試寄信效果，才需要申請 SMTP 帳密（例如 Gmail 應用程式密碼），填入：
+
+```
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_HOST_USER=<你的 email>
+EMAIL_HOST_PASSWORD=<應用程式密碼，不是登入密碼>
+EMAIL_USE_TLS=True
+DEFAULT_FROM_EMAIL=noreply@fjcwo.local
+```
+
+> 同樣屬於機密資訊，只存在本機 `.env`，不要寫進任何 `_notes/` 文件或 commit 訊息。
+
+---
+
 ## 步驟五：執行 Migration
 
 ```bash

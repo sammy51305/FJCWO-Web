@@ -68,6 +68,10 @@ class User(AbstractUser):
     grad_year = models.PositiveSmallIntegerField('畢業年份', null=True, blank=True)
     phone = models.CharField('電話', max_length=20, blank=True)
     line_user_id = models.CharField('LINE User ID', max_length=100, blank=True)
+    must_change_password = models.BooleanField(
+        '需重設密碼', default=False,
+        help_text='幹部代為建立帳號時設為 True，登入後會被強制導向設定新密碼頁面'
+    )
 
     REQUIRED_FIELDS = ['name', 'email']
 
