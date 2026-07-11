@@ -508,7 +508,32 @@ value 是尚未評估的 QuerySet 列表。第一版程式碼誤把 `len(field_u
 
 ### 4.3 場地管理（band_public）
 
-**檔案**：`apps/public/models.py`（Venue、VenueTimeSlot）
+**檔案**：`apps/public/models.py`（Venue、VenueTimeSlot）、`apps/public/views.py`
+
+#### 前端管理頁面：venue_list / venue_create / venue_edit / venue_delete
+
+原本場地只能透過 Django Admin 操作，補上前端頁面後：
+
+| View | 對象 | 功能 |
+|------|------|------|
+| `venue_list` | 幹部 | 依名稱/地址搜尋、依類別（演出/排練）篩選 |
+| `venue_create` | 幹部 | 新增場地主體資料，成功後導向 `venue_edit` 才能新增時段 |
+| `venue_edit` | 幹部 | 編輯場地主體資料 + 管理該場地的所有時段 |
+| `venue_timeslot_delete` | 幹部 | 刪除單一時段 |
+| `venue_delete` | **管理員限定**（`admin` 角色或 `superuser`）| 刪除場地，被演出/排練引用時（`PROTECT`）擋下 |
+
+`venue_create` 只建立場地主體、不處理時段，是因為 `VenueTimeSlot` 需要先有 `venue_id` 才能建立，
+兩者天生就是「先建父層、再建子層」的順序，用兩個步驟比在同一個表單塞進動態數量的時段列更單純。
+
+時段的新增/刪除各自是獨立的 action（`add_timeslot` 這個 POST 參數判斷是不是新增時段的表單），
+跟 `score_parts_manage`、`registration_review` 的核准/拒絕是同樣的「同一頁面多個小 action」寫法。
+
+#### 為什麼刪除場地限管理員
+
+跟 `member_delete`、`event_delete` 是同樣的考量：場地被 `PerformanceEvent`／`Rehearsal` 用 `PROTECT`
+參照，一般幹部不小心刪掉場地會讓歷史排練/演出紀錄失去場地資訊。這裡不像 `member_delete` 需要
+`Collector` 判斷「有沒有關聯紀錄才放行真刪除」——`PROTECT` 本身就是資料庫層級的硬限制，
+管理員也無法繞過，`venue_delete` 只是把 `ProtectedError` 包成友善訊息，而不是讓它變 500。
 
 #### 為什麼要有 VenueTimeSlot？
 
@@ -559,7 +584,7 @@ planning（籌備中）→ confirmed（確認）→ finished（已結束）
 ```
 
 `cancelled` 用於誤建或取消的活動，避免直接刪除造成 cascade 刪除所有排練與紀錄。
-幹部可在編輯頁切換為「已取消」，管理員（superuser）可進一步從活動詳情頁刪除。
+幹部可在編輯頁切換為「已取消」，管理員（`admin` 角色或 `superuser`）可進一步從活動詳情頁刪除。
 
 `event_list` view 將活動分成三區，已取消僅管理員可見：
 
@@ -568,6 +593,11 @@ upcoming  = base.exclude(status__in=['finished', 'cancelled']).order_by('perform
 past      = base.filter(status='finished').order_by('-performance_date')
 cancelled = base.filter(status='cancelled') if request.user.is_superuser else None
 ```
+
+> **已知不一致**：這裡的「已取消」清單過濾只檢查 `is_superuser`，沒有一併檢查 `is_admin_role`，
+> 跟 `event_delete` 的權限判斷不完全對稱（`role=admin` 帳號因為 `User.save()` 會自動設定
+> `is_superuser=True`，實務上兩者等價，暫不影響行為，但程式碼語意上不一致）。
+> 之後若有需要可以一併改成 `request.user.is_superuser or request.user.is_admin_role`。
 
 #### `select_related` 是什麼？
 

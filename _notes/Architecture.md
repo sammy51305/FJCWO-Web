@@ -448,7 +448,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 ├── 演出活動管理（建立／編輯演出活動、新增／編輯排練、演出曲目分配）
 │   └── 管理員限定：刪除演出活動（含二次確認）
 ├── QR Code 簽到管理
-├── 場地主檔管理（Model + Admin）※ 尚無前端頁面
+├── 場地主檔管理（查詢／篩選、新增／編輯、含 VenueTimeSlot 多時段管理；刪除限管理員，已被演出/排練引用時擋下）
 ├── 團員通訊錄（按樂器分組，電話幹部限定，可查詢／篩選在團或已退團；幹部可新增團員、編輯資料、退團／恢復、無關聯紀錄時可真正刪除；管理員可強制刪除已有關聯紀錄的帳號）
 ├── 校友報到審核（查詢／篩選、核准／拒絕、重新開放審核、新增／編輯／刪除申請紀錄；核准時同步建立正式 User 帳號）
 ├── 請假審核
@@ -606,7 +606,7 @@ FJCWO-Web/
 - [x] 把現有 Hugo 公開頁面搬進 Django templates
 
 ### Phase 2 — 核心功能
-- [x] 場地主檔管理（Model + Admin + VenueTimeSlot 多時段）
+- [x] 場地主檔管理（Model + Admin + views + templates + VenueTimeSlot 多時段管理，刪除限管理員）
 - [x] 演出活動 + 排練管理（Model + Admin + views + templates；含前端建立／編輯／標記取消，管理員可刪除）
 - [x] QR Code 簽到系統（Model + Admin + views + templates）
 - [x] 曲目分配（Model + Admin）

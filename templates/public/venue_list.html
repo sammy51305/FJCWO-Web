@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}場地管理 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h2 class="mb-0">場地管理</h2>
+  <a href="{% url 'public:venue_create' %}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg"></i> 新增場地
+  </a>
+</div>
+
+{% if messages %}
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+{% endif %}
+
+<!-- 搜尋／篩選列 -->
+<form method="get" class="row g-2 mb-4">
+  <div class="col-sm-4 col-md-3">
+    <input type="text" name="q" class="form-control form-control-sm"
+           placeholder="搜尋場地名稱或地址…" value="{{ query }}">
+  </div>
+  <div class="col-auto">
+    <select name="type" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="" {% if not type_filter %}selected{% endif %}>全部類別</option>
+      {% for value, label in type_choices %}
+      <option value="{{ value }}" {% if type_filter == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <button type="submit" class="btn btn-sm btn-primary">搜尋</button>
+    {% if query or type_filter %}
+    <a href="{% url 'public:venue_list' %}" class="btn btn-sm btn-outline-secondary">清除</a>
+    {% endif %}
+  </div>
+</form>
+
+{% if venues %}
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>場地名稱</th>
+        <th>類別</th>
+        <th>地址</th>
+        <th>時段數</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for venue in venues %}
+      <tr>
+        <td class="fw-semibold">{{ venue.name }}</td>
+        <td>
+          {% if venue.type == 'performance' %}
+          <span class="badge bg-primary">演出場地</span>
+          {% else %}
+          <span class="badge bg-secondary">排練場地</span>
+          {% endif %}
+        </td>
+        <td class="small text-muted">{{ venue.address|default:"—" }}</td>
+        <td>{{ venue.time_slots.count }}</td>
+        <td>
+          <div class="d-flex gap-1">
+            <a href="{% url 'public:venue_edit' venue.pk %}" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-pencil"></i>
+            </a>
+            {% if user.is_superuser or user.is_admin_role %}
+            <form method="post" action="{% url 'public:venue_delete' venue.pk %}" class="d-inline">
+              {% csrf_token %}
+              <button class="btn btn-sm btn-outline-danger" onclick="return confirm('刪除場地《{{ venue.name }}》？若已被演出活動或排練引用將無法刪除。')">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted">沒有符合條件的場地。</p>
+{% endif %}
+{% endblock %}

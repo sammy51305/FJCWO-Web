@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}{% if action == 'edit' %}編輯場地{% else %}新增場地{% endif %} — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'public:venue_list' %}">場地管理</a></li>
+    <li class="breadcrumb-item active">{% if action == 'edit' %}編輯場地{% else %}新增場地{% endif %}</li>
+  </ol>
+</nav>
+
+{% if messages %}
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+{% endif %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <h2 class="mb-4">{% if action == 'edit' %}編輯場地{% else %}新增場地{% endif %}</h2>
+
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="row">
+        <div class="col-sm-8 mb-3">
+          <label class="form-label fw-semibold">場地名稱 <span class="text-danger">*</span></label>
+          <input type="text" name="name" class="form-control" value="{{ form_data.name }}" required>
+        </div>
+        <div class="col-sm-4 mb-3">
+          <label class="form-label fw-semibold">類別 <span class="text-danger">*</span></label>
+          <select name="type" class="form-select" required>
+            <option value="">請選擇</option>
+            {% for value, label in type_choices %}
+            <option value="{{ value }}" {% if form_data.type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">地址 <span class="text-muted small">（選填）</span></label>
+        <input type="text" name="address" class="form-control" value="{{ form_data.address }}">
+      </div>
+
+      <div class="row">
+        <div class="col-sm-4 mb-3">
+          <label class="form-label fw-semibold">容納人數 <span class="text-muted small">（選填）</span></label>
+          <input type="number" name="capacity" class="form-control" min="0" value="{{ form_data.capacity }}">
+        </div>
+        <div class="col-sm-4 mb-3">
+          <label class="form-label fw-semibold">場地電話 <span class="text-muted small">（選填）</span></label>
+          <input type="text" name="phone" class="form-control" value="{{ form_data.phone }}">
+        </div>
+        <div class="col-sm-4 mb-3">
+          <label class="form-label fw-semibold">Google Maps 網址 <span class="text-muted small">（選填）</span></label>
+          <input type="url" name="google_map_url" class="form-control" value="{{ form_data.google_map_url }}">
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">聯絡人姓名 <span class="text-muted small">（選填）</span></label>
+          <input type="text" name="contact_person" class="form-control" value="{{ form_data.contact_person }}">
+        </div>
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">聯絡人電話 <span class="text-muted small">（選填）</span></label>
+          <input type="text" name="contact_phone" class="form-control" value="{{ form_data.contact_phone }}">
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">交通方式 <span class="text-muted small">（選填）</span></label>
+        <textarea name="transportation" class="form-control" rows="2">{{ form_data.transportation }}</textarea>
+      </div>
+
+      <div class="row">
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">機車停放 <span class="text-muted small">（選填）</span></label>
+          <select name="motorcycle_parking" class="form-select">
+            <option value="">未指定</option>
+            {% for value, label in parking_choices %}
+            <option value="{{ value }}" {% if form_data.motorcycle_parking == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">汽車停放 <span class="text-muted small">（選填）</span></label>
+          <select name="car_parking" class="form-select">
+            <option value="">未指定</option>
+            {% for value, label in parking_choices %}
+            <option value="{{ value }}" {% if form_data.car_parking == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold">備註 <span class="text-muted small">（選填）</span></label>
+        <textarea name="notes" class="form-control" rows="2">{{ form_data.notes }}</textarea>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">{% if action == 'edit' %}儲存變更{% else %}新增場地{% endif %}</button>
+        <a href="{% url 'public:venue_list' %}" class="btn btn-outline-secondary">取消</a>
+      </div>
+    </form>
+
+    {% if action == 'edit' %}
+    <hr class="my-5">
+
+    <h4 class="mb-3">場地時段</h4>
+
+    {% if time_slots %}
+    <div class="table-responsive mb-4">
+      <table class="table table-sm table-hover align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>星期</th>
+            <th>時間</th>
+            <th>費用</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for slot in time_slots %}
+          <tr>
+            <td>{{ slot.weekday_display }}</td>
+            <td>{{ slot.start_time|time:"H:i" }}–{{ slot.end_time|time:"H:i" }}</td>
+            <td>{{ slot.fee|default:"—" }}</td>
+            <td>
+              <form method="post" action="{% url 'public:venue_timeslot_delete' slot.pk %}"
+                    onsubmit="return confirm('刪除這個時段？')">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted">尚未新增任何時段。</p>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-body">
+        <h6 class="mb-3">新增時段</h6>
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="add_timeslot" value="1">
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">適用星期 <span class="text-danger">*</span></label>
+            <div class="d-flex flex-wrap gap-3">
+              <div class="form-check"><input class="form-check-input" type="checkbox" name="is_sun" id="is_sun"><label class="form-check-label" for="is_sun">週日</label></div>
+              <div class="form-check"><input class="form-check-input" type="checkbox" name="is_mon" id="is_mon"><label class="form-check-label" for="is_mon">週一</label></div>
+              <div class="form-check"><input class="form-check-input" type="checkbox" name="is_tue" id="is_tue"><label class="form-check-label" for="is_tue">週二</label></div>
+              <div class="form-check"><input class="form-check-input" type="checkbox" name="is_wed" id="is_wed"><label class="form-check-label" for="is_wed">週三</label></div>
+              <div class="form-check"><input class="form-check-input" type="checkbox" name="is_thu" id="is_thu"><label class="form-check-label" for="is_thu">週四</label></div>
+              <div class="form-check"><input class="form-check-input" type="checkbox" name="is_fri" id="is_fri"><label class="form-check-label" for="is_fri">週五</label></div>
+              <div class="form-check"><input class="form-check-input" type="checkbox" name="is_sat" id="is_sat"><label class="form-check-label" for="is_sat">週六</label></div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-sm-4 mb-3">
+              <label class="form-label fw-semibold">開始時間 <span class="text-danger">*</span></label>
+              <input type="time" name="start_time" class="form-control" required>
+            </div>
+            <div class="col-sm-4 mb-3">
+              <label class="form-label fw-semibold">結束時間 <span class="text-danger">*</span></label>
+              <input type="time" name="end_time" class="form-control" required>
+            </div>
+            <div class="col-sm-4 mb-3">
+              <label class="form-label fw-semibold">費用 <span class="text-muted small">（選填）</span></label>
+              <input type="number" name="fee" class="form-control" min="0">
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-plus-lg"></i> 新增時段
+          </button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

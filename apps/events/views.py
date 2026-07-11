@@ -427,7 +427,7 @@ def attendance_report(request, pk):
 
 @login_required
 def event_delete(request, pk):
-    if not request.user.is_superuser:
+    if not (request.user.is_superuser or request.user.is_admin_role):
         messages.error(request, '權限不足。')
         return redirect('events:event_detail', pk=pk)
 
