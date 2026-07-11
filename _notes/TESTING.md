@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-07-11（共 273 個測試）
+> 最後更新：2026-07-12（共 294 個測試）
 
 ---
 
@@ -63,15 +63,18 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 
 ## 目前測試總覽
 
-共 **273 個測試**，分布在 8 個 app。
+共 **294 個測試**，分布在 8 個 app。
 
-### `apps/accounts/tests.py`（66 個）
+### `apps/accounts/tests.py`（87 個）
 
 | Class | 測試內容 |
 |-------|---------|
 | `LoginLogoutTest` | 登入頁存取、正確/錯誤帳密、session 建立與清除、登出導向 |
 | `ProfileTest` | 個人資料頁存取控制、顯示姓名、POST 更新儲存 |
-| `MemberDirectoryTest` | 通訊錄存取控制、電話/email 可見性（member vs officer）、admin 不顯示 |
+| `MemberDirectoryTest` | 通訊錄存取控制、電話/email 可見性（member vs officer）、admin 不顯示、依姓名搜尋、預設隱藏已退團、status=inactive 篩選、一般團員無法使用狀態篩選 |
+| `MemberEditTest` | 存取控制（未登入/他人/幹部）、GET 預先帶入既有資料、POST 更新成功、幹部可升級為幹部角色、一般幹部不可授予管理員角色（僅管理員本身可以）、404 |
+| `MemberStatusTest` | 幹部可退團／恢復、退團不刪除資料、不能將自己標記退團、一般團員無法操作他人狀態 |
+| `MemberDeleteTest` | 無關聯紀錄的帳號可真正刪除、有關聯紀錄（如出席）的帳號擋下並保留、不能刪除自己、一般團員無法刪除他人 |
 | `UserRoleTest` | `is_officer` 各角色行為（member/officer/admin/superuser）、`is_staff` 與 `is_superuser` 自動設定 |
 | `RegistrationTest` | 校友報到申請（公開存取、重複申請防止、送出建立紀錄）、狀態查詢（用 email 查）、幹部審核（核准/拒絕）、核准同步建立 User 帳號（含 must_change_password）、寄送臨時密碼信件、Email 重複時擋下不建立重複帳號 |
 | `RegistrationManageTest` | 依姓名/Email 搜尋、依狀態篩選、拒絕可重新開放審核（核准不行）、新增申請紀錄（幹部限定）、編輯基本資料（不影響審核狀態）、刪除申請紀錄（已核准者不可刪除，一般團員不可操作）|

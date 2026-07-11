@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}新增團員 — 百韻管樂團{% endblock %}
+{% block title %}{% if action == 'edit' %}編輯團員{% else %}新增團員{% endif %} — 百韻管樂團{% endblock %}
 
 {% block content %}
 <nav aria-label="breadcrumb" class="mb-3">
   <ol class="breadcrumb">
     <li class="breadcrumb-item"><a href="{% url 'accounts:member_directory' %}">團員通訊錄</a></li>
-    <li class="breadcrumb-item active">新增團員</li>
+    <li class="breadcrumb-item active">{% if action == 'edit' %}編輯團員{% else %}新增團員{% endif %}</li>
   </ol>
 </nav>
 
@@ -21,11 +21,13 @@
 
 <div class="row justify-content-center">
   <div class="col-lg-7">
-    <h2 class="mb-2">新增團員</h2>
+    <h2 class="mb-2">{% if action == 'edit' %}編輯團員{% else %}新增團員{% endif %}</h2>
+    {% if action != 'edit' %}
     <p class="text-muted small mb-4">
       只需填寫基本資料，帳號會依 Email 自動產生，系統會寄送帳號與臨時密碼給本人，
       對方登入後會被要求自行設定新密碼。
     </p>
+    {% endif %}
 
     <form method="post">
       {% csrf_token %}
@@ -33,13 +35,24 @@
       <div class="row">
         <div class="col-sm-6 mb-3">
           <label class="form-label fw-semibold">姓名 <span class="text-danger">*</span></label>
-          <input type="text" name="name" class="form-control" value="{{ request.POST.name }}" required>
+          <input type="text" name="name" class="form-control" value="{{ form_data.name }}" required>
         </div>
         <div class="col-sm-6 mb-3">
           <label class="form-label fw-semibold">Email <span class="text-danger">*</span></label>
-          <input type="email" name="email" class="form-control" value="{{ request.POST.email }}" required>
+          <input type="email" name="email" class="form-control" value="{{ form_data.email }}" required>
         </div>
       </div>
+
+      {% if action == 'edit' %}
+      <div class="mb-3">
+        <label class="form-label fw-semibold">角色 <span class="text-danger">*</span></label>
+        <select name="role" class="form-select" required>
+          {% for value, label in role_choices %}
+          <option value="{{ value }}" {% if form_data.role == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
 
       <div class="row">
         <div class="col-sm-6 mb-3">
@@ -47,7 +60,7 @@
           <select name="instrument" class="form-select">
             <option value="">未指定</option>
             {% for inst in instruments %}
-            <option value="{{ inst.pk }}" {% if request.POST.instrument == inst.pk|stringformat:"s" %}selected{% endif %}>
+            <option value="{{ inst.pk }}" {% if form_data.instrument == inst.pk|stringformat:"s" %}selected{% endif %}>
               {{ inst.name }}
             </option>
             {% endfor %}
@@ -58,7 +71,7 @@
           <select name="section" class="form-select">
             <option value="">未指定</option>
             {% for sec in sections %}
-            <option value="{{ sec.pk }}" {% if request.POST.section == sec.pk|stringformat:"s" %}selected{% endif %}>
+            <option value="{{ sec.pk }}" {% if form_data.section == sec.pk|stringformat:"s" %}selected{% endif %}>
               {{ sec.name }}
             </option>
             {% endfor %}
@@ -69,16 +82,16 @@
       <div class="row">
         <div class="col-sm-6 mb-3">
           <label class="form-label fw-semibold">畢業年份 <span class="text-muted small">（選填）</span></label>
-          <input type="number" name="grad_year" class="form-control" value="{{ request.POST.grad_year }}">
+          <input type="number" name="grad_year" class="form-control" value="{{ form_data.grad_year }}">
         </div>
         <div class="col-sm-6 mb-4">
           <label class="form-label fw-semibold">電話 <span class="text-muted small">（選填）</span></label>
-          <input type="text" name="phone" class="form-control" value="{{ request.POST.phone }}">
+          <input type="text" name="phone" class="form-control" value="{{ form_data.phone }}">
         </div>
       </div>
 
       <div class="d-flex gap-2">
-        <button type="submit" class="btn btn-primary">新增團員</button>
+        <button type="submit" class="btn btn-primary">{% if action == 'edit' %}儲存變更{% else %}新增團員{% endif %}</button>
         <a href="{% url 'accounts:member_directory' %}" class="btn btn-outline-secondary">取消</a>
       </div>
     </form>

@@ -8,6 +8,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db.models import Q
+from django.db.models.deletion import Collector, ProtectedError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.crypto import get_random_string
@@ -26,6 +27,37 @@ def _unique_username(base):
         suffix += 1
         username = f'{base}{suffix}'
     return username
+
+
+def _user_has_related_records(user):
+    """
+    用 Django 的 Collector 模擬一次刪除，檢查這個帳號是否已被任何其他資料表參照
+    （出席、請假、借用、財務、公告…）。只要有牽連（含 CASCADE 會被連帶刪除、
+    SET_NULL 會被清空、或 PROTECT 直接擋下），就代表這個帳號已經「被使用過」，
+    不該真的刪除，只能用「退團」（is_active=False）處理。
+    用 Collector 而非手動列出每張表，是因為未來新增別的 app 參照 User 時不用回來改這裡。
+    """
+    collector = Collector(using='default')
+    try:
+        collector.collect([user])
+    except ProtectedError:
+        return True
+    for model, instances in collector.data.items():
+        if model is not User and len(instances) > 0:
+            return True
+    # 有些 CASCADE 反向關聯 Django 會走「快速刪除路徑」，直接發 SQL DELETE，
+    # 不會經過 collector.data，而是放在 collector.fast_deletes（一批 QuerySet）。
+    for qs in collector.fast_deletes:
+        if qs.model is not User and qs.exists():
+            return True
+    # collector.field_updates 的 key 是 (field, value)，不是 model；
+    # value 是尚未評估的 QuerySet 列表，要看 QuerySet 內容是否真的有資料，
+    # 不能只看 list 長度（SET_NULL 欄位一定會出現在這裡，即使對應資料是空的）。
+    for (field, value), querysets in collector.field_updates.items():
+        for qs in querysets:
+            if qs.exists():
+                return True
+    return False
 
 
 def _create_member_with_temp_password(*, name, email, instrument=None, section=None, grad_year=None, phone=''):
@@ -121,13 +153,24 @@ def profile_view(request):
 
 @login_required
 def member_directory(request):
-    members = (
-        User.objects
-        .filter(is_active=True)
-        .exclude(role=User.Role.ADMIN)
-        .select_related('instrument', 'section')
-        .order_by('instrument__category', 'instrument__name', 'name')
-    )
+    # 退團／全部篩選只給幹部用，一般團員永遠只看得到在團名單
+    status_filter = request.GET.get('status', '') if request.user.is_officer else ''
+    query = request.GET.get('q', '').strip()
+
+    members = User.objects.exclude(role=User.Role.ADMIN).select_related('instrument', 'section')
+
+    if status_filter == 'inactive':
+        members = members.filter(is_active=False)
+    elif status_filter == 'all':
+        pass
+    else:
+        status_filter = ''
+        members = members.filter(is_active=True)
+
+    if query:
+        members = members.filter(Q(name__icontains=query) | Q(instrument__name__icontains=query))
+
+    members = members.order_by('instrument__category', 'instrument__name', 'name')
 
     # 按樂器族群分類分組
     grouped = {}
@@ -141,7 +184,145 @@ def member_directory(request):
 
     return render(request, 'accounts/member_directory.html', {
         'grouped_members': sorted_groups,
+        'query': query,
+        'status_filter': status_filter,
     })
+
+
+@login_required
+def member_edit(request, pk):
+    """幹部編輯任一團員的資料（含角色；admin 角色僅限管理員本身才能授予，避免權限升級）"""
+    member = get_object_or_404(User, pk=pk)
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('accounts:member_directory')
+
+    can_grant_admin = request.user.is_superuser or request.user.is_admin_role
+
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        email = request.POST.get('email', '').strip()
+        role = request.POST.get('role', member.role)
+        instrument_id = request.POST.get('instrument', '')
+        section_id = request.POST.get('section', '')
+        grad_year = request.POST.get('grad_year', '').strip()
+        phone = request.POST.get('phone', '').strip()
+
+        errors = []
+        if not name:
+            errors.append('請填寫姓名。')
+        if not email:
+            errors.append('請填寫 Email。')
+        elif User.objects.exclude(pk=member.pk).filter(email=email).exists():
+            errors.append('此 Email 已被使用。')
+        if role not in User.Role.values:
+            errors.append('請選擇角色。')
+        elif role == User.Role.ADMIN and not can_grant_admin:
+            errors.append('只有管理員可以將角色設為管理員。')
+
+        grad_year_value = None
+        if grad_year:
+            try:
+                grad_year_value = int(grad_year)
+            except ValueError:
+                errors.append('畢業年份格式錯誤。')
+
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+        else:
+            member.name = name
+            member.email = email
+            member.role = role
+            member.instrument = InstrumentFamily.objects.filter(pk=instrument_id).first() if instrument_id else None
+            member.section = SectionType.objects.filter(pk=section_id).first() if section_id else None
+            member.grad_year = grad_year_value
+            member.phone = phone
+            member.save()
+            messages.success(request, f'已更新 {member.name} 的資料。')
+            return redirect('accounts:member_directory')
+
+    role_choices = User.Role.choices
+    if not can_grant_admin:
+        role_choices = [c for c in role_choices if c[0] != User.Role.ADMIN]
+
+    form_data = request.POST if request.method == 'POST' else {
+        'name': member.name,
+        'email': member.email,
+        'role': member.role,
+        'instrument': str(member.instrument_id or ''),
+        'section': str(member.section_id or ''),
+        'grad_year': member.grad_year,
+        'phone': member.phone,
+    }
+
+    return render(request, 'accounts/member_form.html', {
+        'action': 'edit',
+        'member': member,
+        'form_data': form_data,
+        'instruments': InstrumentFamily.objects.order_by('category', 'name'),
+        'sections': SectionType.objects.all(),
+        'role_choices': role_choices,
+    })
+
+
+@login_required
+def member_deactivate(request, pk):
+    """團員退團：標記 is_active=False（軟刪除），保留所有歷史紀錄"""
+    member = get_object_or_404(User, pk=pk)
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('accounts:member_directory')
+
+    if request.method == 'POST':
+        if member.pk == request.user.pk:
+            messages.error(request, '不能將自己標記為退團。')
+        else:
+            member.is_active = False
+            member.save()
+            messages.success(request, f'已將 {member.name} 標記為退團。')
+    return redirect('accounts:member_directory')
+
+
+@login_required
+def member_reactivate(request, pk):
+    """恢復退團團員的在團狀態"""
+    member = get_object_or_404(User, pk=pk)
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('accounts:member_directory')
+
+    if request.method == 'POST':
+        member.is_active = True
+        member.save()
+        messages.success(request, f'已恢復 {member.name} 的在團狀態。')
+    return redirect('accounts:member_directory')
+
+
+@login_required
+def member_delete(request, pk):
+    """
+    刪除團員帳號。只有完全沒有任何關聯紀錄（出席/請假/借用/財務…）的帳號才允許真的刪除，
+    通常對應「剛新增就發現打錯」的情境；已經有歷史紀錄的帳號一律擋下，改請使用「退團」。
+    """
+    member = get_object_or_404(User, pk=pk)
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('accounts:member_directory')
+
+    if request.method == 'POST':
+        if member.pk == request.user.pk:
+            messages.error(request, '不能刪除自己的帳號。')
+        elif _user_has_related_records(member):
+            messages.error(
+                request,
+                f'{member.name} 已有相關紀錄（出席／請假／借用／財務等），無法直接刪除，請改用「退團」。'
+            )
+        else:
+            name = member.name
+            member.delete()
+            messages.success(request, f'已刪除 {name} 的帳號。')
+    return redirect('accounts:member_directory')
 
 
 @login_required
@@ -195,6 +376,8 @@ def member_create(request):
             return redirect('accounts:member_directory')
 
     return render(request, 'accounts/member_form.html', {
+        'action': 'create',
+        'form_data': request.POST if request.method == 'POST' else {},
         'instruments': InstrumentFamily.objects.order_by('category', 'name'),
         'sections': SectionType.objects.all(),
     })

@@ -12,9 +12,41 @@
   {% endif %}
 </div>
 
+{% if messages %}
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+{% endif %}
+
 {% if not user.is_officer %}
 <div class="alert alert-info">電話僅幹部可查閱。</div>
 {% endif %}
+
+<!-- 搜尋／篩選列 -->
+<form method="get" class="row g-2 mb-4">
+  <div class="col-sm-4 col-md-3">
+    <input type="text" name="q" class="form-control form-control-sm"
+           placeholder="搜尋姓名或樂器…" value="{{ query }}">
+  </div>
+  {% if user.is_officer %}
+  <div class="col-auto">
+    <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="" {% if not status_filter %}selected{% endif %}>在團</option>
+      <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>已退團</option>
+      <option value="all" {% if status_filter == 'all' %}selected{% endif %}>全部</option>
+    </select>
+  </div>
+  {% endif %}
+  <div class="col-auto">
+    <button type="submit" class="btn btn-sm btn-primary">搜尋</button>
+    {% if query or status_filter %}
+    <a href="{% url 'accounts:member_directory' %}" class="btn btn-sm btn-outline-secondary">清除</a>
+    {% endif %}
+  </div>
+</form>
 
 {% for category, members in grouped_members %}
 <h5 class="text-muted mt-4 mb-2">{{ category }}</h5>
@@ -29,6 +61,8 @@
         {% if user.is_officer %}
         <th>電話</th>
         <th>Email</th>
+        <th>狀態</th>
+        <th></th>
         {% endif %}
       </tr>
     </thead>
@@ -42,6 +76,41 @@
         {% if user.is_officer %}
         <td>{{ member.phone|default:"—" }}</td>
         <td><a href="mailto:{{ member.email }}">{{ member.email }}</a></td>
+        <td>
+          {% if member.is_active %}
+          <span class="badge bg-success">在團</span>
+          {% else %}
+          <span class="badge bg-secondary">已退團</span>
+          {% endif %}
+        </td>
+        <td>
+          <div class="d-flex gap-1 flex-wrap">
+            <a href="{% url 'accounts:member_edit' member.pk %}" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-pencil"></i>
+            </a>
+            {% if member.is_active %}
+            <form method="post" action="{% url 'accounts:member_deactivate' member.pk %}" class="d-inline">
+              {% csrf_token %}
+              <button class="btn btn-sm btn-outline-warning" onclick="return confirm('將 {{ member.name }} 標記為退團？')">
+                退團
+              </button>
+            </form>
+            {% else %}
+            <form method="post" action="{% url 'accounts:member_reactivate' member.pk %}" class="d-inline">
+              {% csrf_token %}
+              <button class="btn btn-sm btn-outline-success" onclick="return confirm('恢復 {{ member.name }} 的在團狀態？')">
+                恢復
+              </button>
+            </form>
+            {% endif %}
+            <form method="post" action="{% url 'accounts:member_delete' member.pk %}" class="d-inline">
+              {% csrf_token %}
+              <button class="btn btn-sm btn-outline-danger" onclick="return confirm('刪除 {{ member.name }} 的帳號？若已有相關紀錄將無法刪除。')">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </div>
+        </td>
         {% endif %}
       </tr>
       {% endfor %}
@@ -49,6 +118,6 @@
   </table>
 </div>
 {% empty %}
-<p class="text-muted">目前沒有會員資料。</p>
+<p class="text-muted">沒有符合條件的團員資料。</p>
 {% endfor %}
 {% endblock %}

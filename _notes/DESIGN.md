@@ -420,6 +420,71 @@ for member in members:
 `get_category_display()` 是 Django 自動加在 `TextChoices` 欄位上的方法，
 把資料庫存的英文 key（如 `woodwind`）轉成中文顯示值（如 `木管`）。
 
+#### 通訊錄的查詢／篩選
+
+依姓名或樂器族群名稱關鍵字搜尋（`Q(name__icontains=query) | Q(instrument__name__icontains=query)`），
+寫法跟 `score_list` 一致。狀態篩選（在團／已退團／全部）只給幹部用：
+
+```python
+status_filter = request.GET.get('status', '') if request.user.is_officer else ''
+```
+
+一般團員即使自己在網址帶 `?status=inactive`，view 也會強制忽略，只看得到在團名單——
+誰已經退團屬於幹部內部管理事項，不對一般團員公開。
+
+#### 退團＝軟刪除，不是真的刪除
+
+`member_deactivate` 只是把 `User.is_active` 設成 `False`，`member_reactivate` 設回 `True`，
+兩者都不動資料庫裡的任何其他紀錄。原因跟演出活動用「已取消」狀態而不直接刪除是同一個道理：
+`User` 被排練出席、請假、演出出席、財產借用、財務紀錄、公告等多張表用外鍵參照，
+其中不少是 `CASCADE`——真的刪除團員會連帶砍光他所有歷史紀錄。
+
+#### member_delete：只有「乾淨」帳號才允許真的刪除
+
+「退團」不能滿足所有情境——如果幹部新增團員時打錯字，馬上發現，這種帳號還沒有任何關聯資料，
+應該可以直接刪乾淨，不需要留著一筆「退團」的髒資料。`_user_has_related_records()` 用 Django 的
+`Collector`（`Model.delete()` 內部用的同一套機制）模擬一次刪除，檢查這個帳號會不會牽連任何其他資料：
+
+```python
+collector = Collector(using='default')
+try:
+    collector.collect([user])
+except ProtectedError:
+    return True          # PROTECT 關聯（如 Announcement.created_by）：擋下
+for model, instances in collector.data.items():
+    if model is not User and len(instances) > 0:
+        return True       # 一般 CASCADE 收集到的關聯物件
+for qs in collector.fast_deletes:
+    if qs.model is not User and qs.exists():
+        return True       # 見下方「fast_deletes 的坑」
+for (field, value), querysets in collector.field_updates.items():
+    for qs in querysets:
+        if qs.exists():
+            return True    # SET_NULL 關聯（如 Rehearsal.summary_by）
+return False
+```
+
+有牽連就擋下真正刪除，只能改用退團；完全沒有牽連（`collector` 除了 `User` 自己以外什麼都沒收集到）
+才允許 `member.delete()`。用 `Collector` 而非手動列出每張表的好處是，以後新增別的 app 參照 `User`
+時，這裡不需要跟著改。
+
+#### fast_deletes 的坑：CASCADE 反向關聯不一定出現在 collector.data
+
+開發時原本以為「CASCADE 關聯會出現在 `collector.data`，SET_NULL 出現在 `collector.field_updates`」，
+測試也因此一度誤判：明明帳號已經有 `RehearsalAttendance` 出席紀錄，`_user_has_related_records()`
+卻回傳 `False`，讓真正刪除通過了。
+
+原因是 Django 對某些「簡單、無需再觸發其他 signal」的 CASCADE 反向關聯，會走內部的**快速刪除路徑**
+（直接發一條 SQL `DELETE ... WHERE`，不需要把每個 instance 都載入成 Python 物件），
+這類物件只會出現在 `collector.fast_deletes`（一批尚未評估的 QuerySet），完全不會進入 `collector.data`。
+`RehearsalAttendance` 剛好符合這個條件，所以第一版程式碼完全漏掉了它，是靠測試
+（`MemberDeleteTest.test_member_with_related_records_cannot_be_deleted`）才抓出來的。
+
+另外 `collector.field_updates` 的 key 其實是 `(field, value)` 這個 tuple，不是 model；
+value 是尚未評估的 QuerySet 列表。第一版程式碼誤把 `len(field_updates[key])`（list 長度，
+只要這個 FK 欄位存在就恆為 1）當成「筆數」，導致任何帳號都被誤判成「有牽連」——
+必須改成呼叫 `qs.exists()` 才是正確判斷 QuerySet 裡有沒有真正的資料列。
+
 ---
 
 ### 4.3 場地管理（band_public）
@@ -1341,6 +1406,9 @@ charter.save()
 - **新建團員帳號一律用臨時密碼、不留空**：曾考慮讓密碼留空（unusable password）讓團員自己設定，
   但那樣任何知道帳號的人都能不驗證密碼直接搶先設定新密碼，等於帳號劫持。
   臨時密碼隨機產生、寄信給本人，寄信失敗才退回畫面顯示（見 §4.2），且只出現一次，不寫入 log。
+- **團員退團用 `is_active=False`（軟刪除），不是真的刪除**：`User` 被出席/請假/借用/財務/公告等多張表
+  CASCADE 參照，真刪除會連帶砍光歷史紀錄。只有完全沒有關聯紀錄的帳號（如剛新增打錯）才允許真刪除，
+  用 Django `Collector` 判斷，注意 `collector.fast_deletes` 這個坑（見 §4.2「fast_deletes 的坑」）。
 
 ---
 

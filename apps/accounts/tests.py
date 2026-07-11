@@ -161,8 +161,17 @@ class MemberDirectoryTest(TestCase):
             username='dir_officer',
             email='dirofficer@test.local',
             password='testpass123',
-            name='通訊錄幹部',
+            name='負責審核的幹部',
             role=User.Role.OFFICER,
+        )
+        # 搜尋「應被排除」的斷言不能用登入者（self.officer）自己的名字，
+        # 因為導覽列一定會顯示登入者本人姓名（見 base.html），跟篩選結果無關，另建一個第三方團員來驗證
+        self.unrelated_member = User.objects.create_user(
+            username='dir_unrelated',
+            email='dir_unrelated@test.local',
+            password='testpass123',
+            name='不相關的團員',
+            role=User.Role.MEMBER,
         )
         self.url = reverse('accounts:member_directory')
 
@@ -218,6 +227,252 @@ class MemberDirectoryTest(TestCase):
         self.client.force_login(self.officer)
         r = self.client.get(self.url)
         self.assertNotContains(r, '管理員本人')
+
+    # ── 搜尋／篩選 ──────────────────────────────────────
+
+    def test_search_by_name(self):
+        """依姓名搜尋"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url, {'q': '通訊錄團員'})
+        self.assertContains(r, '通訊錄團員')
+        self.assertNotContains(r, '不相關的團員')
+
+    def test_default_hides_inactive_members(self):
+        """預設（無篩選）只顯示在團團員，不顯示已退團的人"""
+        inactive = User.objects.create_user(
+            username='dir_inactive', email='dir_inactive@test.local',
+            password='x', name='已退團的人', role=User.Role.MEMBER, is_active=False,
+        )
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertNotContains(r, '已退團的人')
+
+    def test_status_inactive_filter_shows_only_retired(self):
+        """status=inactive 只顯示已退團的人"""
+        User.objects.create_user(
+            username='dir_inactive2', email='dir_inactive2@test.local',
+            password='x', name='已退團的人2', role=User.Role.MEMBER, is_active=False,
+        )
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url, {'status': 'inactive'})
+        self.assertContains(r, '已退團的人2')
+        self.assertNotContains(r, '通訊錄團員')
+
+    def test_member_cannot_use_status_filter(self):
+        """一般團員無法用 status 參數看到已退團的人（權限只給幹部）"""
+        User.objects.create_user(
+            username='dir_inactive3', email='dir_inactive3@test.local',
+            password='x', name='已退團的人3', role=User.Role.MEMBER, is_active=False,
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(self.url, {'status': 'inactive'})
+        self.assertNotContains(r, '已退團的人3')
+
+
+class MemberEditTest(TestCase):
+    """幹部編輯團員資料"""
+
+    def setUp(self):
+        self.family = InstrumentFamily.objects.create(
+            name='豎笛族', category=InstrumentFamily.Category.WOODWIND
+        )
+        self.other_family = InstrumentFamily.objects.create(
+            name='薩克斯風族', category=InstrumentFamily.Category.WOODWIND
+        )
+        self.officer = User.objects.create_user(
+            username='edit_m_officer', password='x', name='編輯幹部',
+            email='edit_m_officer@test.local', role=User.Role.OFFICER,
+        )
+        self.member = User.objects.create_user(
+            username='edit_m_member', password='x', name='被編輯的人',
+            email='edit_m_member@test.local', role=User.Role.MEMBER, instrument=self.family,
+        )
+        self.other_member = User.objects.create_user(
+            username='edit_m_other', password='x', name='一般團員',
+            email='edit_m_other@test.local', role=User.Role.MEMBER,
+        )
+        self.superuser = User.objects.create_superuser(
+            username='edit_m_super', password='x', name='超級管理員', email='edit_m_super@test.local',
+        )
+        self.url = reverse('accounts:member_edit', args=[self.member.pk])
+
+    def test_unauthenticated_redirects_to_login(self):
+        """未登入應導向登入頁"""
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    def test_member_redirects_with_error_message(self):
+        """一般團員無法編輯他人資料"""
+        self.client.force_login(self.other_member)
+        r = self.client.get(self.url, follow=True)
+        self.assertRedirects(r, reverse('accounts:member_directory'))
+        self.assertContains(r, '權限不足')
+
+    def test_officer_get_returns_200_with_prefilled_data(self):
+        """幹部 GET 應正常顯示表單，且既有資料已預先帶入"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'value="被編輯的人"')
+
+    def test_officer_post_updates_member(self):
+        """幹部送出修改後的資料應成功更新"""
+        self.client.force_login(self.officer)
+        r = self.client.post(self.url, {
+            'name': '改名後的人',
+            'email': self.member.email,
+            'role': User.Role.MEMBER,
+            'instrument': self.other_family.pk,
+            'grad_year': 113,
+        })
+        self.assertRedirects(r, reverse('accounts:member_directory'))
+        self.member.refresh_from_db()
+        self.assertEqual(self.member.name, '改名後的人')
+        self.assertEqual(self.member.instrument, self.other_family)
+
+    def test_officer_can_promote_to_officer_role(self):
+        """一般幹部可以把團員改成幹部角色"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'name': self.member.name, 'email': self.member.email,
+            'role': User.Role.OFFICER,
+        })
+        self.member.refresh_from_db()
+        self.assertEqual(self.member.role, User.Role.OFFICER)
+
+    def test_regular_officer_cannot_grant_admin_role(self):
+        """一般幹部（非管理員）不能把角色設為管理員"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'name': self.member.name, 'email': self.member.email,
+            'role': User.Role.ADMIN,
+        })
+        self.member.refresh_from_db()
+        self.assertEqual(self.member.role, User.Role.MEMBER)
+
+    def test_superuser_can_grant_admin_role(self):
+        """超級管理員可以把角色設為管理員"""
+        self.client.force_login(self.superuser)
+        self.client.post(self.url, {
+            'name': self.member.name, 'email': self.member.email,
+            'role': User.Role.ADMIN,
+        })
+        self.member.refresh_from_db()
+        self.assertEqual(self.member.role, User.Role.ADMIN)
+
+    def test_invalid_pk_returns_404(self):
+        """不存在的團員 pk 應回 404"""
+        self.client.force_login(self.officer)
+        r = self.client.get(reverse('accounts:member_edit', args=[99999]))
+        self.assertEqual(r.status_code, 404)
+
+
+class MemberStatusTest(TestCase):
+    """團員退團／恢復在團狀態（軟刪除）"""
+
+    def setUp(self):
+        self.officer = User.objects.create_user(
+            username='status_officer', password='x', name='狀態幹部',
+            email='status_officer@test.local', role=User.Role.OFFICER,
+        )
+        self.member = User.objects.create_user(
+            username='status_member', password='x', name='要退團的人',
+            email='status_member@test.local', role=User.Role.MEMBER,
+        )
+        self.other_member = User.objects.create_user(
+            username='status_other', password='x', name='一般團員',
+            email='status_other@test.local', role=User.Role.MEMBER,
+        )
+
+    def test_officer_can_deactivate_member(self):
+        """幹部可將團員標記為退團，is_active 變 False"""
+        self.client.force_login(self.officer)
+        self.client.post(reverse('accounts:member_deactivate', args=[self.member.pk]))
+        self.member.refresh_from_db()
+        self.assertFalse(self.member.is_active)
+
+    def test_deactivate_does_not_delete_record(self):
+        """退團不會真的刪除資料"""
+        self.client.force_login(self.officer)
+        self.client.post(reverse('accounts:member_deactivate', args=[self.member.pk]))
+        self.assertTrue(User.objects.filter(pk=self.member.pk).exists())
+
+    def test_officer_cannot_deactivate_self(self):
+        """幹部不能把自己標記為退團"""
+        self.client.force_login(self.officer)
+        self.client.post(reverse('accounts:member_deactivate', args=[self.officer.pk]))
+        self.officer.refresh_from_db()
+        self.assertTrue(self.officer.is_active)
+
+    def test_member_cannot_deactivate_others(self):
+        """一般團員無法將他人標記為退團"""
+        self.client.force_login(self.other_member)
+        self.client.post(reverse('accounts:member_deactivate', args=[self.member.pk]))
+        self.member.refresh_from_db()
+        self.assertTrue(self.member.is_active)
+
+    def test_officer_can_reactivate_member(self):
+        """幹部可將已退團的團員恢復在團"""
+        self.member.is_active = False
+        self.member.save()
+        self.client.force_login(self.officer)
+        self.client.post(reverse('accounts:member_reactivate', args=[self.member.pk]))
+        self.member.refresh_from_db()
+        self.assertTrue(self.member.is_active)
+
+
+class MemberDeleteTest(TestCase):
+    """團員帳號刪除：僅無任何關聯紀錄時允許真的刪除"""
+
+    def setUp(self):
+        self.officer = User.objects.create_user(
+            username='del_officer', password='x', name='刪除幹部',
+            email='del_officer@test.local', role=User.Role.OFFICER,
+        )
+        self.member = User.objects.create_user(
+            username='del_member', password='x', name='要刪除的人',
+            email='del_member@test.local', role=User.Role.MEMBER,
+        )
+        self.other_member = User.objects.create_user(
+            username='del_other', password='x', name='一般團員',
+            email='del_other@test.local', role=User.Role.MEMBER,
+        )
+
+    def test_officer_can_delete_member_with_no_history(self):
+        """沒有任何關聯紀錄的帳號（例如剛新增打錯）可以真的被刪除"""
+        self.client.force_login(self.officer)
+        self.client.post(reverse('accounts:member_delete', args=[self.member.pk]))
+        self.assertFalse(User.objects.filter(pk=self.member.pk).exists())
+
+    def test_member_with_related_records_cannot_be_deleted(self):
+        """已有關聯紀錄（如出席紀錄）的帳號不可刪除，應顯示錯誤訊息並保留資料"""
+        from apps.events.models import PerformanceEvent, Rehearsal, RehearsalAttendance
+        from apps.public.models import Venue
+
+        venue = Venue.objects.create(name='測試場地', type='rehearsal')
+        event = PerformanceEvent.objects.create(
+            name='測試演出', type='concert', performance_date=timezone.now(), performance_venue=venue,
+        )
+        rehearsal = Rehearsal.objects.create(event=event, sequence=1, date=timezone.now(), venue=venue)
+        RehearsalAttendance.objects.create(rehearsal=rehearsal, member=self.member, status='present')
+
+        self.client.force_login(self.officer)
+        r = self.client.post(reverse('accounts:member_delete', args=[self.member.pk]), follow=True)
+        self.assertTrue(User.objects.filter(pk=self.member.pk).exists())
+        self.assertContains(r, '無法直接刪除')
+
+    def test_officer_cannot_delete_self(self):
+        """幹部不能刪除自己的帳號"""
+        self.client.force_login(self.officer)
+        self.client.post(reverse('accounts:member_delete', args=[self.officer.pk]))
+        self.assertTrue(User.objects.filter(pk=self.officer.pk).exists())
+
+    def test_member_cannot_delete_others(self):
+        """一般團員無法刪除他人帳號"""
+        self.client.force_login(self.other_member)
+        self.client.post(reverse('accounts:member_delete', args=[self.member.pk]))
+        self.assertTrue(User.objects.filter(pk=self.member.pk).exists())
 
 
 class UserRoleTest(TestCase):
