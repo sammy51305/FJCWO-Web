@@ -22,7 +22,7 @@
 
 ---
 
-## 五份文件各自的職責
+## 各文件的職責
 
 | 文件 | 記錄什麼 | 不記錄什麼 |
 |------|---------|-----------|
@@ -31,3 +31,4 @@
 | [TESTING.md](TESTING.md) | 測試總數、各 class 說明、執行方式、未覆蓋功能 | 測試的具體程式碼 |
 | [SETUP.md](SETUP.md) | 從零建環境的步驟（含 fixtures 載入順序）| 架構設計 |
 | [OVERVIEW.md](OVERVIEW.md) | 功能總覽與操作流程（非技術人員版）| 技術實作細節 |
+| [WORKFLOW.md](WORKFLOW.md) | 開發標準流程、commit 前 checklist、commit message 規範 | 各文件內部的細節內容 |

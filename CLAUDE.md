@@ -11,8 +11,10 @@ Phase 2 功能全部完成（LINE Bot 通知除外），Phase 3（會議紀錄 A
 ## 開發環境
 
 ```bash
-venv\Scripts\python.exe manage.py runserver   # 啟動開發伺服器
-venv\Scripts\python.exe manage.py test        # 執行全部測試（預期全部通過）
+venv\Scripts\python.exe manage.py runserver           # 啟動開發伺服器
+venv\Scripts\python.exe manage.py migrate             # 套用資料庫遷移（新拉程式碼、或看到 relation does not exist 錯誤時執行）
+venv\Scripts\python.exe manage.py makemigrations      # 改了 Model 後產生新的 migration 檔
+venv\Scripts\python.exe manage.py test                # 執行全部測試（預期全部通過）
 venv\Scripts\python.exe manage.py test apps.scores --verbosity=2  # 單一 app
 ```
 

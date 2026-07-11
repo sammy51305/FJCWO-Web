@@ -87,6 +87,35 @@ DB_PORT=5432
 
 ---
 
+## 選用：設定 LINE Bot 通知
+
+`.env` 的 `LINE_CHANNEL_ACCESS_TOKEN` 與 `LINE_GROUP_ID` 兩個變數本機開發**可以留空**：
+[apps/notifications/utils.py](../apps/notifications/utils.py) 在缺少任一值時會直接跳過推播並記 log，不會噴錯（見 [DESIGN.md](DESIGN.md) §4.18 silent fail 設計）。
+
+若需要實際測試推播效果，才需要申請以下兩個值：
+
+1. **取得 `LINE_CHANNEL_ACCESS_TOKEN`**
+   - 前往 [LINE Developers Console](https://developers.line.biz/) 登入
+   - 建立一個 Provider（若尚未有）
+   - 在該 Provider 下建立一個 **Messaging API** channel
+   - 進入該 channel 設定頁的「Messaging API」分頁，簽發 **Channel access token（long-lived）**
+
+2. **取得 `LINE_GROUP_ID`**
+   - 用該 channel 的 QR Code 把 Bot 加為好友，並邀請進目標 LINE 群組
+   - LINE 沒有介面可直接查詢群組 ID，需暫時架一個 webhook 端點（如 [ngrok](https://ngrok.com/) 轉發），在該 channel 設定 webhook URL 並開啟
+   - 在群組裡發一則訊息，觸發 webhook，從收到的 payload 裡讀出 `events[0].source.groupId`
+   - 取得後可關閉 webhook，設定值本身長期有效
+
+3. 把兩個值填入 `.env`：
+   ```
+   LINE_CHANNEL_ACCESS_TOKEN=<你的 token>
+   LINE_GROUP_ID=<你的群組 ID>
+   ```
+
+> **注意**：這兩個值屬於機密資訊，只存在本機 `.env`（不進 git），不要寫進任何 `_notes/` 文件或 commit 訊息。
+
+---
+
 ## 步驟五：執行 Migration
 
 ```bash
