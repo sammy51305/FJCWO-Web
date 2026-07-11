@@ -301,6 +301,115 @@ class ScoreDetailViewTest(TestCase):
         r = self.client.get(self.url)
         self.assertContains(r, '無數位版本')
 
+    def test_breadcrumb_preserves_list_query_params(self):
+        """
+        從列表帶著篩選條件（如 ?type=full）進入詳情頁時，
+        麵包屑「樂譜庫存」連結應帶回同樣的篩選條件，而不是導回無篩選的預設列表。
+        """
+        self.client.force_login(self.member)
+        r = self.client.get(self.url, {'type': 'full'})
+        self.assertContains(r, f'{reverse("scores:score_list")}?type=full')
+
+    def test_breadcrumb_without_query_params_links_to_plain_list(self):
+        """直接進入詳情頁（沒有帶篩選條件）時，麵包屑應連回不帶查詢字串的列表頁"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertContains(r, f'href="{reverse("scores:score_list")}"')
+
+
+class ScoreCreateViewTest(TestCase):
+    """新增樂譜頁面（/scores/create/）"""
+
+    def setUp(self):
+        self.member = User.objects.create_user(
+            username='create_member',
+            email='create_member@test.local',
+            password='testpass123',
+            name='一般團員',
+            role=User.Role.MEMBER,
+        )
+        self.officer = User.objects.create_user(
+            username='create_officer',
+            email='create_officer@test.local',
+            password='testpass123',
+            name='新增樂譜幹部',
+            role=User.Role.OFFICER,
+        )
+        family = InstrumentFamily.objects.create(
+            name='豎笛族', category=InstrumentFamily.Category.WOODWIND
+        )
+        self.instrument = InstrumentType.objects.create(name='單簧管', family=family)
+        self.url = reverse('scores:score_create')
+
+    # ── 存取控制 ────────────────────────────────────────
+
+    def test_unauthenticated_redirects_to_login(self):
+        """未登入應導向登入頁"""
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    def test_member_redirects_with_error_message(self):
+        """一般團員應被導回列表頁並顯示權限不足"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url, follow=True)
+        self.assertRedirects(r, reverse('scores:score_list'))
+        self.assertContains(r, '權限不足')
+
+    def test_officer_get_returns_200(self):
+        """幹部 GET 應正常顯示表單"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 200)
+
+    # ── POST 新增總譜 ────────────────────────────────────
+
+    def test_officer_post_creates_full_score(self):
+        """幹部送出總譜資料應成功建立，並導向該樂譜詳情頁"""
+        self.client.force_login(self.officer)
+        r = self.client.post(self.url, {
+            'title': '天空之城',
+            'score_type': Score.ScoreType.FULL,
+            'copyright_status': Score.CopyrightStatus.PUBLIC_DOMAIN,
+            'physical_quantity': '2',
+        })
+        score = Score.objects.get(title='天空之城')
+        self.assertRedirects(r, reverse('scores:score_detail', args=[score.pk]))
+        self.assertEqual(score.score_type, Score.ScoreType.FULL)
+        self.assertIsNone(score.instrument)
+
+    def test_officer_post_creates_part_score_with_instrument(self):
+        """幹部送出分譜資料且有指定樂器時應成功建立"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'title': '天空之城',
+            'score_type': Score.ScoreType.PART,
+            'instrument': self.instrument.pk,
+            'copyright_status': Score.CopyrightStatus.PUBLIC_DOMAIN,
+        })
+        score = Score.objects.get(title='天空之城', score_type=Score.ScoreType.PART)
+        self.assertEqual(score.instrument, self.instrument)
+
+    def test_empty_title_does_not_create_record(self):
+        """曲名空白時 full_clean() 應擋下，不建立任何記錄"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'title': '',
+            'score_type': Score.ScoreType.FULL,
+            'copyright_status': Score.CopyrightStatus.PUBLIC_DOMAIN,
+        })
+        self.assertFalse(Score.objects.exists())
+
+    def test_part_score_without_instrument_does_not_create_record(self):
+        """分譜未指定樂器時 clean() 驗證應擋下，不建立任何記錄"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'title': '天空之城',
+            'score_type': Score.ScoreType.PART,
+            'copyright_status': Score.CopyrightStatus.PUBLIC_DOMAIN,
+        })
+        self.assertFalse(Score.objects.exists())
+
 
 class ScoreDownloadViewTest(TestCase):
     """樂譜 PDF 下載保護"""

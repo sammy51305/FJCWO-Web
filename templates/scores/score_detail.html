@@ -5,7 +5,7 @@
 {% block content %}
 <nav aria-label="breadcrumb" class="mb-3">
   <ol class="breadcrumb">
-    <li class="breadcrumb-item"><a href="{% url 'scores:score_list' %}">樂譜庫存</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'scores:score_list' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}">樂譜庫存</a></li>
     <li class="breadcrumb-item active">{{ score.title }}</li>
   </ol>
 </nav>

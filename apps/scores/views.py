@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -37,6 +38,82 @@ def score_list(request):
         'selected_type': score_type,
         'selected_instrument': instrument_id,
         'query': query,
+    })
+
+
+@login_required
+def score_create(request):
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('scores:score_list')
+
+    if request.method == 'POST':
+        score_type = request.POST.get('score_type', '')
+        instrument_id = request.POST.get('instrument', '')
+        section_id = request.POST.get('section', '')
+        parent_score_id = request.POST.get('parent_score', '')
+        physical_quantity = request.POST.get('physical_quantity', '0').strip()
+
+        errors = []
+        try:
+            physical_quantity = int(physical_quantity or 0)
+        except ValueError:
+            errors.append('實體數量格式錯誤。')
+            physical_quantity = 0
+
+        instrument = InstrumentType.objects.filter(pk=instrument_id).first() if instrument_id else None
+        section = SectionType.objects.filter(pk=section_id).first() if section_id else None
+        parent_score = Score.objects.filter(pk=parent_score_id).first() if parent_score_id else None
+
+        if score_type == Score.ScoreType.FULL:
+            # 總譜不應指定樂器/聲部：表單依 score_type 隱藏欄位，這裡直接忽略殘留值
+            instrument = None
+            section = None
+
+        score = Score(
+            title=request.POST.get('title', '').strip(),
+            composer=request.POST.get('composer', '').strip(),
+            arranger=request.POST.get('arranger', '').strip(),
+            score_type=score_type,
+            instrument=instrument,
+            section=section,
+            copyright_status=request.POST.get('copyright_status', ''),
+            physical_quantity=physical_quantity,
+            source=request.POST.get('source', ''),
+            publisher=request.POST.get('publisher', '').strip(),
+            difficulty=request.POST.get('difficulty', ''),
+            parent_score=parent_score,
+            version_note=request.POST.get('version_note', '').strip(),
+        )
+        file = request.FILES.get('file')
+        if file:
+            score.file = file
+
+        if not errors:
+            try:
+                score.full_clean()
+            except ValidationError as e:
+                for field_errors in e.message_dict.values():
+                    errors.extend(field_errors)
+
+        if errors:
+            for error in errors:
+                messages.error(request, error)
+        else:
+            score.save()
+            messages.success(request, f'樂譜《{score.title}》已新增。')
+            return redirect('scores:score_detail', pk=score.pk)
+
+    return render(request, 'scores/score_form.html', {
+        'action': 'create',
+        'instruments': InstrumentType.objects.select_related('family')
+                       .order_by('family__category', 'family__name', 'name'),
+        'sections': SectionType.objects.all(),
+        'scores_for_parent': Score.objects.order_by('title'),
+        'score_type_choices': Score.ScoreType.choices,
+        'copyright_choices': Score.CopyrightStatus.choices,
+        'source_choices': Score.Source.choices,
+        'difficulty_choices': Score.Difficulty.choices,
     })
 
 

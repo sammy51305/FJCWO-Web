@@ -6,7 +6,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h2 class="mb-0">樂譜庫存</h2>
   {% if user.is_officer %}
-  <a href="/admin/scores/score/add/" class="btn btn-primary btn-sm">
+  <a href="{% url 'scores:score_create' %}" class="btn btn-primary btn-sm">
     <i class="bi bi-plus-lg"></i> 新增樂譜
   </a>
   {% endif %}
@@ -95,7 +95,7 @@
           {% if score.physical_quantity %}{{ score.physical_quantity }} 本{% else %}<span class="text-muted">—</span>{% endif %}
         </td>
         <td>
-          <a href="{% url 'scores:score_detail' score.pk %}" class="btn btn-sm btn-outline-secondary">詳細</a>
+          <a href="{% url 'scores:score_detail' score.pk %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}" class="btn btn-sm btn-outline-secondary">詳細</a>
         </td>
       </tr>
       {% endfor %}

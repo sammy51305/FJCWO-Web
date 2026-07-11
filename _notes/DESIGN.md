@@ -595,6 +595,20 @@ view 在 GET 時預先建立巢狀資料結構（`categories_data`）供 templat
 預設資料儲存在 `fixtures/instruments.json`（12 族群、24 種樂器）
 與 `fixtures/sections.json`（第一部〜第四部、Solo）。
 
+#### 新增樂譜（score_create）
+
+路由：`/scores/create/`，幹部限定。原本「新增樂譜」按鈕直接連到 Django Admin 的新增頁，
+但一般 `officer` 角色沒有 `is_staff`（見 §2 `is_staff` 自動設定），無法進入 `/admin/`，等於幹部點了按鈕卻進不去。
+補上前端表單後改由 `score_create` view 處理，維持與其他 create view 一致的手動表單驗證風格。
+
+表單依 `score_type` 用純 JS 顯示/隱藏「樂器」「聲部」欄位（總譜不需要，分譜必填樂器）。
+驗證上不重複造輪子，而是把 POST 資料組成 `Score` 實例後呼叫 `full_clean()`，
+直接沿用 Model 既有的 `clean()` 規則（見 §「總譜 vs 分譜」的驗證表），
+和 Admin 新增頁走的是同一套驗證邏輯。
+
+分譜若要掛在特定總譜底下，仍建議透過 `score_parts_manage` 的四層 UI 上傳，
+`score_create` 不提供 `full_score` 欄位，避免和既有上傳流程產生兩套重複入口。
+
 #### Setlist 只連結總譜
 
 `Setlist.score` 外鍵指向 `Score`，view 層限制只能選 `score_type='full'` 的曲子：
@@ -825,6 +839,18 @@ paginator = Paginator(scores, 30)
 ```
 
 三個條件可以自由組合，例如「只看長笛分譜」或「搜尋包含 '星' 字的曲子」。
+
+#### 麵包屑保留列表篩選條件
+
+`score_list` 的「詳細」連結、`score_detail` 的麵包屑「樂譜庫存」連結，
+都用 `{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}` 把目前的 query string 原樣轉發：
+
+```
+score_list（?type=full&q=天空）→ 詳細 → score_detail?type=full&q=天空 → 麵包屑 → score_list?type=full&q=天空
+```
+
+純 template 端處理，不需要 view 額外傳參數（`request` context processor 已在 `settings.py` 啟用）。
+沒有帶查詢字串進入詳情頁時，麵包屑就連回不帶參數的預設列表，行為不變。
 
 #### score_detail：版本鏈顯示
 
