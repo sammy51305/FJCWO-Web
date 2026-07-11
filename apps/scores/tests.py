@@ -410,6 +410,37 @@ class ScoreCreateViewTest(TestCase):
         })
         self.assertFalse(Score.objects.exists())
 
+    # ── full_score 綁定 ──────────────────────────────────
+    # 新增分譜時可直接指定所屬總譜，不再只能透過 score_parts_manage 綁定
+
+    def test_officer_post_creates_part_score_bound_to_full_score(self):
+        """新增分譜時指定 full_score，應正確綁定到該總譜"""
+        full_score = Score.objects.create(title='天空之城', score_type=Score.ScoreType.FULL)
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'title': '天空之城（單簧管）',
+            'score_type': Score.ScoreType.PART,
+            'instrument': self.instrument.pk,
+            'copyright_status': Score.CopyrightStatus.PUBLIC_DOMAIN,
+            'full_score': full_score.pk,
+        })
+        part = Score.objects.get(title='天空之城（單簧管）')
+        self.assertEqual(part.full_score, full_score)
+        self.assertIn(part, full_score.parts.all())
+
+    def test_full_score_ignores_full_score_field(self):
+        """建立總譜時即使 POST 帶了 full_score，也應被忽略（總譜不該有所屬總譜）"""
+        other_full = Score.objects.create(title='卡門', score_type=Score.ScoreType.FULL)
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'title': '天空之城',
+            'score_type': Score.ScoreType.FULL,
+            'copyright_status': Score.CopyrightStatus.PUBLIC_DOMAIN,
+            'full_score': other_full.pk,
+        })
+        score = Score.objects.get(title='天空之城')
+        self.assertIsNone(score.full_score)
+
 
 @override_settings(MEDIA_ROOT=_TEMP_MEDIA)
 class ScoreEditViewTest(TestCase):
@@ -534,6 +565,104 @@ class ScoreEditViewTest(TestCase):
         })
         self.score.refresh_from_db()
         self.assertNotEqual(self.score.file.name, old_name)
+
+    def test_edit_part_score_binds_to_full_score(self):
+        """編輯既有分譜時指定 full_score，應正確更新綁定關係"""
+        part = Score.objects.create(
+            title='卡門組曲（長笛）', score_type=Score.ScoreType.PART, instrument=self.instrument,
+        )
+        edit_url = reverse('scores:score_edit', args=[part.pk])
+        self.client.force_login(self.officer)
+        self.client.post(edit_url, {
+            'title': '卡門組曲（長笛）',
+            'score_type': Score.ScoreType.PART,
+            'instrument': self.instrument.pk,
+            'copyright_status': Score.CopyrightStatus.PUBLIC_DOMAIN,
+            'full_score': self.score.pk,
+        })
+        part.refresh_from_db()
+        self.assertEqual(part.full_score, self.score)
+
+
+class ScoreDeleteViewTest(TestCase):
+    """刪除樂譜（限管理員，跟演出活動／場地／團員通訊錄的刪除權限一致）"""
+
+    def setUp(self):
+        self.officer = User.objects.create_user(
+            username='sdel_officer', password='x', name='刪除樂譜幹部',
+            email='sdel_officer@test.local', role=User.Role.OFFICER,
+        )
+        self.admin = User.objects.create_user(
+            username='sdel_admin', password='x', name='刪除樂譜管理員',
+            email='sdel_admin@test.local', role=User.Role.ADMIN,
+        )
+        family = InstrumentFamily.objects.create(
+            name='豎笛族', category=InstrumentFamily.Category.WOODWIND
+        )
+        self.instrument = InstrumentType.objects.create(name='單簧管', family=family)
+        self.score = Score.objects.create(
+            title='要刪除的樂譜', score_type=Score.ScoreType.FULL,
+        )
+        self.url = reverse('scores:score_delete', args=[self.score.pk])
+
+    def test_officer_cannot_delete(self):
+        """一般幹部無法刪除樂譜"""
+        self.client.force_login(self.officer)
+        r = self.client.post(self.url, follow=True)
+        self.assertTrue(Score.objects.filter(pk=self.score.pk).exists())
+        self.assertContains(r, '權限不足')
+
+    def test_admin_can_delete_score(self):
+        """管理員可刪除樂譜，並導向列表頁"""
+        self.client.force_login(self.admin)
+        r = self.client.post(self.url)
+        self.assertFalse(Score.objects.filter(pk=self.score.pk).exists())
+        self.assertRedirects(r, reverse('scores:score_list'))
+
+    def test_deleting_full_score_cascades_parts(self):
+        """刪除總譜應一併刪除底下所有分譜（既有 CASCADE 設計）"""
+        part = Score.objects.create(
+            title='要刪除的樂譜（單簧管）', score_type=Score.ScoreType.PART,
+            instrument=self.instrument, full_score=self.score,
+        )
+        self.client.force_login(self.admin)
+        self.client.post(self.url)
+        self.assertFalse(Score.objects.filter(pk=part.pk).exists())
+
+    def test_admin_cannot_delete_score_referenced_by_setlist(self):
+        """
+        樂譜被排入演出曲目單（Setlist，PROTECT）時，即使是管理員也無法刪除，
+        應顯示友善錯誤訊息並保留資料，而不是讓伺服器噴 500。
+        """
+        from django.utils import timezone
+        from apps.events.models import PerformanceEvent, Setlist
+        from apps.public.models import Venue
+
+        venue = Venue.objects.create(name='刪除樂譜測試場地', type='performance')
+        event = PerformanceEvent.objects.create(
+            name='刪除樂譜測試演出', type='concert', performance_date=timezone.now(),
+            performance_venue=venue,
+        )
+        Setlist.objects.create(event=event, score=self.score, order=1)
+
+        self.client.force_login(self.admin)
+        r = self.client.post(self.url, follow=True)
+        self.assertTrue(Score.objects.filter(pk=self.score.pk).exists())
+        self.assertContains(r, '已被演出曲目單或對外交換紀錄引用')
+
+    def test_admin_cannot_delete_score_referenced_by_exchange(self):
+        """樂譜被對外交換紀錄（ScoreExchangeItem，PROTECT）引用時，管理員也無法刪除"""
+        from .models import ScoreExchange, ScoreExchangeItem
+
+        exchange = ScoreExchange.objects.create(other_band='測試樂團', exchange_date='2026-01-01')
+        ScoreExchangeItem.objects.create(
+            exchange=exchange, direction=ScoreExchangeItem.Direction.GIVE, score=self.score,
+        )
+
+        self.client.force_login(self.admin)
+        r = self.client.post(self.url, follow=True)
+        self.assertTrue(Score.objects.filter(pk=self.score.pk).exists())
+        self.assertContains(r, '已被演出曲目單或對外交換紀錄引用')
 
 
 class ScoreDownloadViewTest(TestCase):

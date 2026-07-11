@@ -36,6 +36,15 @@
     <a href="{% url 'scores:score_edit' score.pk %}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-pencil"></i> 編輯
     </a>
+    {% if user.is_superuser or user.is_admin_role %}
+    <form method="post" action="{% url 'scores:score_delete' score.pk %}" class="d-inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline-danger btn-sm"
+              onclick="return confirm('確定要刪除樂譜《{{ score.title }}》嗎？{% if score.score_type == 'full' %}此操作將一併刪除所有分譜。{% endif %}無法復原。')">
+        <i class="bi bi-trash"></i> 刪除
+      </button>
+    </form>
+    {% endif %}
   </div>
   {% endif %}
 </div>

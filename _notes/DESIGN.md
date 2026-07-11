@@ -915,9 +915,20 @@ if file:
 編輯時如果沒有重新選檔案，`request.FILES` 就不會有 `file` 這個 key，這裡刻意只在有上傳新檔案時才覆寫，
 避免使用者只是想改個曲名，卻不小心把已上傳的 PDF 清空。
 
-分譜若要掛在特定總譜底下，仍建議透過 `score_parts_manage` 的四層 UI 上傳，
-`score_create` / `score_edit` 都不提供 `full_score` 欄位，避免和既有上傳流程產生兩套重複入口
-（編輯既有分譜時，原本的 `full_score` 關聯不會被這兩個 view 動到）。
+#### 分譜跟總譜的綁定：score_create / score_edit 也能指定 full_score
+
+早期版本 `score_create` / `score_edit` 完全不提供 `full_score` 欄位，理由是「避免和
+`score_parts_manage` 的批次上傳流程產生兩套重複入口」。但這樣一來，如果使用者用「新增樂譜」
+分別建一筆總譜跟一筆分譜（而不是透過總譜詳情頁的「管理分譜」上傳），兩筆記錄之間完全沒有關聯，
+分譜不會出現在總譜的「分譜清單」裡，變成一筆孤立紀錄——這是實際使用時發現的問題，不是刻意設計。
+
+現在 `score_type` 選「分譜」時，表單多一個「所屬總譜」下拉選單（選填），`_apply_score_form()`
+會依 POST 的 `full_score` 設定關聯；選「總譜」時無論 POST 帶了什麼值都會被忽略
+（`full_score` 設回 `None`，跟 `instrument`/`section` 同樣的處理方式）。
+
+`score_parts_manage` 的批次上傳流程仍然保留，並沒有被取代——兩者現在是兩條都能正確綁定關聯的路徑，
+差別只在於 `score_parts_manage` 一次可以处理多個樂器/聲部的分譜上傳，`score_create`/`score_edit`
+一次只處理一筆。
 
 #### Setlist 只連結總譜
 
@@ -955,6 +966,20 @@ ScoreExchange（一次交換事件，記錄對方樂團與聯絡人）
 ```
 
 一次交換可能包含多首曲目，用主表 + 明細表拆開，比把所有樂譜塞在一個欄位更容易查詢與維護。
+
+#### score_delete：刪除限管理員
+
+跟 `member_delete`／`event_delete`／`venue_delete` 是同一套「管理員限定」的權限模式
+（`admin` 角色或 `superuser`）。樂譜被引用的方式有兩種，處理方式不同：
+
+- `Setlist.score`、`ScoreExchangeItem.score` 都是 `PROTECT`——這是資料庫層級的硬限制，
+  管理員也無法繞過，`score_delete` 用 `try/except ProtectedError` 包成友善訊息，不會噴 500。
+- `Score.full_score`（分譜指向所屬總譜）是 `CASCADE`——刪除總譜會連帶刪除底下所有分譜，
+  這是既有預期行為（見前面「總譜與分譜的關聯」一節），不需要額外保護。
+
+不像 `member_delete` 需要 `Collector` 判斷「有沒有關聯紀錄才放行真刪除」，樂譜這邊直接讓
+`PROTECT` 擋、`CASCADE` 放行即可，因為分譜隨總譜刪除本來就是設計上允許的，不像團員的出席/請假
+歷史需要額外一層保護。
 
 ---
 

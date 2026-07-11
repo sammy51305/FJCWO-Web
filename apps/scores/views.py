@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
+from django.db.models.deletion import ProtectedError
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -47,6 +48,7 @@ def _apply_score_form(request, score):
     instrument_id = request.POST.get('instrument', '')
     section_id = request.POST.get('section', '')
     parent_score_id = request.POST.get('parent_score', '')
+    full_score_id = request.POST.get('full_score', '')
     physical_quantity = request.POST.get('physical_quantity', '0').strip()
 
     errors = []
@@ -59,11 +61,13 @@ def _apply_score_form(request, score):
     instrument = InstrumentType.objects.filter(pk=instrument_id).first() if instrument_id else None
     section = SectionType.objects.filter(pk=section_id).first() if section_id else None
     parent_score = Score.objects.filter(pk=parent_score_id).first() if parent_score_id else None
+    full_score = Score.objects.filter(pk=full_score_id, score_type=Score.ScoreType.FULL).first() if full_score_id else None
 
     if score_type == Score.ScoreType.FULL:
-        # 總譜不應指定樂器/聲部：表單依 score_type 隱藏欄位，這裡直接忽略殘留值
+        # 總譜不應指定樂器/聲部/所屬總譜：表單依 score_type 隱藏欄位，這裡直接忽略殘留值
         instrument = None
         section = None
+        full_score = None
 
     score.title = request.POST.get('title', '').strip()
     score.composer = request.POST.get('composer', '').strip()
@@ -76,6 +80,7 @@ def _apply_score_form(request, score):
     score.source = request.POST.get('source', '')
     score.publisher = request.POST.get('publisher', '').strip()
     score.difficulty = request.POST.get('difficulty', '')
+    score.full_score = full_score
     score.parent_score = parent_score
     score.version_note = request.POST.get('version_note', '').strip()
 
@@ -94,11 +99,15 @@ def _apply_score_form(request, score):
 
 
 def _score_form_context(score=None):
+    full_scores = Score.objects.filter(score_type=Score.ScoreType.FULL)
+    if score:
+        full_scores = full_scores.exclude(pk=score.pk)
     return {
         'instruments': InstrumentType.objects.select_related('family')
                        .order_by('family__category', 'family__name', 'name'),
         'sections': SectionType.objects.all(),
         'scores_for_parent': Score.objects.exclude(pk=score.pk).order_by('title') if score else Score.objects.order_by('title'),
+        'full_scores': full_scores.order_by('title'),
         'score_type_choices': Score.ScoreType.choices,
         'copyright_choices': Score.CopyrightStatus.choices,
         'source_choices': Score.Source.choices,
@@ -120,6 +129,7 @@ def _initial_form_data(score):
         'source': score.source,
         'publisher': score.publisher,
         'difficulty': score.difficulty,
+        'full_score': str(score.full_score_id or ''),
         'parent_score': str(score.parent_score_id or ''),
         'version_note': score.version_note,
     }
@@ -187,6 +197,33 @@ def score_edit(request, pk):
         'form_data': _initial_form_data(score),
         **_score_form_context(score),
     })
+
+
+@login_required
+def score_delete(request, pk):
+    """
+    刪除樂譜限管理員（admin 角色或 superuser），跟演出活動／場地／團員通訊錄的刪除權限一致。
+    若已被排入演出曲目單（Setlist）或對外交換紀錄（ScoreExchangeItem）引用（PROTECT）會被擋下；
+    刪除總譜會連帶刪除底下所有分譜（Score.full_score 為 CASCADE，屬既有預期行為）。
+    """
+    score = get_object_or_404(Score, pk=pk)
+    if not (request.user.is_superuser or request.user.is_admin_role):
+        messages.error(request, '權限不足，僅管理員可刪除樂譜。')
+        return redirect('scores:score_detail', pk=pk)
+
+    if request.method == 'POST':
+        title = score.title
+        try:
+            score.delete()
+            messages.success(request, f'已刪除樂譜《{title}》。')
+        except ProtectedError:
+            messages.error(
+                request,
+                f'《{title}》已被演出曲目單或對外交換紀錄引用，請先處理相關資料後再刪除。'
+            )
+            return redirect('scores:score_detail', pk=pk)
+        return redirect('scores:score_list')
+    return redirect('scores:score_detail', pk=pk)
 
 
 @login_required

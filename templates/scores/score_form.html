@@ -80,6 +80,18 @@
             {% endfor %}
           </select>
         </div>
+        <div class="col-sm-12 mb-3">
+          <label class="form-label fw-semibold">所屬總譜 <span class="text-muted small">（選填，讓這份分譜出現在該總譜的分譜清單裡）</span></label>
+          <select name="full_score" class="form-select">
+            <option value="">不指定</option>
+            {% for fs in full_scores %}
+            <option value="{{ fs.pk }}" {% if form_data.full_score == fs.pk|stringformat:"s" %}selected{% endif %}>
+              {{ fs.title }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="form-text">若總譜已存在，也可以改用該總譜詳情頁的「管理分譜」批次上傳。</div>
+        </div>
       </div>
 
       <div class="mb-3">

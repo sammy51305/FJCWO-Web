@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-07-12（共 316 個測試）
+> 最後更新：2026-07-12（共 324 個測試）
 
 ---
 
@@ -63,7 +63,7 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 
 ## 目前測試總覽
 
-共 **316 個測試**，分布在 8 個 app。
+共 **324 個測試**，分布在 8 個 app。
 
 ### `apps/accounts/tests.py`（90 個）
 
@@ -96,15 +96,16 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 | `EventDeleteTest` | 團員/幹部無法刪除、GET 不刪除、管理員 POST 刪除並導回列表、刪除 cascade 排練、刪除按鈕出現在列表頁（管理員可見/幹部不可見）、詳情頁不再出現刪除按鈕 |
 | `RehearsalManageTest` | 存取控制（未登入/團員/幹部）、新增排練成功、重複 sequence 被擋、空日期被擋、編輯排練更新 sequence |
 
-### `apps/scores/tests.py`（52 個）
+### `apps/scores/tests.py`（60 個）
 
 | Class | 測試內容 |
 |-------|---------|
 | `ScoreModelValidationTest` | `clean()` 驗證：總譜不可有樂器/聲部/full_score、分譜的 full_score 必須指向總譜；`__str__` 格式（含聲部/不含聲部/總譜） |
 | `ScoreListViewTest` | 存取控制、預設顯示全部、`type` 篩選、`instrument` 篩選、關鍵字搜尋、無結果空狀態 |
 | `ScoreDetailViewTest` | 存取控制、曲名/作曲顯示、404、無 PDF 顯示提示、麵包屑帶/不帶篩選條件連回列表 |
-| `ScoreCreateViewTest` | 存取控制（未登入/一般團員/幹部）、POST 新增總譜成功並導向詳情頁、POST 新增分譜（含樂器）成功、空曲名不建立記錄、分譜缺樂器不建立記錄 |
-| `ScoreEditViewTest` | 存取控制（未登入/一般團員/幹部）、GET 既有資料預先帶入欄位、404、POST 更新成功、空曲名不更新、未上傳新檔案保留原檔、上傳新檔案取代原檔 |
+| `ScoreCreateViewTest` | 存取控制（未登入/一般團員/幹部）、POST 新增總譜成功並導向詳情頁、POST 新增分譜（含樂器）成功、空曲名不建立記錄、分譜缺樂器不建立記錄、新增分譜時指定 full_score 正確綁定、總譜忽略殘留的 full_score 值 |
+| `ScoreEditViewTest` | 存取控制（未登入/一般團員/幹部）、GET 既有資料預先帶入欄位、404、POST 更新成功、空曲名不更新、未上傳新檔案保留原檔、上傳新檔案取代原檔、編輯分譜可綁定/更新 full_score |
+| `ScoreDeleteViewTest` | 一般幹部無法刪除、管理員可刪除並導向列表、刪除總譜連帶刪除分譜（CASCADE）、被 Setlist 或 ScoreExchangeItem 引用（PROTECT）時即使管理員也無法刪除 |
 | `ScoreDownloadViewTest` | 存取控制、無 PDF 回 404、無效 pk 回 404 |
 | `ScorePartsManageTest` | 存取控制（未登入/一般團員/幹部）、分譜 pk 回 404、無效 pk 回 404、POST 建立分譜記錄、重複上傳不重複建立（get_or_create）、POST 無檔案顯示警告 |
 
