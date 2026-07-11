@@ -1109,6 +1109,27 @@ class EventDeleteTest(TestCase):
         self.client.post(self.delete_url)
         self.assertEqual(Rehearsal.objects.filter(event=self.event).count(), 0)
 
+    # ── T03 刪除按鈕位置：列表頁而非詳情頁 ──────────────────
+    # 刪除功能從活動詳情頁搬到 /events 列表頁，三個分類（即將到來/過去活動/已取消）都可直接操作
+
+    def test_delete_form_appears_in_event_list_for_admin(self):
+        """管理員在列表頁應看到指向 event_delete 的刪除表單"""
+        self.client.force_login(self.admin)
+        r = self.client.get(reverse('events:event_list'))
+        self.assertContains(r, self.delete_url)
+
+    def test_delete_form_not_appears_in_event_list_for_officer(self):
+        """一般幹部在列表頁不應看到刪除表單"""
+        self.client.force_login(self.officer)
+        r = self.client.get(reverse('events:event_list'))
+        self.assertNotContains(r, self.delete_url)
+
+    def test_delete_button_removed_from_event_detail(self):
+        """刪除功能已搬到列表頁，詳情頁不應再出現刪除表單"""
+        self.client.force_login(self.admin)
+        r = self.client.get(reverse('events:event_detail', args=[self.event.pk]))
+        self.assertNotContains(r, self.delete_url)
+
 
 class RehearsalManageTest(TestCase):
     """排練前端建立與編輯"""

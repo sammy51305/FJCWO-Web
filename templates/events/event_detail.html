@@ -20,12 +20,6 @@
     <i class="bi bi-pencil"></i> 編輯活動
   </a>
   {% endif %}
-  {% if user.is_superuser or user.is_admin_role %}
-  <button type="button" class="btn btn-outline-danger btn-sm d-print-none"
-          data-bs-toggle="modal" data-bs-target="#deleteModal">
-    <i class="bi bi-trash"></i> 刪除
-  </button>
-  {% endif %}
 </div>
 <p class="text-muted mb-4">{{ event.get_type_display }}</p>
 
@@ -143,27 +137,4 @@
 <p class="text-muted">尚未安排排練。</p>
 {% endif %}
 
-{% if user.is_superuser or user.is_admin_role %}
-<div class="modal fade" id="deleteModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">確認刪除</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        確定要刪除演出活動《<strong>{{ event.name }}</strong>》嗎？<br>
-        <span class="text-danger small">此操作將一併刪除所有相關排練、出席紀錄與曲目單，無法復原。</span>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-        <form method="post" action="{% url 'events:event_delete' event.pk %}">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-danger">確認刪除</button>
-        </form>
-      </div>
-    </div>
-  </div>
-</div>
-{% endif %}
 {% endblock %}
