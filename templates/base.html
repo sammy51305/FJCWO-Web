@@ -29,9 +29,9 @@
           <li class="nav-item"><a class="nav-link" href="{% url 'events:my_leave_requests' %}">我的請假</a></li>
           {% endif %}
           {% if user.is_officer %}
-          <li class="nav-item"><a class="nav-link" href="{% url 'accounts:member_directory' %}">通訊錄</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'accounts:member_directory' %}">團員通訊錄</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'events:leave_review_list' %}">請假審核</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'accounts:registration_review' %}">報到審核</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'accounts:registration_review' %}">校友報到審核</a></li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">報表</a>
             <ul class="dropdown-menu">

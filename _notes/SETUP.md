@@ -138,6 +138,24 @@ DEFAULT_FROM_EMAIL=noreply@fjcwo.local
 
 ---
 
+## 選用：機密值怎麼在多台電腦間攜帶
+
+`.env` 不進 git，所以換一台電腦開發，`LINE_CHANNEL_ACCESS_TOKEN`、`LINE_GROUP_ID`、
+`EMAIL_HOST_USER`、`EMAIL_HOST_PASSWORD` 這些值都要重新設定。多數情況下**不需要真的去煩惱這件事**：
+
+- 平常開發不需要真憑證。兩者的邏輯正確性已經有自動化測試覆蓋（`apps/notifications/tests.py`
+  用假 token 測試 LINE 推播；Django 測試框架會自動把 email 攔截到記憶體，不會真的寄送），
+  `python manage.py test` 在任何一台電腦上都能驗證邏輯，不需要真憑證。
+- 真的需要真憑證的情境，只有你想親眼驗證「LINE 真的推播到手機」「Email 真的收到信」這種
+  端到端測試，而這種驗證做過一次確認沒問題後，不需要每次換電腦都重做。
+
+如果你就是想要能隨時在任何電腦上做端到端驗證，或考慮到未來系統交接給下一屆幹部，
+建議把這幾個值存進密碼管理工具（例如 [Bitwarden](https://bitwarden.com/)，免費版即可），
+存一份「FJCWO .env 機密值」的安全筆記，換電腦時複製貼上到新的 `.env` 即可。
+比起機密值只存在單一個人的電腦裡，密碼管理工具更容易交接、也更不會因為換人換電腦就遺失。
+
+---
+
 ## 步驟五：執行 Migration
 
 ```bash

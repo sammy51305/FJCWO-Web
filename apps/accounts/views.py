@@ -6,7 +6,9 @@ from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
-from django.shortcuts import redirect, render
+from django.core.paginator import Paginator
+from django.db.models import Q
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.crypto import get_random_string
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -258,7 +260,7 @@ def registration_status(request):
 
 @login_required
 def registration_review(request):
-    """幹部審核校友報到申請"""
+    """幹部審核／管理校友報到申請：核准、拒絕、重新開放審核"""
     if not request.user.is_officer:
         messages.error(request, '權限不足。')
         return redirect('accounts:member_directory')
@@ -267,39 +269,168 @@ def registration_review(request):
         reg_id = request.POST.get('reg_id')
         action = request.POST.get('action')
         reg = Registration.objects.filter(pk=reg_id).first()
-        if reg and reg.status == Registration.Status.PENDING:
-            if action == 'approve':
-                if User.objects.filter(email=reg.email).exists():
-                    messages.error(request, f'Email {reg.email} 已有帳號使用，請確認是否重複申請。')
-                else:
-                    user, username, password, email_sent = _create_member_with_temp_password(
-                        name=reg.name, email=reg.email, instrument=reg.instrument.family,
-                        grad_year=reg.grad_year, phone=reg.phone,
-                    )
-                    reg.status = Registration.Status.APPROVED
-                    reg.reviewed_by = request.user
-                    reg.reviewed_at = timezone.now()
-                    reg.save()
-                    if email_sent:
-                        messages.success(request, f'已核准 {reg.name} 的申請，帳號密碼已寄送至 {reg.email}。')
-                    else:
-                        messages.warning(
-                            request,
-                            f'已核准 {reg.name} 的申請，但寄信失敗，請自行告知本人：'
-                            f'帳號：{username}，臨時密碼：{password}。'
-                        )
-            elif action == 'reject':
-                reg.status = Registration.Status.REJECTED
+
+        if reg and action == 'approve' and reg.status == Registration.Status.PENDING:
+            if User.objects.filter(email=reg.email).exists():
+                messages.error(request, f'Email {reg.email} 已有帳號使用，請確認是否重複申請。')
+            else:
+                user, username, password, email_sent = _create_member_with_temp_password(
+                    name=reg.name, email=reg.email, instrument=reg.instrument.family,
+                    grad_year=reg.grad_year, phone=reg.phone,
+                )
+                reg.status = Registration.Status.APPROVED
                 reg.reviewed_by = request.user
                 reg.reviewed_at = timezone.now()
                 reg.save()
-                messages.success(request, f'已拒絕 {reg.name} 的申請。')
+                if email_sent:
+                    messages.success(request, f'已核准 {reg.name} 的申請，帳號密碼已寄送至 {reg.email}。')
+                else:
+                    messages.warning(
+                        request,
+                        f'已核准 {reg.name} 的申請，但寄信失敗，請自行告知本人：'
+                        f'帳號：{username}，臨時密碼：{password}。'
+                    )
+        elif reg and action == 'reject' and reg.status == Registration.Status.PENDING:
+            reg.status = Registration.Status.REJECTED
+            reg.reviewed_by = request.user
+            reg.reviewed_at = timezone.now()
+            reg.save()
+            messages.success(request, f'已拒絕 {reg.name} 的申請。')
+        elif reg and action == 'reopen' and reg.status == Registration.Status.REJECTED:
+            reg.status = Registration.Status.PENDING
+            reg.reviewed_by = None
+            reg.reviewed_at = None
+            reg.save()
+            messages.success(request, f'{reg.name} 的申請已重新開放審核。')
+
         return redirect('accounts:registration_review')
 
-    pending = Registration.objects.filter(status=Registration.Status.PENDING).select_related('instrument')
-    reviewed = Registration.objects.exclude(status=Registration.Status.PENDING).select_related('instrument', 'reviewed_by').order_by('-reviewed_at')[:50]
+    registrations = Registration.objects.select_related('instrument', 'reviewed_by').order_by('-created_at')
+
+    query = request.GET.get('q', '').strip()
+    status_filter = request.GET.get('status', '')
+
+    if query:
+        registrations = registrations.filter(Q(name__icontains=query) | Q(email__icontains=query))
+    if status_filter in Registration.Status.values:
+        registrations = registrations.filter(status=status_filter)
+
+    paginator = Paginator(registrations, 30)
+    page = paginator.get_page(request.GET.get('page'))
 
     return render(request, 'accounts/registration_review.html', {
-        'pending': pending,
-        'reviewed': reviewed,
+        'page_obj': page,
+        'registrations': page.object_list,
+        'query': query,
+        'status_filter': status_filter,
+        'status_choices': Registration.Status.choices,
+        'pending_count': Registration.objects.filter(status=Registration.Status.PENDING).count(),
     })
+
+
+@login_required
+def registration_create(request):
+    """幹部手動新增一筆校友報到申請紀錄（例如電話/現場口頭申請，補登進系統）"""
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('accounts:registration_review')
+
+    instruments = InstrumentType.objects.select_related('family').all()
+
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        instrument_id = request.POST.get('instrument', '')
+        grad_year = request.POST.get('grad_year', '').strip()
+        phone = request.POST.get('phone', '').strip()
+        email = request.POST.get('email', '').strip()
+
+        errors = []
+        if not name:
+            errors.append('請填寫姓名。')
+        if not instrument_id:
+            errors.append('請選擇樂器。')
+        if not grad_year or not grad_year.isdigit():
+            errors.append('請填寫有效的畢業年份。')
+        if not email:
+            errors.append('請填寫 Email。')
+
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+        else:
+            Registration.objects.create(
+                name=name, instrument_id=instrument_id,
+                grad_year=int(grad_year), phone=phone, email=email,
+            )
+            messages.success(request, f'已新增申請紀錄 {name}，狀態為待審核。')
+            return redirect('accounts:registration_review')
+
+    return render(request, 'accounts/registration_form.html', {
+        'action': 'create',
+        'instruments': instruments,
+    })
+
+
+@login_required
+def registration_edit(request, pk):
+    """幹部編輯校友報到申請的基本資料（不含審核狀態，狀態變更走核准/拒絕按鈕）"""
+    reg = get_object_or_404(Registration, pk=pk)
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('accounts:registration_review')
+
+    instruments = InstrumentType.objects.select_related('family').all()
+
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        instrument_id = request.POST.get('instrument', '')
+        grad_year = request.POST.get('grad_year', '').strip()
+        phone = request.POST.get('phone', '').strip()
+        email = request.POST.get('email', '').strip()
+
+        errors = []
+        if not name:
+            errors.append('請填寫姓名。')
+        if not instrument_id:
+            errors.append('請選擇樂器。')
+        if not grad_year or not grad_year.isdigit():
+            errors.append('請填寫有效的畢業年份。')
+        if not email:
+            errors.append('請填寫 Email。')
+
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+        else:
+            reg.name = name
+            reg.instrument_id = instrument_id
+            reg.grad_year = int(grad_year)
+            reg.phone = phone
+            reg.email = email
+            reg.save()
+            messages.success(request, f'已更新 {reg.name} 的申請資料。')
+            return redirect('accounts:registration_review')
+
+    return render(request, 'accounts/registration_form.html', {
+        'action': 'edit',
+        'registration': reg,
+        'instruments': instruments,
+    })
+
+
+@login_required
+def registration_delete(request, pk):
+    """幹部刪除校友報到申請紀錄（僅限待審核／已拒絕，已核准的保留稽核軌跡）"""
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('accounts:registration_review')
+
+    reg = get_object_or_404(Registration, pk=pk)
+    if request.method == 'POST':
+        if reg.status == Registration.Status.APPROVED:
+            messages.error(request, '已核准的申請紀錄不可刪除，需保留稽核軌跡。')
+        else:
+            name = reg.name
+            reg.delete()
+            messages.success(request, f'已刪除 {name} 的申請紀錄。')
+    return redirect('accounts:registration_review')

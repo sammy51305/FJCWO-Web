@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}{% if action == 'edit' %}編輯申請紀錄{% else %}新增申請紀錄{% endif %} — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'accounts:registration_review' %}">校友報到審核</a></li>
+    <li class="breadcrumb-item active">{% if action == 'edit' %}編輯申請紀錄{% else %}新增申請紀錄{% endif %}</li>
+  </ol>
+</nav>
+
+{% if messages %}
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+{% endif %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <h2 class="mb-4">{% if action == 'edit' %}編輯申請紀錄{% else %}新增申請紀錄{% endif %}</h2>
+
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">姓名 <span class="text-danger">*</span></label>
+        <input type="text" name="name" class="form-control"
+               value="{% if action == 'edit' %}{{ registration.name }}{% else %}{{ request.POST.name }}{% endif %}" required>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">樂器 <span class="text-danger">*</span></label>
+        <select name="instrument" class="form-select" required>
+          <option value="">請選擇</option>
+          {% for inst in instruments %}
+          <option value="{{ inst.pk }}"
+            {% if action == 'edit' and registration.instrument_id == inst.pk %}selected
+            {% elif request.POST.instrument == inst.pk|stringformat:"s" %}selected{% endif %}>
+            {{ inst.get_category_display }} — {{ inst.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">畢業年份 <span class="text-danger">*</span></label>
+        <input type="number" name="grad_year" class="form-control" min="1990" max="2099"
+               value="{% if action == 'edit' %}{{ registration.grad_year }}{% else %}{{ request.POST.grad_year }}{% endif %}" required>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Email <span class="text-danger">*</span></label>
+        <input type="email" name="email" class="form-control"
+               value="{% if action == 'edit' %}{{ registration.email }}{% else %}{{ request.POST.email }}{% endif %}" required>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold">電話 <span class="text-muted small">（選填）</span></label>
+        <input type="tel" name="phone" class="form-control"
+               value="{% if action == 'edit' %}{{ registration.phone }}{% else %}{{ request.POST.phone }}{% endif %}">
+      </div>
+
+      {% if action == 'edit' %}
+      <div class="alert alert-secondary small">
+        審核狀態不在此頁修改，請回列表用「核准／拒絕／重新審核」按鈕操作。
+      </div>
+      {% endif %}
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">{% if action == 'edit' %}儲存變更{% else %}新增申請紀錄{% endif %}</button>
+        <a href="{% url 'accounts:registration_review' %}" class="btn btn-outline-secondary">取消</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

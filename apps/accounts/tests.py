@@ -1,6 +1,7 @@
 from django.core import mail
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from .models import InstrumentFamily, InstrumentType, User
 
@@ -138,7 +139,7 @@ class ProfileTest(TestCase):
 
 
 class MemberDirectoryTest(TestCase):
-    """會員通訊錄"""
+    """團員通訊錄"""
 
     def setUp(self):
         self.family = InstrumentFamily.objects.create(
@@ -456,6 +457,188 @@ class RegistrationTest(TestCase):
         self.client.post(self.review_url, {'reg_id': reg.pk, 'action': 'reject'})
         reg.refresh_from_db()
         self.assertEqual(reg.status, Registration.Status.REJECTED)
+
+
+class RegistrationManageTest(TestCase):
+    """校友報到申請的完整管理功能：查詢、重新審核、新增、編輯、刪除"""
+
+    def setUp(self):
+        self.family = InstrumentFamily.objects.create(
+            name='長號族', category=InstrumentFamily.Category.BRASS
+        )
+        self.instrument = InstrumentType.objects.create(name='長號', family=self.family)
+        self.other_instrument = InstrumentType.objects.create(name='低音號', family=self.family)
+        self.officer = User.objects.create_user(
+            username='mng_officer', password='x', name='管理幹部',
+            email='mng_officer@test.local', role=User.Role.OFFICER,
+        )
+        self.member = User.objects.create_user(
+            username='mng_member', password='x', name='一般團員',
+            email='mng_member@test.local', role=User.Role.MEMBER,
+        )
+        self.review_url = reverse('accounts:registration_review')
+        self.create_url = reverse('accounts:registration_create')
+
+    # ── 查詢／篩選 ──────────────────────────────────────
+
+    def test_search_by_name(self):
+        """依姓名關鍵字搜尋"""
+        from .models import Registration
+        Registration.objects.create(
+            name='搜尋目標', instrument=self.instrument, grad_year=110, email='findme@test.local',
+        )
+        Registration.objects.create(
+            name='不相關的人', instrument=self.instrument, grad_year=110, email='other@test.local',
+        )
+        self.client.force_login(self.officer)
+        r = self.client.get(self.review_url, {'q': '搜尋目標'})
+        self.assertContains(r, '搜尋目標')
+        self.assertNotContains(r, '不相關的人')
+
+    def test_filter_by_status(self):
+        """依審核狀態篩選"""
+        from .models import Registration
+        Registration.objects.create(
+            name='待審的人', instrument=self.instrument, grad_year=110,
+            email='pending_person@test.local', status=Registration.Status.PENDING,
+        )
+        Registration.objects.create(
+            name='已拒絕的人', instrument=self.instrument, grad_year=110,
+            email='rejected_person@test.local', status=Registration.Status.REJECTED,
+        )
+        self.client.force_login(self.officer)
+        r = self.client.get(self.review_url, {'status': 'rejected'})
+        self.assertContains(r, '已拒絕的人')
+        self.assertNotContains(r, '待審的人')
+
+    # ── 重新開放審核 ────────────────────────────────────
+
+    def test_reopen_rejected_registration(self):
+        """已拒絕的申請可重新開放為待審核"""
+        from .models import Registration
+        reg = Registration.objects.create(
+            name='想再給機會', instrument=self.instrument, grad_year=110,
+            email='reopen@test.local', status=Registration.Status.REJECTED,
+            reviewed_by=self.officer, reviewed_at=timezone.now(),
+        )
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'reg_id': reg.pk, 'action': 'reopen'})
+        reg.refresh_from_db()
+        self.assertEqual(reg.status, Registration.Status.PENDING)
+        self.assertIsNone(reg.reviewed_by)
+
+    def test_cannot_reopen_approved_registration(self):
+        """已核准的申請不能被重新開放（帳號已建立，狀態不該再變動）"""
+        from .models import Registration
+        reg = Registration.objects.create(
+            name='已核准的人', instrument=self.instrument, grad_year=110,
+            email='already_approved@test.local', status=Registration.Status.APPROVED,
+        )
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'reg_id': reg.pk, 'action': 'reopen'})
+        reg.refresh_from_db()
+        self.assertEqual(reg.status, Registration.Status.APPROVED)
+
+    # ── 新增申請紀錄 ────────────────────────────────────
+
+    def test_member_cannot_access_create(self):
+        """
+        一般團員無法新增申請紀錄。權限檢查導向 registration_review，
+        但團員在那邊一樣沒有權限，會再被導向通訊錄，所以最終落點是通訊錄頁。
+        """
+        self.client.force_login(self.member)
+        r = self.client.get(self.create_url, follow=True)
+        self.assertRedirects(r, reverse('accounts:member_directory'))
+        self.assertContains(r, '權限不足')
+
+    def test_officer_post_creates_registration(self):
+        """幹部送出有效資料應成功建立申請紀錄，狀態預設待審核"""
+        from .models import Registration
+        self.client.force_login(self.officer)
+        r = self.client.post(self.create_url, {
+            'name': '電話報到的人',
+            'instrument': self.instrument.pk,
+            'grad_year': 112,
+            'email': 'phonecall@test.local',
+            'phone': '0900000000',
+        })
+        self.assertRedirects(r, self.review_url)
+        reg = Registration.objects.get(email='phonecall@test.local')
+        self.assertEqual(reg.name, '電話報到的人')
+        self.assertEqual(reg.status, Registration.Status.PENDING)
+
+    def test_create_empty_name_does_not_create_record(self):
+        """姓名空白時應擋下，不建立紀錄"""
+        from .models import Registration
+        self.client.force_login(self.officer)
+        self.client.post(self.create_url, {
+            'name': '',
+            'instrument': self.instrument.pk,
+            'grad_year': 112,
+            'email': 'blank_name@test.local',
+        })
+        self.assertFalse(Registration.objects.filter(email='blank_name@test.local').exists())
+
+    # ── 編輯申請紀錄 ────────────────────────────────────
+
+    def test_officer_post_edits_registration(self):
+        """幹部編輯應更新資料，不影響審核狀態"""
+        from .models import Registration
+        reg = Registration.objects.create(
+            name='打錯字的人', instrument=self.instrument, grad_year=110, email='typo@test.local',
+        )
+        edit_url = reverse('accounts:registration_edit', args=[reg.pk])
+        self.client.force_login(self.officer)
+        r = self.client.post(edit_url, {
+            'name': '修正後的姓名',
+            'instrument': self.other_instrument.pk,
+            'grad_year': 111,
+            'email': 'typo@test.local',
+        })
+        self.assertRedirects(r, self.review_url)
+        reg.refresh_from_db()
+        self.assertEqual(reg.name, '修正後的姓名')
+        self.assertEqual(reg.instrument, self.other_instrument)
+        self.assertEqual(reg.status, Registration.Status.PENDING)
+
+    def test_edit_invalid_pk_returns_404(self):
+        """不存在的申請 pk 應回 404"""
+        self.client.force_login(self.officer)
+        r = self.client.get(reverse('accounts:registration_edit', args=[99999]))
+        self.assertEqual(r.status_code, 404)
+
+    # ── 刪除申請紀錄 ────────────────────────────────────
+
+    def test_officer_can_delete_pending_registration(self):
+        """待審核的申請紀錄可被刪除"""
+        from .models import Registration
+        reg = Registration.objects.create(
+            name='要刪除的人', instrument=self.instrument, grad_year=110, email='todelete@test.local',
+        )
+        self.client.force_login(self.officer)
+        self.client.post(reverse('accounts:registration_delete', args=[reg.pk]))
+        self.assertFalse(Registration.objects.filter(pk=reg.pk).exists())
+
+    def test_approved_registration_cannot_be_deleted(self):
+        """已核准的申請紀錄不可刪除，需保留稽核軌跡"""
+        from .models import Registration
+        reg = Registration.objects.create(
+            name='已核准不可刪', instrument=self.instrument, grad_year=110,
+            email='approved_keep@test.local', status=Registration.Status.APPROVED,
+        )
+        self.client.force_login(self.officer)
+        self.client.post(reverse('accounts:registration_delete', args=[reg.pk]))
+        self.assertTrue(Registration.objects.filter(pk=reg.pk).exists())
+
+    def test_member_cannot_delete_registration(self):
+        """一般團員無法刪除申請紀錄"""
+        from .models import Registration
+        reg = Registration.objects.create(
+            name='團員不能刪這個', instrument=self.instrument, grad_year=110, email='member_cant@test.local',
+        )
+        self.client.force_login(self.member)
+        self.client.post(reverse('accounts:registration_delete', args=[reg.pk]))
+        self.assertTrue(Registration.objects.filter(pk=reg.pk).exists())
 
 
 class MemberCreateTest(TestCase):
