@@ -1571,6 +1571,26 @@ charter.save()
 不需要重新設計資料結構。目前完全沒有前端頁面，只能透過 Django Admin 操作——
 待討論的是要不要幫它補一個前端管理頁面（比照團員通訊錄、場地管理的模式）。
 
+### 6. 首頁 Dashboard 應該顯示請假審核結果，不是只有待審核
+
+2026-07-12 實測發現：首頁「待審假單提醒」（`apps/public/views.py` 的 `index` view）
+只查詢 `status=pending` 的 `LeaveRequest`：
+
+```python
+context['pending_leaves'] = (
+    LeaveRequest.objects
+    .filter(member=request.user, status=LeaveRequest.Status.PENDING)
+    ...
+)
+```
+
+幹部核准或拒絕後，這筆申請的狀態不再是 `pending`，就直接從清單上「消失」——團員完全不會在
+首頁看到任何結果通知，必須自己想到要去「我的請假」（`my_leave_requests`）才查得到核准/拒絕結果。
+需要在 Dashboard 補一個「近期審核結果」之類的區塊，讓團員一登入首頁就能看到自己的申請有沒有被處理，
+不用是靠自己想到要去別的頁面查。實作前要想清楚：
+- 「近期」怎麼界定？例如審核時間在最近 N 天內，還是「上次登入後有新結果」這種已讀/未讀概念？
+- 核准/拒絕都要顯示，還是只顯示其中一種？
+
 ---
 
 ## 附錄一：常見 Django 概念速查
