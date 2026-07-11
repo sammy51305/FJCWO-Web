@@ -97,6 +97,9 @@
     <a href="{% url 'events:attendance_report' event.pk %}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-bar-chart"></i> 出席報表
     </a>
+    <a href="{% url 'events:leave_stats' %}?event={{ event.pk }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-calendar-x"></i> 請假統計
+    </a>
   </div>
   {% endif %}
 </div>
