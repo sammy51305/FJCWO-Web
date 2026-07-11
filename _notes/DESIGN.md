@@ -1383,7 +1383,14 @@ def push_line_message(text: str) -> None:
 
 ### 4.19 演出分譜下載（scores）
 
-**檔案**：`apps/scores/views.py`（`performance_parts`）、路由：`/scores/performance/<pk>/parts/`
+> **※ 規劃中，尚未實作。** 這節原本寫成已完成功能，但實際程式碼裡沒有 `performance_parts` 這個 view，
+> `apps/scores/urls.py` 也沒有對應路由——這裡記錄的是當初的設計構想，不是現況。
+> 跟 [Architecture.md](Architecture.md) 頁面權限結構裡「分譜查詢（我被分配到哪些譜）※ 規劃中」
+> 對得上，只是這份文件之前忘了同步標記成規劃中，2026-07-12 發現並修正。
+> 目前團員要看分譜，只能透過 `score_list`／`score_detail` 自己搜尋瀏覽，沒有「依演出活動 +
+> 自己的樂器」自動篩選的專屬入口。
+
+**檔案**：`apps/scores/views.py`（`performance_parts`，待新增）、路由：`/scores/performance/<pk>/parts/`（待新增）
 
 **登入者可用**，依登入者的樂器篩選該演出的分譜。
 
