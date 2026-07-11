@@ -21,6 +21,9 @@ hugo_stats.json
 Thumbs.db
 *.tmp
 
+# --- Claude Code local config ---
+.claude/
+
 # --- [Security Isolation] ---
 # 這裡排除所有機敏資料夾與檔案
 .private/
