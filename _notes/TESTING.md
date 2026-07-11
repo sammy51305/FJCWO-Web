@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-07-12（共 330 個測試）
+> 最後更新：2026-07-12（共 338 個測試）
 
 ---
 
@@ -63,7 +63,7 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 
 ## 目前測試總覽
 
-共 **330 個測試**，分布在 8 個 app。
+共 **338 個測試**，分布在 8 個 app。
 
 ### `apps/accounts/tests.py`（90 個）
 
@@ -81,11 +81,11 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 | `MemberCreateTest` | 存取控制（未登入/一般團員/幹部）、POST 新增團員成功（角色固定 member）、帳號依 Email 自動產生、Email 重複不建立記錄、寄送臨時密碼信件 |
 | `ForcePasswordChangeTest` | `must_change_password` 使用者任何頁面都被導向設定密碼頁、一般使用者不受影響、設定密碼頁本身不被攔截、成功設定後清除 flag 並可用新密碼登入、密碼不一致/太弱被擋、臨時密碼登入後仍被導向設定密碼頁（含錯誤密碼登入失敗的驗證）|
 
-### `apps/events/tests.py`（101 個）
+### `apps/events/tests.py`（103 個）
 
 | Class | 測試內容 |
 |-------|---------|
-| `LeaveRequestTestCase` | 請假申請的存取控制、空白/空白原因被擋、正常送出、重複申請防止、我的紀錄、幹部審核（核准/拒絕）、核准後同步出席紀錄、核准不覆寫已簽到的 PRESENT 紀錄 |
+| `LeaveRequestTestCase` | 請假申請的存取控制、空白/空白原因被擋、正常送出、重複申請防止、我的紀錄、幹部審核（核准/拒絕）、核准後同步出席紀錄、核准不覆寫已簽到的 PRESENT 紀錄、核准/拒絕後 result_seen 設為 False |
 | `EventViewsTest` | 演出活動列表/詳情、排練詳情、摘要/備註顯示、申請請假按鈕（未來啟用/過去停用）、活動詳情頁請假捷徑連結（未來顯示/過去不顯示）|
 | `QRCodeTest` | QR 管理頁存取控制、產生 token、重新產生換 UUID、小時數邊界、停用/啟用 toggle、簽到頁顯示、已簽到提示、簽到確認建立出席紀錄 |
 | `SetlistManageTest` | 曲目管理存取控制、新增總譜成功、新增分譜被擋（404）、重複順序被擋、移除曲目 |
@@ -139,10 +139,11 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 |-------|---------|
 | `PushLineMessageTest` | credentials 齊全時發出 API 請求、TOKEN 缺少時略過、GROUP_ID 缺少時略過、API 失敗時 silent fail |
 
-### `apps/public/tests.py`（28 個）
+### `apps/public/tests.py`（34 個）
 
 | Class | 測試內容 |
 |-------|---------|
+| `IndexDashboardLeaveResultTest` | 首頁顯示未讀的核准/拒絕請假結果、待審核不顯示為結果、看過一次後 result_seen 變 True、已讀結果不再顯示、不會看到其他團員的結果 |
 | `PublicPagesTest` | 首頁、關於百韻、章程三頁面的 200 回應與不需登入；章程有內容時顯示、無內容時顯示佔位文字 |
 | `CharterEditTest` | 存取控制（未登入/一般團員/幹部）、POST 儲存章程並 redirect、二次更新不新增資料 |
 | `VenueManageTest` | 存取控制（未登入/一般團員/幹部）、依名稱搜尋、依類別篩選、新增/編輯場地、新增/刪除時段、刪除限管理員、被演出活動引用（PROTECT）時即使管理員也無法刪除 |

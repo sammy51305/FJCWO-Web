@@ -754,7 +754,9 @@ pending（待審核）
     └── rejected（拒絕）← 幹部按「拒絕」
 ```
 
-核准後，`reviewed_by` 和 `reviewed_at` 會一起記錄，留下稽核軌跡。
+核准後，`reviewed_by` 和 `reviewed_at` 會一起記錄，留下稽核軌跡；同時把 `result_seen` 設回
+`False`，讓首頁 Dashboard 知道「這是團員還沒看過的新結果」（見 §4.11「為什麼待審核清單看不到
+核准/拒絕結果」）。
 
 `leave_review_list` 在處理核准/拒絕動作前，會先確認申請狀態仍為 `pending`，
 防止幹部透過瀏覽器上一頁重複送出，誤將已審核的申請再次翻轉。
@@ -1100,7 +1102,7 @@ def _visible_announcements(user):
 
 **檔案**：`apps/public/views.py`（`index`）
 
-首頁對**未登入者**顯示靜態內容；對**已登入者**額外查詢三筆資料，組成個人化 Dashboard：
+首頁對**未登入者**顯示靜態內容；對**已登入者**額外查詢資料，組成個人化 Dashboard：
 
 ```python
 # 下次排練：最近一場日期 > 現在的排練
@@ -1120,6 +1122,18 @@ context['pending_leaves'] = (
     .order_by('rehearsal__date')
 )
 
+# 我的請假審核結果（核准/拒絕後尚未在首頁看過的通知，見下方說明）
+reviewed_leaves = list(
+    LeaveRequest.objects
+    .filter(member=request.user, result_seen=False)
+    .exclude(status=LeaveRequest.Status.PENDING)
+    .select_related('rehearsal__event')
+    .order_by('-reviewed_at')
+)
+context['reviewed_leaves'] = reviewed_leaves
+if reviewed_leaves:
+    LeaveRequest.objects.filter(pk__in=[leave.pk for leave in reviewed_leaves]).update(result_seen=True)
+
 # 幹部專屬：待審核的校友報到申請數（顯示提醒徽章）
 if request.user.is_officer:
     context['pending_registrations_count'] = (
@@ -1128,9 +1142,31 @@ if request.user.is_officer:
 ```
 
 **設計考量：**
-- 三個查詢彼此獨立，無 N+1 問題（`select_related` 處理關聯）
+- 各查詢彼此獨立，無 N+1 問題（`select_related` 處理關聯）
 - `pending_registrations_count` 只給幹部，一般團員不需要看這個數字
 - import 放在 `if request.user.is_authenticated` 內部，避免未登入時引發不必要的查詢
+
+#### 為什麼「待審核」清單看不到核准/拒絕結果，要另外查一次
+
+`pending_leaves` 只查 `status=pending`，核准或拒絕後這筆申請直接從清單消失，
+團員完全看不到任何結果通知，只能自己想到要去「我的請假」查——這是實測時發現的落差
+（見附錄五第 6 項），不是刻意設計。
+
+`reviewed_leaves` 用 `result_seen` 這個欄位解決「團員有沒有看過這個結果」的問題：
+
+```python
+result_seen = models.BooleanField('團員已讀審核結果', default=True, ...)
+```
+
+- `leave_review_list` 核准/拒絕時把 `result_seen` 設回 `False`，代表「有新結果團員還沒看過」
+- 首頁 `index` view 查出所有 `result_seen=False` 的已審核申請，顯示成通知，**同一次 request
+  裡就把它們標記回 `result_seen=True`**——不需要團員多點一下「已讀」，看到首頁就算已讀
+- 欄位預設值刻意設成 `True`（不是 `False`）：這樣加欄位的 migration 套用時，既有的歷史核准/
+  拒絕紀錄不會被當成「新結果」瞬間全部跳出來洗版，只有欄位加入後才審核的申請才會走這套通知流程
+
+沒有用「時間視窗」（例如「審核時間在最近 3 天內」）判斷是否顯示，是因為時間視窗會有兩種問題：
+團員太久沒登入就會錯過通知（超出視窗就消失了），或是團員每天都登入就會重複看到同一筆好幾天
+（視窗內反覆出現）。已讀旗標可以精準地「看過一次就不再顯示」，不受登入頻率影響。
 
 ---
 
@@ -1571,25 +1607,7 @@ charter.save()
 不需要重新設計資料結構。目前完全沒有前端頁面，只能透過 Django Admin 操作——
 待討論的是要不要幫它補一個前端管理頁面（比照團員通訊錄、場地管理的模式）。
 
-### 6. 首頁 Dashboard 應該顯示請假審核結果，不是只有待審核
-
-2026-07-12 實測發現：首頁「待審假單提醒」（`apps/public/views.py` 的 `index` view）
-只查詢 `status=pending` 的 `LeaveRequest`：
-
-```python
-context['pending_leaves'] = (
-    LeaveRequest.objects
-    .filter(member=request.user, status=LeaveRequest.Status.PENDING)
-    ...
-)
-```
-
-幹部核准或拒絕後，這筆申請的狀態不再是 `pending`，就直接從清單上「消失」——團員完全不會在
-首頁看到任何結果通知，必須自己想到要去「我的請假」（`my_leave_requests`）才查得到核准/拒絕結果。
-需要在 Dashboard 補一個「近期審核結果」之類的區塊，讓團員一登入首頁就能看到自己的申請有沒有被處理，
-不用是靠自己想到要去別的頁面查。實作前要想清楚：
-- 「近期」怎麼界定？例如審核時間在最近 N 天內，還是「上次登入後有新結果」這種已讀/未讀概念？
-- 核准/拒絕都要顯示，還是只顯示其中一種？
+~~### 6. 首頁 Dashboard 應該顯示請假審核結果~~ → 已完成，見 §4.11「為什麼待審核清單看不到核准/拒絕結果」
 
 ---
 

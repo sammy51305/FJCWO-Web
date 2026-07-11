@@ -7,6 +7,21 @@
 
 <h2 class="mb-4">嗨，{{ user.name }} 👋</h2>
 
+{% if reviewed_leaves %}
+<div class="mb-4">
+  {% for leave in reviewed_leaves %}
+  <div class="alert {% if leave.status == 'approved' %}alert-success{% else %}alert-danger{% endif %} d-flex align-items-center gap-3 mb-2">
+    <i class="bi {% if leave.status == 'approved' %}bi-check-circle{% else %}bi-x-circle{% endif %} fs-4"></i>
+    <div>
+      你申請的「{{ leave.rehearsal.event.name }} 第 {{ leave.rehearsal.sequence }} 次排練」請假，
+      已{% if leave.status == 'approved' %}核准{% else %}被拒絕{% endif %}。
+      <a href="{% url 'events:my_leave_requests' %}" class="alert-link ms-2">查看詳情 →</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 <div class="row g-4">
 
   <!-- 下次排練 -->

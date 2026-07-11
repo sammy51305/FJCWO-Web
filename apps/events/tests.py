@@ -176,6 +176,22 @@ class LeaveRequestTestCase(TestCase):
         self.assertEqual(leave.status, LeaveRequest.Status.REJECTED)
         self.assertEqual(leave.reviewed_by, self.officer)
 
+    def test_approve_marks_result_unseen(self):
+        """核准後 result_seen 應變 False，讓首頁能偵測到這是團員還沒看過的新結果"""
+        leave = LeaveRequest.objects.create(member=self.member, rehearsal=self.rehearsal, reason='請假')
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'leave_id': leave.pk, 'action': 'approve'})
+        leave.refresh_from_db()
+        self.assertFalse(leave.result_seen)
+
+    def test_reject_marks_result_unseen(self):
+        """拒絕後 result_seen 應變 False"""
+        leave = LeaveRequest.objects.create(member=self.member, rehearsal=self.rehearsal, reason='請假')
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'leave_id': leave.pk, 'action': 'reject'})
+        leave.refresh_from_db()
+        self.assertFalse(leave.result_seen)
+
     # ── T11 核准同步出席紀錄 ──────────────────────────────────
 
     def test_approve_creates_leave_attendance(self):

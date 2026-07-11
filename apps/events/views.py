@@ -123,6 +123,7 @@ def leave_review_list(request):
             leave.status = LeaveRequest.Status.APPROVED
             leave.reviewed_by = request.user
             leave.reviewed_at = timezone.now()
+            leave.result_seen = False
             leave.save()
             # 同步出席紀錄：核准請假 → 標記為請假
             # 若團員已 QR 簽到（PRESENT），保留簽到紀錄不覆寫
@@ -138,6 +139,7 @@ def leave_review_list(request):
             leave.status = LeaveRequest.Status.REJECTED
             leave.reviewed_by = request.user
             leave.reviewed_at = timezone.now()
+            leave.result_seen = False
             leave.save()
             messages.success(request, f'已拒絕 {leave.member.name} 的請假申請。')
         return redirect('events:leave_review_list')

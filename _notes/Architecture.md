@@ -378,6 +378,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | created_at | 申請時間（自動填入）|
 | reviewed_by | 審核幹部（關聯 User）|
 | reviewed_at | 審核時間 |
+| result_seen | 團員是否已在首頁看過審核結果（核准/拒絕時設 False，首頁顯示過一次後設回 True）|
 
 ### 客座團員（GuestMember）
 

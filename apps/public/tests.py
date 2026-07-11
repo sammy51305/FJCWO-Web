@@ -1,8 +1,108 @@
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.accounts.models import User
 from .models import CharterContent, Venue, VenueTimeSlot
+
+
+class IndexDashboardLeaveResultTest(TestCase):
+    """首頁 Dashboard 顯示請假審核結果通知"""
+
+    def setUp(self):
+        from apps.events.models import LeaveRequest, PerformanceEvent, Rehearsal
+
+        self.member = User.objects.create_user(
+            username='dash_member', password='x', name='首頁測試團員',
+            email='dash_member@test.local', role=User.Role.MEMBER,
+        )
+        venue = Venue.objects.create(name='首頁測試場地', type=Venue.Type.REHEARSAL)
+        event = PerformanceEvent.objects.create(
+            name='首頁測試演出', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now(), performance_venue=venue,
+        )
+        self.rehearsal = Rehearsal.objects.create(
+            event=event, sequence=1, date=timezone.now(), venue=venue,
+        )
+        self.url = reverse('public:index')
+
+    def test_unseen_approved_leave_shown_on_dashboard(self):
+        """核准但團員還沒看過的請假結果，應出現在首頁"""
+        from apps.events.models import LeaveRequest
+
+        LeaveRequest.objects.create(
+            member=self.member, rehearsal=self.rehearsal, reason='請假',
+            status=LeaveRequest.Status.APPROVED, result_seen=False,
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertContains(r, '已核准')
+
+    def test_unseen_rejected_leave_shown_on_dashboard(self):
+        """拒絕但團員還沒看過的請假結果，應出現在首頁"""
+        from apps.events.models import LeaveRequest
+
+        LeaveRequest.objects.create(
+            member=self.member, rehearsal=self.rehearsal, reason='請假',
+            status=LeaveRequest.Status.REJECTED, result_seen=False,
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertContains(r, '被拒絕')
+
+    def test_pending_leave_not_shown_as_result(self):
+        """待審核的請假不應出現在審核結果通知裡"""
+        from apps.events.models import LeaveRequest
+
+        LeaveRequest.objects.create(
+            member=self.member, rehearsal=self.rehearsal, reason='請假',
+            status=LeaveRequest.Status.PENDING,
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertNotContains(r, '已核准')
+        self.assertNotContains(r, '被拒絕')
+
+    def test_result_marked_seen_after_dashboard_view(self):
+        """看過一次首頁後，result_seen 應變 True，之後查詢就是「已讀」"""
+        from apps.events.models import LeaveRequest
+
+        leave = LeaveRequest.objects.create(
+            member=self.member, rehearsal=self.rehearsal, reason='請假',
+            status=LeaveRequest.Status.APPROVED, result_seen=False,
+        )
+        self.client.force_login(self.member)
+        self.client.get(self.url)
+        leave.refresh_from_db()
+        self.assertTrue(leave.result_seen)
+
+    def test_already_seen_result_not_shown_again(self):
+        """已經看過的審核結果，第二次進首頁不應再顯示"""
+        from apps.events.models import LeaveRequest
+
+        LeaveRequest.objects.create(
+            member=self.member, rehearsal=self.rehearsal, reason='請假',
+            status=LeaveRequest.Status.APPROVED, result_seen=True,
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertNotContains(r, '已核准')
+
+    def test_other_members_result_not_shown(self):
+        """不會看到其他團員的請假審核結果"""
+        from apps.events.models import LeaveRequest
+
+        other_member = User.objects.create_user(
+            username='dash_other', password='x', name='別的團員',
+            email='dash_other@test.local', role=User.Role.MEMBER,
+        )
+        LeaveRequest.objects.create(
+            member=other_member, rehearsal=self.rehearsal, reason='請假',
+            status=LeaveRequest.Status.APPROVED, result_seen=False,
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertNotContains(r, '已核准')
 
 
 class PublicPagesTest(TestCase):

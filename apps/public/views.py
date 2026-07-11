@@ -38,6 +38,19 @@ def index(request):
             .select_related('rehearsal__event')
             .order_by('rehearsal__date')
         )
+        # 我的請假審核結果（核准/拒絕後尚未在首頁看過的通知）
+        reviewed_leaves = list(
+            LeaveRequest.objects
+            .filter(member=request.user, result_seen=False)
+            .exclude(status=LeaveRequest.Status.PENDING)
+            .select_related('rehearsal__event')
+            .order_by('-reviewed_at')
+        )
+        context['reviewed_leaves'] = reviewed_leaves
+        if reviewed_leaves:
+            LeaveRequest.objects.filter(
+                pk__in=[leave.pk for leave in reviewed_leaves]
+            ).update(result_seen=True)
         # 幹部：待審核的校友報到申請數
         if request.user.is_officer:
             from apps.accounts.models import Registration

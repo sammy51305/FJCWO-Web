@@ -247,6 +247,10 @@ class LeaveRequest(models.Model):
         null=True, blank=True, related_name='reviewed_leaves', verbose_name='審核幹部'
     )
     reviewed_at = models.DateTimeField('審核時間', null=True, blank=True)
+    result_seen = models.BooleanField(
+        '團員已讀審核結果', default=True,
+        help_text='核准/拒絕時設為 False，團員在首頁看到通知後設回 True；預設 True 避免既有資料被當成新結果'
+    )
 
     class Meta:
         verbose_name = '請假申請'
