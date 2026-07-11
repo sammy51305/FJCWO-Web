@@ -15,6 +15,7 @@
 | 某個系統的設計邏輯是什麼 | [DESIGN.md](DESIGN.md) 四、各系統運作邏輯 |
 | 這段程式「為什麼這樣寫」，是設計選擇還是 bug | [DESIGN.md](DESIGN.md) 附錄三 |
 | 有哪些已知的資料完整性問題還沒修 | [DESIGN.md](DESIGN.md) 附錄四 |
+| 有哪些構想中、還沒設計/實作的功能 | [DESIGN.md](DESIGN.md) 附錄五 |
 | 目前有幾個測試、測了什麼 | [TESTING.md](TESTING.md) |
 | 要新增測試，慣例是什麼 | [TESTING.md](TESTING.md) 新增測試的慣例 |
 | 第一次建立開發環境 | [SETUP.md](SETUP.md) |
