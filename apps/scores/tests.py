@@ -411,6 +411,131 @@ class ScoreCreateViewTest(TestCase):
         self.assertFalse(Score.objects.exists())
 
 
+@override_settings(MEDIA_ROOT=_TEMP_MEDIA)
+class ScoreEditViewTest(TestCase):
+    """編輯樂譜頁面（/scores/<pk>/edit/）"""
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(_TEMP_MEDIA, ignore_errors=True)
+        super().tearDownClass()
+
+    def setUp(self):
+        self.member = User.objects.create_user(
+            username='edit_member',
+            email='edit_member@test.local',
+            password='testpass123',
+            name='一般團員',
+            role=User.Role.MEMBER,
+        )
+        self.officer = User.objects.create_user(
+            username='edit_officer',
+            email='edit_officer@test.local',
+            password='testpass123',
+            name='編輯樂譜幹部',
+            role=User.Role.OFFICER,
+        )
+        family = InstrumentFamily.objects.create(
+            name='豎笛族', category=InstrumentFamily.Category.WOODWIND
+        )
+        self.instrument = InstrumentType.objects.create(name='單簧管', family=family)
+        self.score = Score.objects.create(
+            title='卡門組曲',
+            composer='比才',
+            score_type=Score.ScoreType.FULL,
+            copyright_status=Score.CopyrightStatus.PUBLIC_DOMAIN,
+        )
+        self.url = reverse('scores:score_edit', args=[self.score.pk])
+
+    # ── 存取控制 ────────────────────────────────────────
+
+    def test_unauthenticated_redirects_to_login(self):
+        """未登入應導向登入頁"""
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    def test_member_redirects_with_error_message(self):
+        """一般團員應被導回該樂譜詳情頁並顯示權限不足（不像 Admin 那樣直接被擋在登入頁外）"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url, follow=True)
+        self.assertRedirects(r, reverse('scores:score_detail', args=[self.score.pk]))
+        self.assertContains(r, '權限不足')
+
+    def test_officer_get_returns_200_with_prefilled_data(self):
+        """幹部 GET 應正常顯示表單，且既有資料已預先帶入欄位"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'value="卡門組曲"')
+        self.assertContains(r, 'value="比才"')
+
+    def test_invalid_pk_returns_404(self):
+        """不存在的樂譜 pk 應回 404"""
+        self.client.force_login(self.officer)
+        r = self.client.get(reverse('scores:score_edit', args=[99999]))
+        self.assertEqual(r.status_code, 404)
+
+    # ── POST 更新 ────────────────────────────────────────
+
+    def test_officer_post_updates_score(self):
+        """幹部送出修改後的資料應成功更新，並導向詳情頁"""
+        self.client.force_login(self.officer)
+        r = self.client.post(self.url, {
+            'title': '卡門組曲（修訂版）',
+            'composer': '比才',
+            'score_type': Score.ScoreType.FULL,
+            'copyright_status': Score.CopyrightStatus.PUBLIC_DOMAIN,
+            'physical_quantity': '3',
+        })
+        self.assertRedirects(r, reverse('scores:score_detail', args=[self.score.pk]))
+        self.score.refresh_from_db()
+        self.assertEqual(self.score.title, '卡門組曲（修訂版）')
+        self.assertEqual(self.score.physical_quantity, 3)
+
+    def test_empty_title_does_not_update_record(self):
+        """曲名清空時 full_clean() 應擋下，原始資料不變"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'title': '',
+            'score_type': Score.ScoreType.FULL,
+            'copyright_status': Score.CopyrightStatus.PUBLIC_DOMAIN,
+        })
+        self.score.refresh_from_db()
+        self.assertEqual(self.score.title, '卡門組曲')
+
+    def test_post_without_file_keeps_existing_file(self):
+        """編輯時沒有重新上傳檔案，應保留原本的 PDF，不會被清空"""
+        self.score.file = SimpleUploadedFile('original.pdf', b'%PDF-1.4 original', content_type='application/pdf')
+        self.score.save()
+
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'title': '卡門組曲',
+            'score_type': Score.ScoreType.FULL,
+            'copyright_status': Score.CopyrightStatus.PUBLIC_DOMAIN,
+        })
+        self.score.refresh_from_db()
+        self.assertTrue(self.score.file)
+
+    def test_post_with_new_file_replaces_existing(self):
+        """上傳新檔案應取代原本的 PDF"""
+        self.score.file = SimpleUploadedFile('original.pdf', b'%PDF-1.4 original', content_type='application/pdf')
+        self.score.save()
+        old_name = self.score.file.name
+
+        self.client.force_login(self.officer)
+        new_pdf = SimpleUploadedFile('replacement.pdf', b'%PDF-1.4 replacement', content_type='application/pdf')
+        self.client.post(self.url, {
+            'title': '卡門組曲',
+            'score_type': Score.ScoreType.FULL,
+            'copyright_status': Score.CopyrightStatus.PUBLIC_DOMAIN,
+            'file': new_pdf,
+        })
+        self.score.refresh_from_db()
+        self.assertNotEqual(self.score.file.name, old_name)
+
+
 class ScoreDownloadViewTest(TestCase):
     """樂譜 PDF 下載保護"""
 

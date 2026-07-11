@@ -1,12 +1,17 @@
 {% extends "base.html" %}
 
-{% block title %}新增樂譜 — 百韻管樂團{% endblock %}
+{% block title %}{% if action == 'edit' %}編輯樂譜{% else %}新增樂譜{% endif %} — 百韻管樂團{% endblock %}
 
 {% block content %}
 <nav aria-label="breadcrumb" class="mb-3">
   <ol class="breadcrumb">
     <li class="breadcrumb-item"><a href="{% url 'scores:score_list' %}">樂譜庫存</a></li>
+    {% if action == 'edit' %}
+    <li class="breadcrumb-item"><a href="{% url 'scores:score_detail' score.pk %}">{{ score.title }}</a></li>
+    <li class="breadcrumb-item active">編輯</li>
+    {% else %}
     <li class="breadcrumb-item active">新增樂譜</li>
+    {% endif %}
   </ol>
 </nav>
 
@@ -21,24 +26,24 @@
 
 <div class="row justify-content-center">
   <div class="col-lg-7">
-    <h2 class="mb-4">新增樂譜</h2>
+    <h2 class="mb-4">{% if action == 'edit' %}編輯樂譜{% else %}新增樂譜{% endif %}</h2>
 
     <form method="post" enctype="multipart/form-data">
       {% csrf_token %}
 
       <div class="mb-3">
         <label class="form-label fw-semibold">曲名 <span class="text-danger">*</span></label>
-        <input type="text" name="title" class="form-control" value="{{ request.POST.title }}" required>
+        <input type="text" name="title" class="form-control" value="{{ form_data.title }}" required>
       </div>
 
       <div class="row">
         <div class="col-sm-6 mb-3">
           <label class="form-label fw-semibold">作曲家</label>
-          <input type="text" name="composer" class="form-control" value="{{ request.POST.composer }}">
+          <input type="text" name="composer" class="form-control" value="{{ form_data.composer }}">
         </div>
         <div class="col-sm-6 mb-3">
           <label class="form-label fw-semibold">編曲者</label>
-          <input type="text" name="arranger" class="form-control" value="{{ request.POST.arranger }}">
+          <input type="text" name="arranger" class="form-control" value="{{ form_data.arranger }}">
         </div>
       </div>
 
@@ -47,7 +52,7 @@
         <select name="score_type" id="id_score_type" class="form-select" required>
           <option value="">請選擇</option>
           {% for value, label in score_type_choices %}
-          <option value="{{ value }}" {% if request.POST.score_type == value %}selected{% endif %}>{{ label }}</option>
+          <option value="{{ value }}" {% if form_data.score_type == value %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
       </div>
@@ -58,7 +63,7 @@
           <select name="instrument" class="form-select">
             <option value="">請選擇</option>
             {% for inst in instruments %}
-            <option value="{{ inst.pk }}" {% if request.POST.instrument == inst.pk|stringformat:"s" %}selected{% endif %}>
+            <option value="{{ inst.pk }}" {% if form_data.instrument == inst.pk|stringformat:"s" %}selected{% endif %}>
               {{ inst.family.name }} － {{ inst.name }}
             </option>
             {% endfor %}
@@ -69,7 +74,7 @@
           <select name="section" class="form-select">
             <option value="">不指定</option>
             {% for sec in sections %}
-            <option value="{{ sec.pk }}" {% if request.POST.section == sec.pk|stringformat:"s" %}selected{% endif %}>
+            <option value="{{ sec.pk }}" {% if form_data.section == sec.pk|stringformat:"s" %}selected{% endif %}>
               {{ sec.name }}
             </option>
             {% endfor %}
@@ -82,7 +87,7 @@
         <select name="copyright_status" class="form-select" required>
           <option value="">請選擇</option>
           {% for value, label in copyright_choices %}
-          <option value="{{ value }}" {% if request.POST.copyright_status == value %}selected{% endif %}>{{ label }}</option>
+          <option value="{{ value }}" {% if form_data.copyright_status == value %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
       </div>
@@ -91,14 +96,14 @@
         <div class="col-sm-4 mb-3">
           <label class="form-label fw-semibold">實體紙本數量</label>
           <input type="number" name="physical_quantity" class="form-control" min="0"
-                 value="{{ request.POST.physical_quantity|default:'0' }}">
+                 value="{{ form_data.physical_quantity|default:'0' }}">
         </div>
         <div class="col-sm-4 mb-3">
           <label class="form-label fw-semibold">來源</label>
           <select name="source" class="form-select">
             <option value="">未指定</option>
             {% for value, label in source_choices %}
-            <option value="{{ value }}" {% if request.POST.source == value %}selected{% endif %}>{{ label }}</option>
+            <option value="{{ value }}" {% if form_data.source == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
           </select>
         </div>
@@ -107,7 +112,7 @@
           <select name="difficulty" class="form-select">
             <option value="">未指定</option>
             {% for value, label in difficulty_choices %}
-            <option value="{{ value }}" {% if request.POST.difficulty == value %}selected{% endif %}>{{ label }}</option>
+            <option value="{{ value }}" {% if form_data.difficulty == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
           </select>
         </div>
@@ -115,7 +120,7 @@
 
       <div class="mb-3">
         <label class="form-label fw-semibold">出版商 <span class="text-muted small">（選填）</span></label>
-        <input type="text" name="publisher" class="form-control" value="{{ request.POST.publisher }}">
+        <input type="text" name="publisher" class="form-control" value="{{ form_data.publisher }}">
       </div>
 
       <div class="mb-3">
@@ -123,7 +128,7 @@
         <select name="parent_score" class="form-select">
           <option value="">原版（無）</option>
           {% for s in scores_for_parent %}
-          <option value="{{ s.pk }}" {% if request.POST.parent_score == s.pk|stringformat:"s" %}selected{% endif %}>
+          <option value="{{ s.pk }}" {% if form_data.parent_score == s.pk|stringformat:"s" %}selected{% endif %}>
             {{ s }}
           </option>
           {% endfor %}
@@ -132,17 +137,31 @@
 
       <div class="mb-4">
         <label class="form-label fw-semibold">改版說明 <span class="text-muted small">（選填）</span></label>
-        <textarea name="version_note" class="form-control" rows="2">{{ request.POST.version_note }}</textarea>
+        <textarea name="version_note" class="form-control" rows="2">{{ form_data.version_note }}</textarea>
       </div>
 
       <div class="mb-4">
         <label class="form-label fw-semibold">樂譜 PDF <span class="text-muted small">（選填，之後也可補上傳）</span></label>
+        {% if action == 'edit' and score.file %}
+        <div class="mb-1">
+          <a href="{% url 'scores:score_download' score.pk %}" class="text-success small">
+            <i class="bi bi-check-circle-fill"></i> 已上傳
+          </a>
+        </div>
+        {% endif %}
         <input type="file" name="file" accept=".pdf" class="form-control">
+        {% if action == 'edit' and score.file %}
+        <div class="form-text">上傳新檔案以替換，留空則保留原檔案。</div>
+        {% endif %}
       </div>
 
       <div class="d-flex gap-2">
-        <button type="submit" class="btn btn-primary">新增樂譜</button>
+        <button type="submit" class="btn btn-primary">{% if action == 'edit' %}儲存變更{% else %}新增樂譜{% endif %}</button>
+        {% if action == 'edit' %}
+        <a href="{% url 'scores:score_detail' score.pk %}" class="btn btn-outline-secondary">取消</a>
+        {% else %}
         <a href="{% url 'scores:score_list' %}" class="btn btn-outline-secondary">取消</a>
+        {% endif %}
       </div>
     </form>
   </div>

@@ -702,19 +702,62 @@ view 在 GET 時預先建立巢狀資料結構（`categories_data`）供 templat
 預設資料儲存在 `fixtures/instruments.json`（12 族群、24 種樂器）
 與 `fixtures/sections.json`（第一部〜第四部、Solo）。
 
-#### 新增樂譜（score_create）
+#### 新增／編輯樂譜（score_create / score_edit）
 
-路由：`/scores/create/`，幹部限定。原本「新增樂譜」按鈕直接連到 Django Admin 的新增頁，
-但一般 `officer` 角色沒有 `is_staff`（見 §2 `is_staff` 自動設定），無法進入 `/admin/`，等於幹部點了按鈕卻進不去。
-補上前端表單後改由 `score_create` view 處理，維持與其他 create view 一致的手動表單驗證風格。
+路由：`/scores/create/`、`/scores/<pk>/edit/`，皆幹部限定。原本「新增樂譜」「編輯」按鈕都直接連到
+Django Admin 的頁面，但一般 `officer` 角色沒有 `is_staff`（見 §2 `is_staff` 自動設定），
+無法進入 `/admin/`，等於幹部點了按鈕卻進不去——`score_edit` 是後來才發現的同一種問題，
+`score_detail.html` 的「編輯」連結曾經漏了修，和 `score_create` 一起補齊。
+
+兩個 view 共用同一套邏輯，避免寫兩份重複的欄位解析與驗證：
+
+```python
+def _apply_score_form(request, score):
+    """把 POST 資料寫進 score 實例（新建或既有皆可），回傳 errors 清單"""
+    ...
+    score.title = request.POST.get('title', '').strip()
+    ...
+    if not errors:
+        try:
+            score.full_clean()   # 沿用 Model 既有的 clean() 規則，不重複造輪子
+        except ValidationError as e:
+            ...
+    return errors
+```
+
+`score_create` 傳入一個空的 `Score()`；`score_edit` 傳入 `get_object_or_404(Score, pk=pk)` 取出的既有實例，
+兩者都呼叫 `_apply_score_form()` 寫入欄位再 `full_clean()`，驗證邏輯完全一致。
 
 表單依 `score_type` 用純 JS 顯示/隱藏「樂器」「聲部」欄位（總譜不需要，分譜必填樂器）。
-驗證上不重複造輪子，而是把 POST 資料組成 `Score` 實例後呼叫 `full_clean()`，
-直接沿用 Model 既有的 `clean()` 規則（見 §「總譜 vs 分譜」的驗證表），
-和 Admin 新增頁走的是同一套驗證邏輯。
+
+#### 編輯頁的欄位預先帶入：form_data
+
+`score_create` 的 GET 沒有既有資料，欄位一律空白；`score_edit` 的 GET 則要把既有樂譜的值填進表單。
+兩者共用同一份 `score_form.html`，為了不在 template 裡到處寫「有 POST 用 POST、沒有就用 score 的值」
+這種條件判斷，改在 view 層統一組出一個 `form_data` 字典再傳給 template：
+
+```python
+'form_data': request.POST if request.method == 'POST' else _initial_form_data(score),
+```
+
+`_initial_form_data()` 把 `score` 的欄位轉成跟表單欄位同名的字典（FK 欄位轉成字串 pk，對應 `<select>` 的 value）。
+Template 只需要統一寫 `{{ form_data.title }}`，不論是新增頁（空字典）、編輯頁 GET（既有資料）、
+或驗證失敗重新顯示（使用者剛送出的值）都適用同一套寫法。
+
+#### 為什麼 file 欄位沒有值就不覆蓋
+
+```python
+file = request.FILES.get('file')
+if file:
+    score.file = file
+```
+
+編輯時如果沒有重新選檔案，`request.FILES` 就不會有 `file` 這個 key，這裡刻意只在有上傳新檔案時才覆寫，
+避免使用者只是想改個曲名，卻不小心把已上傳的 PDF 清空。
 
 分譜若要掛在特定總譜底下，仍建議透過 `score_parts_manage` 的四層 UI 上傳，
-`score_create` 不提供 `full_score` 欄位，避免和既有上傳流程產生兩套重複入口。
+`score_create` / `score_edit` 都不提供 `full_score` 欄位，避免和既有上傳流程產生兩套重複入口
+（編輯既有分譜時，原本的 `full_score` 關聯不會被這兩個 view 動到）。
 
 #### Setlist 只連結總譜
 

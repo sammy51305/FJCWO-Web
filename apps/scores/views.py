@@ -41,6 +41,90 @@ def score_list(request):
     })
 
 
+def _apply_score_form(request, score):
+    """把 POST 資料寫進 score 實例（新建或既有皆可），回傳 errors 清單。"""
+    score_type = request.POST.get('score_type', '')
+    instrument_id = request.POST.get('instrument', '')
+    section_id = request.POST.get('section', '')
+    parent_score_id = request.POST.get('parent_score', '')
+    physical_quantity = request.POST.get('physical_quantity', '0').strip()
+
+    errors = []
+    try:
+        physical_quantity = int(physical_quantity or 0)
+    except ValueError:
+        errors.append('實體數量格式錯誤。')
+        physical_quantity = 0
+
+    instrument = InstrumentType.objects.filter(pk=instrument_id).first() if instrument_id else None
+    section = SectionType.objects.filter(pk=section_id).first() if section_id else None
+    parent_score = Score.objects.filter(pk=parent_score_id).first() if parent_score_id else None
+
+    if score_type == Score.ScoreType.FULL:
+        # 總譜不應指定樂器/聲部：表單依 score_type 隱藏欄位，這裡直接忽略殘留值
+        instrument = None
+        section = None
+
+    score.title = request.POST.get('title', '').strip()
+    score.composer = request.POST.get('composer', '').strip()
+    score.arranger = request.POST.get('arranger', '').strip()
+    score.score_type = score_type
+    score.instrument = instrument
+    score.section = section
+    score.copyright_status = request.POST.get('copyright_status', '')
+    score.physical_quantity = physical_quantity
+    score.source = request.POST.get('source', '')
+    score.publisher = request.POST.get('publisher', '').strip()
+    score.difficulty = request.POST.get('difficulty', '')
+    score.parent_score = parent_score
+    score.version_note = request.POST.get('version_note', '').strip()
+
+    file = request.FILES.get('file')
+    if file:
+        score.file = file
+
+    if not errors:
+        try:
+            score.full_clean()
+        except ValidationError as e:
+            for field_errors in e.message_dict.values():
+                errors.extend(field_errors)
+
+    return errors
+
+
+def _score_form_context(score=None):
+    return {
+        'instruments': InstrumentType.objects.select_related('family')
+                       .order_by('family__category', 'family__name', 'name'),
+        'sections': SectionType.objects.all(),
+        'scores_for_parent': Score.objects.exclude(pk=score.pk).order_by('title') if score else Score.objects.order_by('title'),
+        'score_type_choices': Score.ScoreType.choices,
+        'copyright_choices': Score.CopyrightStatus.choices,
+        'source_choices': Score.Source.choices,
+        'difficulty_choices': Score.Difficulty.choices,
+    }
+
+
+def _initial_form_data(score):
+    """既有樂譜的欄位值，轉成表單欄位名稱對應的字典，供編輯頁 GET 時預先帶入。"""
+    return {
+        'title': score.title,
+        'composer': score.composer,
+        'arranger': score.arranger,
+        'score_type': score.score_type,
+        'instrument': str(score.instrument_id or ''),
+        'section': str(score.section_id or ''),
+        'copyright_status': score.copyright_status,
+        'physical_quantity': score.physical_quantity,
+        'source': score.source,
+        'publisher': score.publisher,
+        'difficulty': score.difficulty,
+        'parent_score': str(score.parent_score_id or ''),
+        'version_note': score.version_note,
+    }
+
+
 @login_required
 def score_create(request):
     if not request.user.is_officer:
@@ -48,53 +132,8 @@ def score_create(request):
         return redirect('scores:score_list')
 
     if request.method == 'POST':
-        score_type = request.POST.get('score_type', '')
-        instrument_id = request.POST.get('instrument', '')
-        section_id = request.POST.get('section', '')
-        parent_score_id = request.POST.get('parent_score', '')
-        physical_quantity = request.POST.get('physical_quantity', '0').strip()
-
-        errors = []
-        try:
-            physical_quantity = int(physical_quantity or 0)
-        except ValueError:
-            errors.append('實體數量格式錯誤。')
-            physical_quantity = 0
-
-        instrument = InstrumentType.objects.filter(pk=instrument_id).first() if instrument_id else None
-        section = SectionType.objects.filter(pk=section_id).first() if section_id else None
-        parent_score = Score.objects.filter(pk=parent_score_id).first() if parent_score_id else None
-
-        if score_type == Score.ScoreType.FULL:
-            # 總譜不應指定樂器/聲部：表單依 score_type 隱藏欄位，這裡直接忽略殘留值
-            instrument = None
-            section = None
-
-        score = Score(
-            title=request.POST.get('title', '').strip(),
-            composer=request.POST.get('composer', '').strip(),
-            arranger=request.POST.get('arranger', '').strip(),
-            score_type=score_type,
-            instrument=instrument,
-            section=section,
-            copyright_status=request.POST.get('copyright_status', ''),
-            physical_quantity=physical_quantity,
-            source=request.POST.get('source', ''),
-            publisher=request.POST.get('publisher', '').strip(),
-            difficulty=request.POST.get('difficulty', ''),
-            parent_score=parent_score,
-            version_note=request.POST.get('version_note', '').strip(),
-        )
-        file = request.FILES.get('file')
-        if file:
-            score.file = file
-
-        if not errors:
-            try:
-                score.full_clean()
-            except ValidationError as e:
-                for field_errors in e.message_dict.values():
-                    errors.extend(field_errors)
+        score = Score()
+        errors = _apply_score_form(request, score)
 
         if errors:
             for error in errors:
@@ -104,16 +143,49 @@ def score_create(request):
             messages.success(request, f'樂譜《{score.title}》已新增。')
             return redirect('scores:score_detail', pk=score.pk)
 
+        return render(request, 'scores/score_form.html', {
+            'action': 'create',
+            'form_data': request.POST,
+            **_score_form_context(),
+        })
+
     return render(request, 'scores/score_form.html', {
         'action': 'create',
-        'instruments': InstrumentType.objects.select_related('family')
-                       .order_by('family__category', 'family__name', 'name'),
-        'sections': SectionType.objects.all(),
-        'scores_for_parent': Score.objects.order_by('title'),
-        'score_type_choices': Score.ScoreType.choices,
-        'copyright_choices': Score.CopyrightStatus.choices,
-        'source_choices': Score.Source.choices,
-        'difficulty_choices': Score.Difficulty.choices,
+        'form_data': {},
+        **_score_form_context(),
+    })
+
+
+@login_required
+def score_edit(request, pk):
+    score = get_object_or_404(Score, pk=pk)
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('scores:score_detail', pk=pk)
+
+    if request.method == 'POST':
+        errors = _apply_score_form(request, score)
+
+        if errors:
+            for error in errors:
+                messages.error(request, error)
+        else:
+            score.save()
+            messages.success(request, f'樂譜《{score.title}》已更新。')
+            return redirect('scores:score_detail', pk=score.pk)
+
+        return render(request, 'scores/score_form.html', {
+            'action': 'edit',
+            'score': score,
+            'form_data': request.POST,
+            **_score_form_context(score),
+        })
+
+    return render(request, 'scores/score_form.html', {
+        'action': 'edit',
+        'score': score,
+        'form_data': _initial_form_data(score),
+        **_score_form_context(score),
     })
 
 

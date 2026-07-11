@@ -33,7 +33,7 @@
       <i class="bi bi-music-note-list"></i> 管理分譜
     </a>
     {% endif %}
-    <a href="/admin/scores/score/{{ score.pk }}/change/" class="btn btn-outline-secondary btn-sm">
+    <a href="{% url 'scores:score_edit' score.pk %}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-pencil"></i> 編輯
     </a>
   </div>
