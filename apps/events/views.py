@@ -162,6 +162,24 @@ def leave_review_list(request):
     })
 
 
+@login_required
+def leave_delete(request, pk):
+    """
+    刪除請假申請紀錄，限管理員（admin 角色或 superuser）。
+    沒有其他表格參照 LeaveRequest，不會有 PROTECT/CASCADE 顧慮，直接刪除即可。
+    """
+    leave = get_object_or_404(LeaveRequest, pk=pk)
+    if not (request.user.is_superuser or request.user.is_admin_role):
+        messages.error(request, '權限不足，僅管理員可刪除請假紀錄。')
+        return redirect('events:leave_review_list')
+
+    if request.method == 'POST':
+        member_name = leave.member.name
+        leave.delete()
+        messages.success(request, f'已刪除 {member_name} 的請假紀錄。')
+    return redirect('events:leave_review_list')
+
+
 def _make_qr_data_url(url):
     img = qrcode.make(url)
     buf = io.BytesIO()

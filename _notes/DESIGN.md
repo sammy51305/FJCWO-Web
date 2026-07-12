@@ -761,6 +761,13 @@ pending（待審核）
 `leave_review_list` 在處理核准/拒絕動作前，會先確認申請狀態仍為 `pending`，
 防止幹部透過瀏覽器上一頁重複送出，誤將已審核的申請再次翻轉。
 
+#### leave_delete：刪除請假紀錄限管理員
+
+跟 `member_delete`／`event_delete`／`venue_delete`／`score_delete` 同一套「管理員限定」權限模式。
+`LeaveRequest` 沒有被任何其他表格參照，不像場地/樂譜/團員那樣有 `PROTECT`/`CASCADE` 需要處理，
+`leave.delete()` 可以直接刪，不需要額外的關聯檢查或 try/except。入口在「請假審核」頁的
+「近期審核紀錄」表格每一列，方便清掉測試/誤建的請假紀錄。
+
 ---
 
 ### 4.7 財務管理（finance）

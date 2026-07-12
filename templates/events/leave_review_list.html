@@ -53,6 +53,9 @@
         <th>狀態</th>
         <th>審核幹部</th>
         <th>審核時間</th>
+        {% if user.is_superuser or user.is_admin_role %}
+        <th></th>
+        {% endif %}
       </tr>
     </thead>
     <tbody>
@@ -69,6 +72,17 @@
         </td>
         <td>{{ leave.reviewed_by.name|default:"—" }}</td>
         <td>{{ leave.reviewed_at|date:"Y/m/d H:i"|default:"—" }}</td>
+        {% if user.is_superuser or user.is_admin_role %}
+        <td>
+          <form method="post" action="{% url 'events:leave_delete' leave.pk %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-danger"
+                    onclick="return confirm('確定要刪除 {{ leave.member.name }} 的這筆請假紀錄嗎？無法復原。')">
+              <i class="bi bi-trash"></i>
+            </button>
+          </form>
+        </td>
+        {% endif %}
       </tr>
       {% endfor %}
     </tbody>

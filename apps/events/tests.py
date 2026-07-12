@@ -26,6 +26,13 @@ class LeaveRequestTestCase(TestCase):
             name='測試幹部',
             role=User.Role.OFFICER,
         )
+        self.admin = User.objects.create_user(
+            username='test_admin',
+            email='admin@test.local',
+            password='testpass123',
+            name='測試管理員',
+            role=User.Role.ADMIN,
+        )
         self.venue = Venue.objects.create(name='測試場地', type='rehearsal')
         self.event = PerformanceEvent.objects.create(
             name='測試音樂會',
@@ -191,6 +198,39 @@ class LeaveRequestTestCase(TestCase):
         self.client.post(self.review_url, {'leave_id': leave.pk, 'action': 'reject'})
         leave.refresh_from_db()
         self.assertFalse(leave.result_seen)
+
+    # ── 刪除請假紀錄：限管理員 ───────────────────────────────
+
+    def test_officer_cannot_delete_leave(self):
+        """一般幹部無法刪除請假紀錄"""
+        leave = LeaveRequest.objects.create(
+            member=self.member, rehearsal=self.rehearsal, reason='請假',
+            status=LeaveRequest.Status.APPROVED,
+        )
+        self.client.force_login(self.officer)
+        r = self.client.post(reverse('events:leave_delete', args=[leave.pk]), follow=True)
+        self.assertTrue(LeaveRequest.objects.filter(pk=leave.pk).exists())
+        self.assertContains(r, '權限不足')
+
+    def test_admin_can_delete_leave(self):
+        """管理員可刪除請假紀錄"""
+        leave = LeaveRequest.objects.create(
+            member=self.member, rehearsal=self.rehearsal, reason='請假',
+            status=LeaveRequest.Status.APPROVED,
+        )
+        self.client.force_login(self.admin)
+        self.client.post(reverse('events:leave_delete', args=[leave.pk]))
+        self.assertFalse(LeaveRequest.objects.filter(pk=leave.pk).exists())
+
+    def test_member_cannot_delete_leave(self):
+        """一般團員無法刪除請假紀錄"""
+        leave = LeaveRequest.objects.create(
+            member=self.member, rehearsal=self.rehearsal, reason='請假',
+            status=LeaveRequest.Status.APPROVED,
+        )
+        self.client.force_login(self.member)
+        self.client.post(reverse('events:leave_delete', args=[leave.pk]))
+        self.assertTrue(LeaveRequest.objects.filter(pk=leave.pk).exists())
 
     # ── T11 核准同步出席紀錄 ──────────────────────────────────
 
