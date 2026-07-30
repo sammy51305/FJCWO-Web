@@ -190,6 +190,49 @@ def member_directory(request):
 
 
 @login_required
+def member_directory_report(request):
+    """
+    團員通訊錄列印報表（幹部限定）。
+
+    比照排練出席、財產借用、會費繳納、請假統計都已有的列印報表：套用 @media print 樣式、
+    附報表日期與列印按鈕。含電話／Email，故限幹部；分組邏輯與通訊錄頁一致（依樂器族群分類）。
+    沿用通訊錄的 status 參數（在團／已退團／全部），預設只印在團名單。
+    """
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('accounts:member_directory')
+
+    status_filter = request.GET.get('status', '')
+    members = User.objects.exclude(role=User.Role.ADMIN).select_related('instrument', 'section')
+
+    if status_filter == 'inactive':
+        members = members.filter(is_active=False)
+    elif status_filter == 'all':
+        pass
+    else:
+        status_filter = ''
+        members = members.filter(is_active=True)
+
+    members = members.order_by('instrument__category', 'instrument__name', 'name')
+
+    # 依樂器族群分類分組（與 member_directory 相同：木管 → 銅管 → 打擊 → 其他 → 未分類）
+    grouped = {}
+    for member in members:
+        category = member.instrument.get_category_display() if member.instrument else '未分類'
+        grouped.setdefault(category, []).append(member)
+    order = ['木管', '銅管', '打擊', '其他', '未分類']
+    grouped_members = sorted(grouped.items(), key=lambda x: order.index(x[0]) if x[0] in order else 99)
+    total = sum(len(m) for _, m in grouped_members)
+
+    return render(request, 'accounts/member_directory_report.html', {
+        'grouped_members': grouped_members,
+        'status_filter': status_filter,
+        'total': total,
+        'today': timezone.localdate(),
+    })
+
+
+@login_required
 def member_edit(request, pk):
     """幹部編輯任一團員的資料（含角色；admin 角色僅限管理員本身才能授予，避免權限升級）"""
     member = get_object_or_404(User, pk=pk)

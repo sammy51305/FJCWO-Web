@@ -1126,3 +1126,103 @@ class ForcePasswordChangeTest(TestCase):
             'username': 'needs_reset', 'password': 'temp12345',
         }, follow=True)
         self.assertRedirects(r, self.change_url)
+
+
+class MemberDirectoryReportTest(TestCase):
+    """
+    團員通訊錄列印報表（/accounts/directory/report/）
+
+    幹部限定（含電話／Email）；依樂器族群分組；沿用通訊錄的 status 篩選，預設只印在團名單。
+    """
+
+    def setUp(self):
+        self.family = InstrumentFamily.objects.create(
+            name='長笛族', category=InstrumentFamily.Category.WOODWIND
+        )
+        self.flute = InstrumentType.objects.create(name='長笛', family=self.family)
+
+        self.officer = User.objects.create_user(
+            username='report_officer', email='report_officer@test.local', password='x',
+            name='名冊測試幹部', role=User.Role.OFFICER,
+        )
+        self.plain_member = User.objects.create_user(
+            username='report_member', email='report_member@test.local', password='x',
+            name='一般團員', role=User.Role.MEMBER,
+        )
+        # 在團團員（有電話/Email，用來驗證報表內容）
+        self.active_member = User.objects.create_user(
+            username='report_active', email='report_active@test.local', password='x',
+            name='在團笛手', role=User.Role.MEMBER, phone='0912345678',
+            instrument=self.family,
+        )
+        # 已退團團員（用第三方姓名，避免和登入者本人姓名混淆）
+        self.inactive_member = User.objects.create_user(
+            username='report_inactive', email='report_inactive@test.local', password='x',
+            name='已退團笛手', role=User.Role.MEMBER, instrument=self.family, is_active=False,
+        )
+        self.url = reverse('accounts:member_directory_report')
+
+    # ── 存取控制 ────────────────────────────────────────
+
+    def test_unauthenticated_redirects(self):
+        """未登入應導向登入頁"""
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    def test_member_forbidden(self):
+        """一般團員無權限（含電話/Email），應導回通訊錄並顯示權限不足"""
+        self.client.force_login(self.plain_member)
+        r = self.client.get(self.url, follow=True)
+        self.assertRedirects(r, reverse('accounts:member_directory'))
+        self.assertContains(r, '權限不足')
+
+    def test_officer_can_view(self):
+        """幹部可開啟報表"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 200)
+
+    # ── 報表內容 ────────────────────────────────────────
+
+    def test_shows_active_member_contact(self):
+        """報表顯示在團團員的姓名、電話與 Email"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertContains(r, '在團笛手')
+        self.assertContains(r, '0912345678')
+        self.assertContains(r, 'report_active@test.local')
+
+    def test_grouped_by_category(self):
+        """依樂器族群分類分組（在團笛手屬木管，應出現分類標題）"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertContains(r, '木管')
+
+    def test_has_print_button(self):
+        """報表頁應有觸發瀏覽器列印的按鈕"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertContains(r, 'window.print()')
+
+    # ── status 篩選 ─────────────────────────────────────
+
+    def test_default_excludes_inactive(self):
+        """預設只印在團名單，不含已退團團員"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertNotContains(r, '已退團笛手')
+
+    def test_status_inactive_shows_inactive(self):
+        """status=inactive 時只列已退團團員"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url, {'status': 'inactive'})
+        self.assertContains(r, '已退團笛手')
+        self.assertNotContains(r, '在團笛手')
+
+    def test_status_all_shows_both(self):
+        """status=all 時在團與已退團都列出"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url, {'status': 'all'})
+        self.assertContains(r, '在團笛手')
+        self.assertContains(r, '已退團笛手')

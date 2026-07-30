@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}團員通訊錄名冊 — 百韻管樂團{% endblock %}
+
+{% block extra_css %}
+<style>
+  @media print {
+    .d-print-none { display: none !important; }
+    body { font-size: 11px; }
+    .table th, .table td { padding: 3px 6px !important; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="mb-0">團員通訊錄名冊</h2>
+    <p class="text-muted mb-0 small">
+      報表日期：{{ today|date:"Y/m/d" }}
+      · {% if status_filter == 'inactive' %}已退團{% elif status_filter == 'all' %}全部{% else %}在團{% endif %}名單
+    </p>
+  </div>
+  <button class="btn btn-outline-secondary d-print-none" onclick="window.print()">
+    <i class="bi bi-printer"></i> 列印
+  </button>
+</div>
+
+<div class="d-flex gap-3 mb-4">
+  <div class="card text-center px-4 py-2">
+    <div class="fs-4 fw-bold">{{ total }}</div>
+    <div class="text-muted small">總人數</div>
+  </div>
+</div>
+
+{% for category, members in grouped_members %}
+<h5 class="text-muted mt-4 mb-2">{{ category }}（{{ members|length }}）</h5>
+<div class="table-responsive mb-3">
+  <table class="table table-bordered align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>姓名</th>
+        <th>樂器</th>
+        <th>聲部</th>
+        <th>畢業年份</th>
+        <th>電話</th>
+        <th>Email</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for member in members %}
+      <tr>
+        <td>{{ member.name }}</td>
+        <td>{{ member.instrument.name|default:"—" }}</td>
+        <td>{{ member.section.name|default:"—" }}</td>
+        <td>{{ member.grad_year|default:"—" }}</td>
+        <td>{{ member.phone|default:"—" }}</td>
+        <td>{{ member.email }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% empty %}
+<p class="text-muted">沒有符合條件的團員資料。</p>
+{% endfor %}
+{% endblock %}
