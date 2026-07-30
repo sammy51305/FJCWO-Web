@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.accounts.models import InstrumentFamily, InstrumentType, SectionType, User
 from .models import Score
@@ -930,3 +931,125 @@ class ScorePartsManageTest(TestCase):
         self.client.force_login(self.officer)
         r = self.client.post(self.url, follow=True)
         self.assertContains(r, '未偵測到上傳檔案')
+
+
+@override_settings(MEDIA_ROOT=_TEMP_MEDIA)
+class PerformancePartsViewTest(TestCase):
+    """
+    演出分譜下載入口（/scores/performance/<pk>/parts/）
+
+    依登入者的「樂器族群」自動篩選出該演出曲目單用得到的分譜。
+    關聯路徑：PerformanceEvent → Setlist.score（總譜）→ Score.parts（分譜）；
+    篩選用 instrument__family（因 User.instrument 是族群、Score.instrument 是具體樂器，差一層）。
+    """
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(_TEMP_MEDIA, ignore_errors=True)
+        super().tearDownClass()
+
+    def setUp(self):
+        from apps.events.models import PerformanceEvent, Setlist
+        from apps.public.models import Venue
+
+        # 兩個樂器族群：長笛族（登入者所屬）與小號族（別人的）
+        self.flute_family = InstrumentFamily.objects.create(
+            name='長笛族', category=InstrumentFamily.Category.WOODWIND
+        )
+        self.trumpet_family = InstrumentFamily.objects.create(
+            name='小號族', category=InstrumentFamily.Category.BRASS
+        )
+        self.flute = InstrumentType.objects.create(name='長笛', family=self.flute_family)
+        self.trumpet = InstrumentType.objects.create(name='小號', family=self.trumpet_family)
+        self.section = SectionType.objects.create(name='第一部')
+
+        # 登入者：樂器族群設為長笛族
+        self.member = User.objects.create_user(
+            username='pp_member', email='pp_member@test.local', password='x',
+            name='分譜下載員', role=User.Role.MEMBER, instrument=self.flute_family,
+        )
+
+        # 演出 + 曲目單（總譜「星空」）
+        venue = Venue.objects.create(name='演出分譜測試場地', type='performance')
+        self.event = PerformanceEvent.objects.create(
+            name='春季音樂會', type='concert', performance_date=timezone.now(),
+            performance_venue=venue,
+        )
+        self.full_score = Score.objects.create(title='星空', score_type=Score.ScoreType.FULL)
+        Setlist.objects.create(event=self.event, score=self.full_score, order=1)
+
+        # 分譜：長笛（有檔案，登入者族群）、小號（別族群，應被濾掉）
+        self.flute_part = Score.objects.create(
+            title='星空', score_type=Score.ScoreType.PART,
+            instrument=self.flute, section=self.section, full_score=self.full_score,
+            file=SimpleUploadedFile('flute.pdf', b'%PDF-1.4 flute', content_type='application/pdf'),
+        )
+        self.trumpet_part = Score.objects.create(
+            title='星空', score_type=Score.ScoreType.PART,
+            instrument=self.trumpet, full_score=self.full_score,
+        )
+        self.url = reverse('scores:performance_parts', args=[self.event.pk])
+
+    # ── T01 存取控制 ────────────────────────────────────────
+
+    def test_unauthenticated_redirects(self):
+        """未登入應導向登入頁"""
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    def test_authenticated_can_view(self):
+        """登入後可開啟頁面"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 200)
+
+    def test_invalid_event_pk_returns_404(self):
+        """不存在的演出 pk 應回 404"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('scores:performance_parts', args=[99999]))
+        self.assertEqual(r.status_code, 404)
+
+    # ── T02 依樂器族群篩選 ───────────────────────────────────
+
+    def test_shows_part_of_own_family(self):
+        """列出登入者所屬族群（長笛族）的分譜，並提供下載連結"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertContains(r, '長笛')
+        self.assertContains(r, reverse('scores:score_download', args=[self.flute_part.pk]))
+
+    def test_hides_part_of_other_family(self):
+        """不列出其他族群（小號族）的分譜"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertNotContains(r, '小號')
+        self.assertNotContains(r, reverse('scores:score_download', args=[self.trumpet_part.pk]))
+
+    def test_part_not_in_this_event_excluded(self):
+        """分譜的總譜沒被排進這場演出時，不應出現"""
+        other_full = Score.objects.create(title='另一首', score_type=Score.ScoreType.FULL)
+        Score.objects.create(
+            title='另一首', score_type=Score.ScoreType.PART,
+            instrument=self.flute, full_score=other_full,
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertNotContains(r, '另一首')
+
+    # ── T03 邊界情況 ─────────────────────────────────────────
+
+    def test_member_without_family_sees_hint(self):
+        """未設定樂器族群的團員應看到提示，而非空白頁"""
+        self.member.instrument = None
+        self.member.save()
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertContains(r, '尚未設定樂器族群')
+
+    def test_no_matching_parts_shows_empty_message(self):
+        """有設定族群但這場沒有該族群分譜時，顯示友善訊息"""
+        self.flute_part.delete()  # 只剩小號族分譜，登入者是長笛族 → 無結果
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertContains(r, '沒有')

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}我的分譜 — {{ event.name }} — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'events:event_list' %}">演出活動</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'events:event_detail' event.pk %}">{{ event.name }}</a></li>
+    <li class="breadcrumb-item active">我的分譜</li>
+  </ol>
+</nav>
+
+<h2 class="mb-1">我的分譜</h2>
+<p class="text-muted mb-4">
+  {{ event.name }}{% if user_family %} · 依你的樂器族群「{{ user_family.name }}」自動篩選{% endif %}
+</p>
+
+{% if not user_family %}
+<div class="alert alert-warning">
+  你的帳號尚未設定樂器族群，無法自動篩選分譜。請洽幹部協助設定，或直接到
+  <a href="{% url 'scores:score_list' %}">樂譜庫存</a> 搜尋下載。
+</div>
+{% elif not groups %}
+<div class="alert alert-info">
+  這場演出的曲目目前沒有「{{ user_family.name }}」的分譜。可能是幹部尚未上傳，或曲目尚未排定。
+</div>
+{% else %}
+<p class="text-muted small mb-3">
+  同族群的各樂器／聲部分譜都會列出，請依你實際擔任的聲部自行選擇下載。
+</p>
+{% for group in groups %}
+<div class="card mb-3">
+  <div class="card-header fw-semibold">{{ group.full_score.title }}</div>
+  <div class="card-body">
+    <div class="d-flex flex-wrap gap-2">
+      {% for part in group.parts %}
+      <div class="border rounded px-3 py-2 small">
+        <div class="fw-medium">{{ part.instrument.name }}</div>
+        {% if part.section %}<div class="text-muted">{{ part.section.name }}</div>{% endif %}
+        {% if part.file %}
+        <a href="{% url 'scores:score_download' part.pk %}" class="text-success">
+          <i class="bi bi-download"></i> 下載
+        </a>
+        {% else %}
+        <span class="text-muted">尚未上傳</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

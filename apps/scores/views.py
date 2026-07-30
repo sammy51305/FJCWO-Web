@@ -7,6 +7,7 @@ from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 
 from apps.accounts.models import InstrumentFamily, InstrumentType, SectionType
+from apps.events.models import PerformanceEvent
 
 from .models import Score
 
@@ -336,3 +337,47 @@ def score_download(request, pk):
     if not score.file:
         raise Http404
     return FileResponse(score.file.open('rb'), as_attachment=True, filename=score.file.name.split('/')[-1])
+
+
+@login_required
+def performance_parts(request, pk):
+    """
+    演出分譜下載入口：依登入者的樂器族群，篩選出這場演出曲目單裡用得到的分譜。
+
+    關聯路徑：PerformanceEvent → Setlist.score（總譜）→ Score.parts（分譜）。
+    篩選層級：User.instrument 指向「樂器族群」(InstrumentFamily)，Score.instrument 指向
+    「具體樂器」(InstrumentType)，兩者差一層，因此用 instrument__family 比對族群——
+    同族群底下各具體樂器／聲部的分譜全部列出，由團員自行判斷要下載哪一份
+    （呼應「不強制指定聲部」的設計）。
+    """
+    event = get_object_or_404(PerformanceEvent, pk=pk)
+    user_family = request.user.instrument
+
+    groups = []
+    if user_family:
+        parts = (
+            Score.objects
+            .filter(
+                score_type=Score.ScoreType.PART,
+                full_score__setlists__event=event,
+                instrument__family=user_family,
+            )
+            .select_related('instrument', 'section', 'full_score')
+            .distinct()
+            .order_by('full_score__title', 'instrument__name', 'section__name')
+        )
+        # 依所屬總譜（曲目）分組，方便前端一首一首列；parts 已依 full_score__title 排序，
+        # dict 保留插入順序，group 自然照曲名排列
+        grouped = {}
+        for part in parts:
+            grouped.setdefault(
+                part.full_score_id,
+                {'full_score': part.full_score, 'parts': []},
+            )['parts'].append(part)
+        groups = list(grouped.values())
+
+    return render(request, 'scores/performance_parts.html', {
+        'event': event,
+        'groups': groups,
+        'user_family': user_family,
+    })

@@ -1426,39 +1426,49 @@ def push_line_message(text: str) -> None:
 
 ### 4.19 演出分譜下載（scores）
 
-> **※ 規劃中，尚未實作。** 這節原本寫成已完成功能，但實際程式碼裡沒有 `performance_parts` 這個 view，
-> `apps/scores/urls.py` 也沒有對應路由——這裡記錄的是當初的設計構想，不是現況。
-> 跟 [Architecture.md](Architecture.md) 頁面權限結構裡「分譜查詢（我被分配到哪些譜）※ 規劃中」
-> 對得上，只是這份文件之前忘了同步標記成規劃中，2026-07-12 發現並修正。
-> 目前團員要看分譜，只能透過 `score_list`／`score_detail` 自己搜尋瀏覽，沒有「依演出活動 +
-> 自己的樂器」自動篩選的專屬入口。
+**檔案**：`apps/scores/views.py`（`performance_parts`）、路由：`/scores/performance/<pk>/parts/`
+入口：演出活動詳情頁「演出曲目」卡片的「我的分譜」按鈕（有排定曲目時才顯示）。
 
-**檔案**：`apps/scores/views.py`（`performance_parts`，待新增）、路由：`/scores/performance/<pk>/parts/`（待新增）
-
-**登入者可用**，依登入者的樂器篩選該演出的分譜。
+**登入者可用**，依登入者的樂器族群，自動篩選出這場演出曲目單裡用得到的分譜。
 
 #### 資料查詢邏輯
 
 ```python
-# 取得該演出 setlist 內的所有分譜，篩選符合登入者樂器
 parts = Score.objects.filter(
-    setlist__event=event,
     score_type=Score.ScoreType.PART,
-    instrument=request.user.instrument,
-).order_by('section__name')
+    full_score__setlists__event=event,           # 分譜的總譜有被排進這場演出
+    instrument__family=request.user.instrument,  # 依登入者的樂器族群
+).select_related('instrument', 'section', 'full_score').distinct()
 ```
 
-#### 顯示規則
+關聯路徑是 **PerformanceEvent → Setlist.score（總譜）→ Score.parts（分譜）**，不是直接從分譜連到演出。
+分譜透過 `full_score` 掛在總譜下，被 `Setlist` 排進演出的是總譜，所以要用 `full_score__setlists__event`
+反查。查完依所屬總譜（曲目）分組，前端一首一首列出。
 
-| 情況 | `section` 欄位 | 前端顯示 |
-|------|--------------|---------|
-| 同樂器只有一份 PDF（聲部合併）| `None`（空白）| 直接顯示下載按鈕 |
-| 同樂器有多份 PDF（各聲部獨立）| 各自有值（第一部、第二部…）| 列出所有聲部讓團員自行選擇 |
+> **⚠️ 樂器層級差一層（實作時的關鍵修正）**
+> `User.instrument` 指向 **`InstrumentFamily`（族群）**，而 `Score.instrument` 指向
+> **`InstrumentType`（具體樂器）**，兩者不同層級。所以不能寫 `instrument=request.user.instrument`
+> （型別對不上），必須用 `instrument__family=request.user.instrument` 以族群比對。
+> 本節早期曾寫成 `setlist__event` ＋ `instrument=user.instrument`，兩處都與實際 Model 對不上，
+> 2026-07-31 實作時依真實 schema 修正。
+
+#### 顯示規則：族群內全列，讓團員自選
+
+同族群底下各具體樂器／聲部的分譜全部列出（例：薩克斯風族會同時出現中音、次中音…各聲部），
+有 PDF 的顯示下載按鈕，沒 PDF 的顯示「尚未上傳」。
 
 #### 設計選擇：不強制指定聲部
 
 指揮可能在排練過程中調度聲部，事先指定每位團員的聲部會增加維護負擔。
-改由團員登入後自行判斷要下載哪個聲部，系統只負責篩選「正確樂器」的譜。
+系統只負責篩選「正確樂器族群」的譜，由團員登入後自行判斷要下載哪個聲部——
+這也正好呼應「User 只記錄到族群層級」的資料設計：族群篩選是現有欄位能做到的最精準篩選。
+
+#### 邊界情況
+
+| 情況 | 前端顯示 |
+|------|---------|
+| 登入者未設定樂器族群（`User.instrument` 為空）| 提示請洽幹部設定，並附樂譜庫存連結 |
+| 這場沒有該族群的分譜 | 友善訊息（可能尚未上傳或曲目未排定）|
 
 ---
 
@@ -1593,10 +1603,7 @@ charter.save()
   是否要整合成一套「出席意願」狀態機，還是維持三套各自獨立？
 - 誰來看「還有哪些人沒回應」？是否需要一個提醒/催促機制？
 
-### 3. 演出分譜統一下載入口（`performance_parts`）
-
-補實作 §4.19 已經寫好的設計（依演出活動 + 登入者的樂器，自動篩選出該演出用得到的分譜），
-文件內容可以直接拿來當實作依據，不需要重新設計。
+~~### 3. 演出分譜統一下載入口（`performance_parts`）~~ → 已完成（2026-07-31），見 §4.19「演出分譜下載」
 
 ### 4. 每年 12/25 前需提供團員名單向政府申報的提醒
 
