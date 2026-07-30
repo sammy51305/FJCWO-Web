@@ -3,7 +3,7 @@
 ## 專案概述
 
 輔仁大學百韻管樂團（FJCWO）內部管理系統。Django 6.x + PostgreSQL + Bootstrap 5。
-Phase 2 功能全部完成（LINE Bot 通知除外），Phase 3（會議紀錄 AI、演出手冊）尚未開始。
+Phase 2 功能全部完成（含 LINE Bot 群組通知），Phase 3（會議紀錄 AI、演出手冊）尚未開始。
 
 詳細架構、Model 欄位、頁面權限結構 → `_notes/Architecture.md`
 各系統設計邏輯、關聯圖 → `_notes/DESIGN.md`
@@ -44,14 +44,16 @@ venv\Scripts\python.exe manage.py test apps.scores --verbosity=2  # 單一 app
 - N+1 防護：跨 FK 查詢一律加 `select_related` / `prefetch_related`
 - 冪等操作：用 `get_or_create`，不用手動判斷 exist
 - 測試結構：每個 app 一支 `tests.py`，class 用中文 docstring 說明目的
-- Commit message：`type: 中文說明`（type = feat / fix / docs / refactor）
+- Commit message：`type(scope): 中文說明`（type = feat / fix / docs / refactor…，scope = app 名稱；完整規範見 `_notes/WORKFLOW.md`）
 
-## 五份文件各自的職責
+## 文件導覽
 
-| 文件 | 記錄什麼 |
-|------|---------|
-| `Architecture.md` | Model 欄位表、頁面權限、系統清單、目錄結構、Phase 進度 |
-| `DESIGN.md` | FK 關聯圖、各系統設計邏輯與決策（4.x 節） |
-| `TESTING.md` | 測試總數、各 class 說明、未覆蓋功能 |
-| `SETUP.md` | 從零建環境步驟，含 fixtures 載入順序 |
-| `DESIGN.md` 附錄二〜四 | 確認無問題的項目、設計選擇備忘、待評估項目 |
+`_notes/` 下有多份文件，**入口與動線**如下：
+
+```
+CLAUDE.md（你在這 — 工作指引）
+    → _notes/GUIDE.md      不知道查哪份文件？從這裡找（唯一的文件職責索引）
+    → _notes/WORKFLOW.md   開發流程、commit 前 checklist、commit message 規範
+```
+
+各文件記錄什麼、該更新哪一份，一律以 `_notes/GUIDE.md` 為準，不在此重複維護。

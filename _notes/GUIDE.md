@@ -1,6 +1,15 @@
 # _notes 文件導覽
 
 開發時不知道要查哪份文件，從這裡找。
+**本檔是「各文件職責」的唯一來源** —— CLAUDE.md 與 WORKFLOW.md 都指回這裡，不各自維護重複的職責表。
+
+新人閱讀動線：
+
+```
+CLAUDE.md（專案根目錄 — 工作指引：概述 / 環境 / 慣例）
+    → GUIDE.md（你在這 — 文件地圖）
+        → 各專門文件（Architecture / DESIGN / TESTING / SETUP / OVERVIEW / WORKFLOW）
+```
 
 ---
 
@@ -27,6 +36,8 @@
 
 | 文件 | 記錄什麼 | 不記錄什麼 |
 |------|---------|-----------|
+| `../CLAUDE.md` | 專案入口：概述、開發環境、重要慣例、往各文件指路 | 詳細架構、設計邏輯、文件職責表 |
+| [GUIDE.md](GUIDE.md) | 文件導覽、各文件職責索引（本檔） | 文件的具體內容 |
 | [Architecture.md](Architecture.md) | Model 欄位表、頁面權限、系統清單、目錄結構、Phase 進度 | 設計邏輯、實作細節 |
 | [DESIGN.md](DESIGN.md) | FK 關聯圖、各系統設計邏輯與決策、設計選擇備忘、待評估項目 | 欄位清單（在 Architecture）|
 | [TESTING.md](TESTING.md) | 測試總數、各 class 說明、執行方式、未覆蓋功能 | 測試的具體程式碼 |

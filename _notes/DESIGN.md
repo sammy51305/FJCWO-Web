@@ -1616,6 +1616,19 @@ charter.save()
 
 ~~### 6. 首頁 Dashboard 應該顯示請假審核結果~~ → 已完成，見 §4.11「為什麼待審核清單看不到核准/拒絕結果」
 
+### 7. 財務系統前端管理頁面
+
+`FinanceRecord`／`MembershipFee` 兩個 model 已經存在（`apps/finance/models.py`，見 §4.7），
+目前只有 Model + Admin，所有財務操作都透過 Django Admin 進行，沒有任何前端頁面。
+`MembershipFee`（會費繳納）已經有報表的「查詢」面（見會費繳納報表），但**建立/編輯繳費紀錄
+仍只能走 Admin**。待討論的是要不要比照其他系統補前端頁面，實作前需要先想清楚：
+
+- 範圍到哪？只補 `MembershipFee`（幹部登記某人某期已繳），還是連 `FinanceRecord`
+  （一般收支明細）也要前端化？
+- 財務資料敏感度較高，前端頁面的權限要不要比一般幹部功能更嚴（例如只限特定財務幹部）？
+- 附錄四已記錄 `MembershipFee.amount`／`FinanceRecord.amount` 無正數驗證——若要做前端
+  建立/編輯入口，這裡會變成使用者可直接觸發的路徑，屆時應一併補上驗證。
+
 ---
 
 ## 附錄一：常見 Django 概念速查
