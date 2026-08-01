@@ -1660,28 +1660,98 @@ charter.save()
 - 移除 `GuestMember`、移除 `PartAssignment.guest_member`（分譜分配改只用 `member` 指 User）
 - 通訊錄與通訊錄名冊報表要把槍手分流（正式名冊不含槍手）
 
+**登入層級決策（2026-08-02 定案）—— 採 (a) 純名冊型起步**
+三個層級曾並列考慮：
+- **(a) 純名冊型**：槍手不登入，只是幹部登記的「人」，出現在分譜分配 / 演出名單 / 出席；本人不碰系統。最單純，且「跨場 + 轉正」仍成立（轉正時才開帳號）。**← 採用**
+- (b) 輕度自助型：槍手能登入，只做與「來幫忙演出」直接相關的事。
+- (c) 等同團員型：槍手登入後幾乎與正式團員相同，只差身分標記。**排除**——外部人登入後幾乎等同團員，最大化團員限定資料曝光，與下表 ❌ 自相矛盾。
+
+選 (a) 的理由：(a) 已滿足方案 C 的兩個核心目標（跨場 + 轉正），登入能力對這兩件事無貢獻；槍手是信任較低的外部人，不給登入＝沒有 session＝團員限定資料沒有可外洩的路徑。**(a) 是 (b) 的嚴格子集**，資料模型完全一樣，日後真出現「槍手要自助抓分譜」的痛，再對個別槍手開通即可，模型不動。
+
+若日後升級 (b)/(c)，各功能開放建議（先記著，(a) 階段不實作）：
+
+| 功能 | 建議槍手 |
+|------|:---:|
+| 看自己要參加的演出／排練時間 | ✅ |
+| 下載自己樂器的分譜（§4.19）| ✅ |
+| QR 排練簽到 | ✅ |
+| 申請請假 | ⚠️ 待定 |
+| 看公開公告 | ✅ |
+| 看團員限定公告 | ❌ |
+| 樂譜庫存全庫瀏覽／下載 | ❌ |
+| 團員通訊錄（含電話）| ❌ |
+| 編輯自己的個人資料 | ✅ |
+
+---
+
+#### 方案 C 實作藍圖（(a) 純名冊型）
+
+**核心概念**：槍手 = 一筆 `User`、有帳號雛形但**無法登入**；參加哪些場完全由既有 `PartAssignment` / `PerformanceAttendance` 反向帶出，人身上不記「綁哪一場」。
+
+```
+現況（要淘汰）                          方案 C（身分制）
+GuestMember ──event(必填)──▶ 一場        User(role=guest) ──被多場參照──▶ 多場
+     ▲ CASCADE                              ▲ PartAssignment.member
+換一場就重建、系統不認得同一人              同一人天然跨場、轉正只改 role
+```
+
+**（1）資料模型改動**
+
+`User`（accounts）：
+| 改動 | 內容 | 說明 |
+|------|------|------|
+| `Role` 新增 `GUEST` | `GUEST = 'guest', '槍手'` | 沿用既有 role 機制，`is_officer` 自然為 False，不新增布林欄位 |
+| `email` 放寬 | `null=True, blank=True`（保留 `unique`）| 槍手常無 email；Postgres 允許多個 NULL 不衝突 |
+| 新增 `from_band` | `CharField('來自樂團', max_length=100, blank=True)` | 承接 `GuestMember.from_band` |
+| `REQUIRED_FIELDS` | 移除 `email`，留 `name` | email 不再強制 |
+
+`PartAssignment`（events）：移除 `guest_member` FK；`member` 改 `null=False`；`clean()` 的 member/guest 互斥驗證整段刪除（同時清掉附錄四那條「互斥驗證可被 ORM 繞過」的技術債）。
+
+移除 `GuestMember` model：DB 已查核無資料、無 PartAssignment 參照 → 直接 drop table，**不需搬遷**。
+
+> **樂器欄位落差**：`User.instrument` 指 `InstrumentFamily`（族群，粗），舊 `GuestMember.instrument` 指 `InstrumentType`（樂器，細）。方案 C 下槍手比照團員存族群即可——每場精確樂器本來就記在 `PartAssignment.instrument`（InstrumentType），不遺失資訊。
+
+Migration 順序：① accounts（Role 加 GUEST 僅 choices + 新增 from_band + email 改 null/blank）② events（PartAssignment 移除 guest_member、member 改 null=False；刪除 GuestMember）。
+
+**（2）系統流程**
+
+```
+新增槍手：幹部填表(姓名必填/來自樂團/樂器族群/聲部/電話/email 選填)
+  → user = User(role=GUEST, is_active=True, must_change_password=False)
+    user.set_unusable_password()   # 關鍵：登不進系統；不寄帳密信
+  → 槍手進入人員池，立即可在分譜分配下拉被選取
+
+指派演出：分譜分配 member 下拉 = 正式團員 + 槍手
+  → 同一槍手可被多場 PartAssignment 參照 → 天然跨場、系統認得同一人
+
+轉正：幹部按「轉為正式團員」
+  → role: guest → member；補 email；must_change_password=True + 給臨時密碼
+    （直接複用現有「幹部代建帳號」流程）
+  → 過去所有 PartAssignment / PerformanceAttendance 仍指向同一 User pk
+    ∴ 履歷零搬遷、天然接上
+```
+
+額外好處：槍手成為 `User` 後，`PerformanceAttendance.member`（現況只吃 User）**也能記錄槍手演出出席**——現況 GuestMember 做不到。
+
+**（3）資安守則（硬性規定，2026-08-02 資安盤點結論）**
+
+背景：系統登入只有「帳號＋密碼」一條路（`ModelBackend`，無自訂後端、無 password reset、無 LINE/OAuth 登入），`set_unusable_password()` 的槍手在認證層即被擋。真正的風險面是「member-tier 頁面只擋 `@login_required`、不看身分」——槍手一旦有 session 就能踩到全庫樂譜、團員限定公告、通訊錄含電話等（§1660 表中 ❌ 項）。故：
+
+1. **建立槍手鐵則**：一律 `set_unusable_password()` + 不寄帳密信 + `must_change_password=False`。
+2. **顯式拒絕 guest 登入（採用）**：在 `AuthenticationForm.confirm_login_allowed()` 加 `if user.role == User.Role.GUEST: raise ValidationError('此帳號不可登入。')`。把「槍手不可登入」變成顯式、不因未來新增功能（如 password reset）而破的規則，不依賴「剛好沒有 reset」這種隱性前提。走 (b) 時再對被開通的槍手放行。
+3. **查詢分流是資安邊界，非顯示問題**——下列既有查詢不改就會讓槍手滲進團員視圖：
+   | 位置 | 現況 | 必改 |
+   |------|------|------|
+   | `member_directory` accounts/views.py:160 | `.exclude(role=ADMIN)` | 加 `.exclude(role=GUEST)`（含電話通訊錄不可含槍手）|
+   | `member_directory_report` accounts/views.py:206 | 同上 | 加 `.exclude(role=GUEST)` |
+   | `attendance_report` events/views.py:405 | `.filter(is_active=True).exclude(role=ADMIN)` | 依語意決定是否排除 GUEST（排練出席 matrix 是否含槍手）|
+4. **`is_active` 取捨**：槍手保持 `is_active=True`（`attendance_report`／分譜下拉用 `is_active=True` 撈人，False 會使槍手無法被指派）。登入安全由第 2 點保證，不靠 `is_active=False`。
+5. **根本原則（列為 (b) 前置條件）**：關鍵資源（全庫樂譜、團員通訊錄、團員限定公告）從「只 `@login_required`」升級為明文白名單 `role in (MEMBER, OFFICER, ADMIN)`，令未來任何新身分**預設拿不到**。改動面較大，(a) 階段可不做，但 (b) 開放登入前必做。
+
 **尚未決定（待拍板才進實作）**
-1. **槍手能做的事 / 要不要能登入**（最根本，決定其餘一切）：
-   - (a) 純名冊型：槍手不登入，只是幹部登記的「人」，出現在分譜分配 / 演出名單 / 出席；本人不碰系統。最單純，且「跨場 + 轉正」仍成立（轉正時才開帳號）。
-   - (b) 輕度自助型：槍手能登入，只做與「來幫忙演出」直接相關的事。
-   - (c) 等同團員型：槍手登入後幾乎與正式團員相同，只差身分標記。
-   - 若走 (b)/(c)，各功能初步建議：
+- **管理 UI 放法**：獨立「客座團員」頁　vs　整合進通訊錄用篩選切換（傾向後者：少開頁面、少一套權限判斷，但未定案）。
 
-     | 功能 | 建議槍手 |
-     |------|:---:|
-     | 看自己要參加的演出／排練時間 | ✅ |
-     | 下載自己樂器的分譜（§4.19）| ✅ |
-     | QR 排練簽到 | ✅ |
-     | 申請請假 | ⚠️ 待定 |
-     | 看公開公告 | ✅ |
-     | 看團員限定公告 | ❌ |
-     | 樂譜庫存全庫瀏覽／下載 | ❌ |
-     | 團員通訊錄（含電話）| ❌ |
-     | 編輯自己的個人資料 | ✅ |
-
-2. **管理 UI 放法**：獨立「客座團員」頁　vs　整合進通訊錄用篩選切換。
-
-> ⚠️ 以上為設計方向與待決事項，**尚未實作**。GuestMember 目前仍是現況所述的樣子。
+> ⚠️ 登入層級與實作藍圖已定案（(a) + 顯式拒絕登入），但**尚未實作**；管理 UI 放法仍待拍板。GuestMember 目前仍是現況所述的樣子。
 
 ~~### 6. 首頁 Dashboard 應該顯示請假審核結果~~ → 已完成，見 §4.11「為什麼待審核清單看不到核准/拒絕結果」
 
