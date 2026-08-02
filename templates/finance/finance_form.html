@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}{% if action == 'edit' %}編輯收支{% else %}新增收支{% endif %} — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'finance:finance_list' %}">收支明細</a></li>
+    <li class="breadcrumb-item active">{% if action == 'edit' %}編輯收支{% else %}新增收支{% endif %}</li>
+  </ol>
+</nav>
+
+{% if messages %}
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+{% endif %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <h2 class="mb-4">{% if action == 'edit' %}編輯收支{% else %}新增收支{% endif %}</h2>
+
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+
+      <div class="row">
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">類型 <span class="text-danger">*</span></label>
+          <select name="type" class="form-select" required>
+            <option value="">請選擇</option>
+            {% for value, label in type_choices %}
+            <option value="{{ value }}" {% if form_data.type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">分類 <span class="text-danger">*</span></label>
+          <select name="category" class="form-select" required>
+            <option value="">請選擇</option>
+            {% for value, label in category_choices %}
+            <option value="{{ value }}" {% if form_data.category == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">金額 <span class="text-danger">*</span></label>
+          <input type="number" name="amount" class="form-control" min="1" step="1"
+                 value="{{ form_data.amount }}" required>
+          <div class="form-text">須大於 0 的整數（元）。</div>
+        </div>
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">日期 <span class="text-danger">*</span></label>
+          <input type="date" name="date" class="form-control" value="{{ form_data.date }}" required>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">說明 <span class="text-danger">*</span></label>
+        <textarea name="description" class="form-control" rows="2" required>{{ form_data.description }}</textarea>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">關聯演出 <span class="text-muted small">（選填）</span></label>
+        <select name="related_event" class="form-select">
+          <option value="">不關聯</option>
+          {% for ev in events %}
+          <option value="{{ ev.pk }}" {% if form_data.related_event == ev.pk|stringformat:"s" %}selected{% endif %}>
+            {{ ev.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold">收據掃描檔 <span class="text-muted small">（選填）</span></label>
+        <input type="file" name="attachment" class="form-control">
+        {% if action == 'edit' and record.attachment %}
+        <div class="form-text">
+          目前已有：<a href="{% url 'finance:receipt_download' record.pk %}">下載</a>。重新上傳會取代舊檔。
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">{% if action == 'edit' %}儲存變更{% else %}新增{% endif %}</button>
+        <a href="{% url 'finance:finance_list' %}" class="btn btn-outline-secondary">取消</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

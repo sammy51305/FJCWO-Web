@@ -63,7 +63,7 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 
 ## 目前測試總覽
 
-共 **371 個測試**，分布在 8 個 app。
+共 **388 個測試**，分布在 8 個 app。
 
 ### `apps/accounts/tests.py`（112 個）
 
@@ -118,11 +118,13 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 |-------|---------|
 | `BorrowStatusReportTest` | 存取控制、空狀態訊息、借出中財產顯示、已還財產不顯示、逾期標記（overdue flag）、未到期不標記、overdue_count 正確計算 |
 
-### `apps/finance/tests.py`（10 個）
+### `apps/finance/tests.py`（27 個）
 
 | Class | 測試內容 |
 |-------|---------|
 | `MembershipFeeReportTest` | 存取控制、無期別時顯示提示、預設最新期別、GET 切換期別、已繳/未繳/無紀錄三種狀態分類計數、rows 涵蓋全體活躍非 admin 團員 |
+| `FinanceRecordCRUDTest` | 收支明細：存取控制（未登入/團員/幹部）、新增（登記者自動帶入）、amount 0/負數/缺說明被擋、編輯、刪除限管理員（幹部擋下、管理員可刪）、列表收入/支出/結餘摘要 |
+| `FeeEditTest` | 會費登記：一般團員無權限、登記已繳（設 paid_at 與收款幹部）、未繳（兩者為空）、同 member+period 再登記更新不重複、金額 0 被擋、缺團員/期別被擋 |
 
 ### `apps/announcements/tests.py`（23 個）
 

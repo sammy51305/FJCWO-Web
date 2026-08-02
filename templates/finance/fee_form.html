@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}登記會費 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'finance:membership_fee_report' %}">會費繳納狀況</a></li>
+    <li class="breadcrumb-item active">登記／編輯會費</li>
+  </ol>
+</nav>
+
+{% if messages %}
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+{% endif %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <h2 class="mb-4">登記／編輯會費</h2>
+
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">團員 <span class="text-danger">*</span></label>
+        <select name="member" class="form-select" required>
+          <option value="">請選擇</option>
+          {% for m in members %}
+          <option value="{{ m.pk }}" {% if form_data.member == m.pk|stringformat:"s" %}selected{% endif %}>
+            {{ m.name }}{% if m.instrument %}（{{ m.instrument.name }}）{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="row">
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">繳費期別 <span class="text-danger">*</span></label>
+          <input type="text" name="period" class="form-control" value="{{ form_data.period }}"
+                 placeholder="如：2026 上半年" required>
+        </div>
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">金額 <span class="text-danger">*</span></label>
+          <input type="number" name="amount" class="form-control" min="1" step="1"
+                 value="{{ form_data.amount }}" required>
+          <div class="form-text">須大於 0 的整數（元）。</div>
+        </div>
+      </div>
+
+      <div class="form-check mb-3">
+        <input type="checkbox" name="paid" id="paid" class="form-check-input"
+               {% if form_data.paid %}checked{% endif %}>
+        <label class="form-check-label" for="paid">已繳費</label>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold">繳費日期</label>
+        <input type="date" name="paid_at" class="form-control" value="{{ form_data.paid_at }}">
+        <div class="form-text">僅在勾選「已繳費」時生效；未勾選則視為未繳（清除繳費日與收款幹部）。</div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">儲存</button>
+        <a href="{% url 'finance:membership_fee_report' %}" class="btn btn-outline-secondary">取消</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

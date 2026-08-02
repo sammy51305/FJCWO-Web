@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 
 
@@ -18,7 +19,8 @@ class FinanceRecord(models.Model):
 
     type = models.CharField('類型', max_length=10, choices=Type)
     category = models.CharField('分類', max_length=30, choices=Category)
-    amount = models.DecimalField('金額', max_digits=10, decimal_places=0)
+    amount = models.DecimalField('金額', max_digits=10, decimal_places=0,
+                                 validators=[MinValueValidator(1)])
     date = models.DateField('日期')
     description = models.TextField('說明')
     attachment = models.FileField('收據掃描檔', upload_to='finance/', blank=True)
@@ -46,7 +48,8 @@ class MembershipFee(models.Model):
         related_name='membership_fees', verbose_name='團員'
     )
     period = models.CharField('繳費期別', max_length=50)
-    amount = models.DecimalField('金額', max_digits=8, decimal_places=0)
+    amount = models.DecimalField('金額', max_digits=8, decimal_places=0,
+                                 validators=[MinValueValidator(1)])
     paid_at = models.DateField('繳費日期', null=True, blank=True)
     collected_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,

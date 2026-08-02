@@ -15,10 +15,25 @@
 {% block content %}
 <div class="d-flex align-items-center justify-content-between mb-4">
   <h2 class="mb-0">會費繳納狀況</h2>
-  <button class="btn btn-outline-secondary d-print-none" onclick="window.print()">
-    <i class="bi bi-printer"></i> 列印
-  </button>
+  <div class="d-flex gap-2 d-print-none">
+    <a href="{% url 'finance:fee_edit' %}{% if selected_period %}?period={{ selected_period }}{% endif %}"
+       class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-lg"></i> 登記繳費
+    </a>
+    <button class="btn btn-outline-secondary btn-sm" onclick="window.print()">
+      <i class="bi bi-printer"></i> 列印
+    </button>
+  </div>
 </div>
+
+{% if messages %}
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show d-print-none" role="alert">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+{% endif %}
 
 {# ── 期別選擇 ─────────────────────────────────── #}
 <form method="get" class="d-flex align-items-center gap-2 mb-4 d-print-none">
@@ -67,6 +82,7 @@
         <th>金額</th>
         <th>繳費日期</th>
         <th>收款幹部</th>
+        <th class="d-print-none"></th>
       </tr>
     </thead>
     <tbody>
@@ -86,6 +102,12 @@
         <td>{% if row.fee %}{{ row.fee.amount|floatformat:"0" }} 元{% else %}—{% endif %}</td>
         <td>{% if row.fee and row.fee.paid_at %}{{ row.fee.paid_at|date:"Y/m/d" }}{% else %}—{% endif %}</td>
         <td class="text-muted small">{% if row.fee and row.fee.collected_by %}{{ row.fee.collected_by.name }}{% else %}—{% endif %}</td>
+        <td class="d-print-none">
+          <a href="{% url 'finance:fee_edit' %}?member={{ row.member.pk }}&period={{ selected_period }}"
+             class="btn btn-sm btn-outline-secondary">
+            {% if row.status == 'no_record' %}登記{% else %}編輯{% endif %}
+          </a>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
@@ -94,6 +116,6 @@
 {% endif %}
 
 {% else %}
-<p class="text-muted">請先在 Django Admin 建立會費繳納紀錄（MembershipFee）後，再使用此報表。</p>
+<p class="text-muted">尚無任何會費紀錄。點右上角「登記繳費」開始建立第一筆（可自行輸入期別）。</p>
 {% endif %}
 {% endblock %}

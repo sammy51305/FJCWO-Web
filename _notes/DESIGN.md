@@ -775,7 +775,8 @@ pending（待審核）
 
 **檔案**：`apps/finance/models.py`
 
-目前只有 Model + Admin，尚未做前端頁面。所有財務操作透過 Django Admin 進行。
+幹部前端可管理收支明細（`FinanceRecord` CRUD，刪除限管理員）與會費登記（`MembershipFee`），
+詳見附錄五 §7；金額一律驗正數（`MinValueValidator(1)` ＋ view 層 >0 檢查）。
 
 #### 兩個 Model 的差異
 
@@ -1587,8 +1588,6 @@ charter.save()
 | 位置 | 問題描述 |
 |------|---------|
 | `AssetBorrow` | 無限制 `returned_at >= borrowed_at`，可建立時序不合理的記錄 |
-| `MembershipFee` | `amount` 無正數驗證，可存入 0 或負數 |
-| `FinanceRecord` | `amount` 無正數驗證 |
 | `Score` | `parent_score` self-FK 無防循環參照機制 |
 
 ---
@@ -1761,18 +1760,15 @@ Migration 順序：① accounts（Role 加 GUEST 僅 choices + 新增 from_band 
 
 ~~### 6. 首頁 Dashboard 應該顯示請假審核結果~~ → 已完成，見 §4.11「為什麼待審核清單看不到核准/拒絕結果」
 
-### 7. 財務系統前端管理頁面
+~~### 7. 財務系統前端管理頁面~~ → 已完成（2026-08-03）
 
-`FinanceRecord`／`MembershipFee` 兩個 model 已經存在（`apps/finance/models.py`，見 §4.7），
-目前只有 Model + Admin，所有財務操作都透過 Django Admin 進行，沒有任何前端頁面。
-`MembershipFee`（會費繳納）已經有報表的「查詢」面（見會費繳納報表），但**建立/編輯繳費紀錄
-仍只能走 Admin**。待討論的是要不要比照其他系統補前端頁面，實作前需要先想清楚：
-
-- 範圍到哪？只補 `MembershipFee`（幹部登記某人某期已繳），還是連 `FinanceRecord`
-  （一般收支明細）也要前端化？
-- 財務資料敏感度較高，前端頁面的權限要不要比一般幹部功能更嚴（例如只限特定財務幹部）？
-- 附錄四已記錄 `MembershipFee.amount`／`FinanceRecord.amount` 無正數驗證——若要做前端
-  建立/編輯入口，這裡會變成使用者可直接觸發的路徑，屆時應一併補上驗證。
+拍板「方案二：會費登記 ＋ 收支明細，一次到位」，權限沿用一般幹部（`is_officer`）：
+- **收支明細（FinanceRecord）**：幹部限定 CRUD（列表含收入/支出/結餘摘要與類型篩選、新增/編輯、
+  上傳收據、關聯演出）；**刪除限管理員**（財務敏感）；收據下載幹部限定。
+- **會費登記（MembershipFee）**：會費繳納報表每列可「登記/編輯」，`fee_edit` 以 member+period
+  `get_or_create`，設金額／是否已繳(`paid_at`)／收款幹部；可自行輸入新期別。
+- **金額驗證**：兩個 `amount` 皆加 `MinValueValidator(1)`，view 層另有 >0 檢查——
+  同時清掉附錄四原兩條 amount 技術債。
 
 ---
 

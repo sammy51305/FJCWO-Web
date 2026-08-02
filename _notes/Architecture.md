@@ -437,7 +437,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 幹部專區
 ├── 組織章程編輯（編輯章程全文）
 ├── 關於百韻內容管理（新增／編輯／刪除區塊、順序調整、草稿隱藏）
-├── 財務管理（Model + Admin）※ 尚無前端頁面
+├── 財務管理（收支明細 CRUD ＋ 會費登記；收支刪除限管理員）
 ├── 演出活動管理（建立／編輯演出活動、新增／編輯排練、演出曲目分配）
 │   └── 管理員限定：刪除演出活動（/events 列表頁與活動詳情頁皆可操作，含二次確認）
 ├── QR Code 簽到管理
@@ -605,7 +605,7 @@ FJCWO-Web/
 - [x] 演出活動 + 排練管理（Model + Admin + views + templates；含前端建立／編輯／標記取消，管理員可刪除）
 - [x] QR Code 簽到系統（Model + Admin + views + templates）
 - [x] 曲目分配（Model + Admin）
-- [x] 財務管理（Model + Admin）
+- [x] 財務管理（收支明細 CRUD、會費登記前端；amount 正數驗證）
 - [x] 樂譜庫存管理（Model + Admin + views + templates）
 - [x] 公用財產管理 + 借用系統（Model + Admin）
 - [x] 團員通訊錄（按樂器分組，電話/Email 幹部限定）

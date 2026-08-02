@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}收支明細 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0">收支明細</h2>
+  <a href="{% url 'finance:finance_create' %}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg"></i> 新增收支
+  </a>
+</div>
+
+{% if messages %}
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+{% endif %}
+
+<div class="d-flex gap-3 mb-4 flex-wrap">
+  <div class="card text-center px-4 py-2">
+    <div class="fs-5 fw-bold text-success">{{ income }}</div>
+    <div class="text-muted small">總收入</div>
+  </div>
+  <div class="card text-center px-4 py-2">
+    <div class="fs-5 fw-bold text-danger">{{ expense }}</div>
+    <div class="text-muted small">總支出</div>
+  </div>
+  <div class="card text-center px-4 py-2">
+    <div class="fs-5 fw-bold">{{ balance }}</div>
+    <div class="text-muted small">結餘</div>
+  </div>
+</div>
+
+<form method="get" class="mb-3">
+  <select name="type" class="form-select form-select-sm w-auto d-inline" onchange="this.form.submit()">
+    <option value="">全部類型</option>
+    <option value="income" {% if type_filter == 'income' %}selected{% endif %}>收入</option>
+    <option value="expense" {% if type_filter == 'expense' %}selected{% endif %}>支出</option>
+  </select>
+</form>
+
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>日期</th>
+        <th>類型</th>
+        <th>分類</th>
+        <th class="text-end">金額</th>
+        <th>說明</th>
+        <th>關聯演出</th>
+        <th>收據</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in records %}
+      <tr>
+        <td>{{ r.date|date:"Y/m/d" }}</td>
+        <td>
+          {% if r.type == 'income' %}
+          <span class="badge bg-success">收入</span>
+          {% else %}
+          <span class="badge bg-danger">支出</span>
+          {% endif %}
+        </td>
+        <td>{{ r.get_category_display }}</td>
+        <td class="text-end">{{ r.amount }}</td>
+        <td class="small">{{ r.description }}</td>
+        <td class="small text-muted">{{ r.related_event.name|default:"—" }}</td>
+        <td>
+          {% if r.attachment %}
+          <a href="{% url 'finance:receipt_download' r.pk %}" title="下載收據"><i class="bi bi-paperclip"></i></a>
+          {% else %}
+          <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+        <td>
+          <div class="d-flex gap-1">
+            <a href="{% url 'finance:finance_edit' r.pk %}" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-pencil"></i>
+            </a>
+            {% if user.is_superuser or user.is_admin_role %}
+            <form method="post" action="{% url 'finance:finance_delete' r.pk %}" class="d-inline">
+              {% csrf_token %}
+              <button class="btn btn-sm btn-outline-danger"
+                      onclick="return confirm('確定刪除這筆收支紀錄？此操作無法復原。')">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8" class="text-muted text-center py-3">目前沒有收支紀錄。</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
