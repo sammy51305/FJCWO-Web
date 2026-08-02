@@ -403,7 +403,7 @@ def attendance_report(request, pk):
     rehearsals = list(event.rehearsals.select_related('venue').order_by('sequence'))
     members = list(
         User.objects.filter(is_active=True)
-        .exclude(role=User.Role.ADMIN)
+        .exclude(role__in=[User.Role.ADMIN, User.Role.GUEST])
         .select_related('instrument', 'section')
         .order_by('instrument__category', 'instrument__name', 'name')
     )

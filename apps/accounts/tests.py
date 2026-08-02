@@ -1226,3 +1226,159 @@ class MemberDirectoryReportTest(TestCase):
         r = self.client.get(self.url, {'status': 'all'})
         self.assertContains(r, '在團笛手')
         self.assertContains(r, '已退團笛手')
+
+
+class GuestManageTest(TestCase):
+    """
+    客座團員（槍手）管理（/accounts/guests/…）
+
+    槍手＝role=GUEST 的 User（純名冊、不可登入）。涵蓋 CRUD、轉正，以及兩條資安邊界：
+    槍手不可登入系統、槍手不混入團員通訊錄。
+    """
+
+    def setUp(self):
+        self.family = InstrumentFamily.objects.create(
+            name='薩克斯風族', category=InstrumentFamily.Category.WOODWIND
+        )
+        self.officer = User.objects.create_user(
+            username='guest_officer', email='guest_officer@test.local', password='x',
+            name='槍手管理幹部', role=User.Role.OFFICER,
+        )
+        self.plain_member = User.objects.create_user(
+            username='guest_plain', email='guest_plain@test.local', password='x',
+            name='一般團員', role=User.Role.MEMBER,
+        )
+
+    def _make_guest(self, name='槍手甲', **kw):
+        g = User(username=f'g_{name}', name=name, role=User.Role.GUEST, is_active=True, **kw)
+        g.set_unusable_password()
+        g.save()
+        return g
+
+    # ── 存取控制 ────────────────────────────────────────
+
+    def test_list_unauthenticated_redirects(self):
+        """未登入應導向登入頁"""
+        r = self.client.get(reverse('accounts:guest_list'))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    def test_list_member_forbidden(self):
+        """一般團員無權限進入客座團員管理"""
+        self.client.force_login(self.plain_member)
+        r = self.client.get(reverse('accounts:guest_list'), follow=True)
+        self.assertContains(r, '權限不足')
+
+    def test_officer_can_view_list(self):
+        """幹部可開啟客座團員列表"""
+        self.client.force_login(self.officer)
+        r = self.client.get(reverse('accounts:guest_list'))
+        self.assertEqual(r.status_code, 200)
+
+    # ── 新增 ────────────────────────────────────────────
+
+    def test_create_guest(self):
+        """新增槍手：role=GUEST、is_active、不可登入、空 email 存 NULL"""
+        self.client.force_login(self.officer)
+        r = self.client.post(reverse('accounts:guest_create'), {
+            'name': '客座小明', 'from_band': '隔壁樂團',
+            'instrument': self.family.pk, 'phone': '0900000000', 'email': '',
+        })
+        self.assertRedirects(r, reverse('accounts:guest_list'))
+        g = User.objects.get(name='客座小明')
+        self.assertEqual(g.role, User.Role.GUEST)
+        self.assertTrue(g.is_active)
+        self.assertFalse(g.has_usable_password())  # 關鍵：不可登入
+        self.assertIsNone(g.email)                 # 空 email 存 NULL（避免違反 unique）
+        self.assertEqual(g.from_band, '隔壁樂團')
+
+    def test_create_requires_name(self):
+        """姓名空白不建立"""
+        self.client.force_login(self.officer)
+        self.client.post(reverse('accounts:guest_create'), {'name': ''})
+        self.assertFalse(User.objects.filter(role=User.Role.GUEST).exists())
+
+    def test_create_duplicate_email_blocked(self):
+        """填了已被使用的 email 應擋下"""
+        self.client.force_login(self.officer)
+        self.client.post(reverse('accounts:guest_create'), {
+            'name': '撞號槍手', 'email': self.officer.email,
+        })
+        self.assertFalse(User.objects.filter(name='撞號槍手').exists())
+
+    # ── 編輯 ────────────────────────────────────────────
+
+    def test_edit_guest(self):
+        """編輯槍手基本資料"""
+        g = self._make_guest()
+        self.client.force_login(self.officer)
+        self.client.post(reverse('accounts:guest_edit', args=[g.pk]), {
+            'name': '槍手乙', 'from_band': '新樂團',
+        })
+        g.refresh_from_db()
+        self.assertEqual(g.name, '槍手乙')
+        self.assertEqual(g.from_band, '新樂團')
+
+    # ── 轉正 ────────────────────────────────────────────
+
+    def test_promote_guest_to_member(self):
+        """轉正：role→member、補 email、開通登入、標記強制改密碼"""
+        g = self._make_guest()
+        self.client.force_login(self.officer)
+        r = self.client.post(reverse('accounts:guest_promote', args=[g.pk]), {
+            'email': 'promoted@test.local',
+        })
+        self.assertRedirects(r, reverse('accounts:member_directory'))
+        g.refresh_from_db()
+        self.assertEqual(g.role, User.Role.MEMBER)
+        self.assertEqual(g.email, 'promoted@test.local')
+        self.assertTrue(g.has_usable_password())  # 轉正後可登入
+        self.assertTrue(g.must_change_password)
+
+    def test_promote_requires_email(self):
+        """轉正未填 email 應擋下，維持槍手身分"""
+        g = self._make_guest()
+        self.client.force_login(self.officer)
+        self.client.post(reverse('accounts:guest_promote', args=[g.pk]), {'email': ''})
+        g.refresh_from_db()
+        self.assertEqual(g.role, User.Role.GUEST)
+
+    # ── 刪除 ────────────────────────────────────────────
+
+    def test_delete_guest_without_records(self):
+        """無關聯紀錄的槍手可直接刪除"""
+        g = self._make_guest()
+        self.client.force_login(self.officer)
+        r = self.client.post(reverse('accounts:guest_delete', args=[g.pk]))
+        self.assertRedirects(r, reverse('accounts:guest_list'))
+        self.assertFalse(User.objects.filter(pk=g.pk).exists())
+
+    # ── 資安：槍手不可登入 ───────────────────────────────
+
+    def test_guest_cannot_login_even_with_password(self):
+        """即使槍手被設了可用密碼，登入表單仍顯式擋下（confirm_login_allowed）"""
+        User.objects.create_user(
+            username='login_guest', email='login_guest@test.local',
+            password='guestpass123', name='想登入的槍手', role=User.Role.GUEST,
+        )
+        r = self.client.post(reverse('accounts:login'), {
+            'username': 'login_guest', 'password': 'guestpass123',
+        })
+        self.assertEqual(r.status_code, 200)  # 沒導向 = 登入失敗，留在登入頁
+        self.assertFalse(r.wsgi_request.user.is_authenticated)
+
+    # ── 資安：通訊錄分流 ─────────────────────────────────
+
+    def test_guest_excluded_from_directory(self):
+        """槍手不得出現在團員通訊錄"""
+        self._make_guest(name='隱形槍手')
+        self.client.force_login(self.officer)
+        r = self.client.get(reverse('accounts:member_directory'))
+        self.assertNotContains(r, '隱形槍手')
+
+    def test_guest_shown_in_guest_list(self):
+        """槍手出現在客座團員列表"""
+        self._make_guest(name='列表槍手')
+        self.client.force_login(self.officer)
+        r = self.client.get(reverse('accounts:guest_list'))
+        self.assertContains(r, '列表槍手')

@@ -93,12 +93,13 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | username | 帳號 |
 | password | 密碼 |
 | name | 真實姓名 |
-| email | Email |
-| role | 角色：`member`（團員）/ `officer`（幹部）/ `admin`（管理員）|
+| email | Email（可空；槍手 `role=guest` 常無 email，存 NULL）|
+| role | 角色：`member`（團員）/ `officer`（幹部）/ `admin`（管理員）/ `guest`（槍手，純名冊、不可登入）|
 | instrument | 樂器族群（關聯 InstrumentFamily，團員層級識別用）|
 | section | 聲部（關聯 SectionType）|
 | grad_year | 畢業年份 |
 | phone | 電話（幹部限定可查）|
+| from_band | 來自樂團（僅槍手 `role=guest` 適用）|
 | line_user_id | LINE 帳號 ID（用於 Bot 推播）|
 | must_change_password | 是否需強制設定新密碼（幹部代建帳號的臨時密碼登入後會被要求）|
 | is_active | Django 內建欄位，借用來標記「是否在團」：`False` 代表已退團（軟刪除，保留所有歷史紀錄）|
@@ -230,13 +231,10 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 記錄每位成員在特定曲目中負責的樂器與聲部。
 （一位團員可能在不同曲目擔任不同樂器或聲部，因此獨立記錄）
 
-`member` 與 `guest_member` 必須恰好填入一個，不可同時填或同時空白。
-
 | 欄位 | 說明 |
 |------|------|
 | setlist | 哪場演出的哪首曲（關聯 Setlist）|
-| member | 正式團員（關聯 User，可空）|
-| guest_member | 客座團員（關聯 GuestMember，可空）|
+| member | 團員（關聯 User，必填；含 `role=guest` 的槍手）|
 | instrument | 該曲目負責的樂器（關聯 InstrumentType）|
 | section | 該曲目負責的聲部（關聯 SectionType）|
 | score_part | 對應到哪張分譜（關聯 Score）|
@@ -380,18 +378,12 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | reviewed_at | 審核時間 |
 | result_seen | 團員是否已在首頁看過審核結果（核准/拒絕時設 False，首頁顯示過一次後設回 True）|
 
-### 客座團員（GuestMember）
+### 客座團員（槍手）
 
-演出時從別團借調的臨時成員，不需正式帳號，但需出現在分譜分配與演出出席中。
-
-| 欄位 | 說明 |
-|------|------|
-| name | 姓名 |
-| instrument | 樂器（關聯 InstrumentType）|
-| section | 聲部（關聯 SectionType）|
-| from_band | 來自哪個樂團 |
-| event | 參與哪場演出（關聯 PerformanceEvent）|
-| phone | 聯絡電話 |
+2026-08-03 起，槍手不再是獨立的 `GuestMember` model，而是併入 `User`
+（`role=guest`、`set_unusable_password` 不可登入、`from_band` 記來自樂團）。
+跨場參與、轉正為正式團員的設計理由見 [DESIGN.md](DESIGN.md) 附錄五 §5；
+管理入口為幹部限定的「客座團員」頁。
 
 ### 公告（Announcement）
 
@@ -450,7 +442,8 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 │   └── 管理員限定：刪除演出活動（/events 列表頁與活動詳情頁皆可操作，含二次確認）
 ├── QR Code 簽到管理
 ├── 場地主檔管理（查詢／篩選、新增／編輯、含 VenueTimeSlot 多時段管理；刪除限管理員，已被演出/排練引用時擋下）
-├── 團員通訊錄（按樂器分組，電話幹部限定，可查詢／篩選在團或已退團；幹部可新增團員、編輯資料、退團／恢復、無關聯紀錄時可真正刪除；管理員可強制刪除已有關聯紀錄的帳號）
+├── 團員通訊錄（按樂器分組，電話幹部限定，可查詢／篩選在團或已退團；幹部可新增團員、編輯資料、退團／恢復、無關聯紀錄時可真正刪除；管理員可強制刪除已有關聯紀錄的帳號；查詢一律排除槍手）
+├── 客座團員管理（槍手 CRUD ＋ 轉正為正式團員；`role=guest`、不可登入、不列入通訊錄）
 ├── 校友報到審核（查詢／篩選、核准／拒絕、重新開放審核、新增／編輯／刪除申請紀錄；核准時同步建立正式 User 帳號）
 ├── 請假審核（近期審核紀錄可刪除，限管理員）
 ├── 樂譜庫存管理（Model + Admin，瀏覽／新增／編輯（總譜／分譜，含綁定所屬總譜，列表頁顯示分譜所屬總譜）有前端，分譜批次上傳；刪除限管理員，列表頁與詳情頁皆可操作）

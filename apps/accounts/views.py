@@ -157,7 +157,7 @@ def member_directory(request):
     status_filter = request.GET.get('status', '') if request.user.is_officer else ''
     query = request.GET.get('q', '').strip()
 
-    members = User.objects.exclude(role=User.Role.ADMIN).select_related('instrument', 'section')
+    members = User.objects.exclude(role__in=[User.Role.ADMIN, User.Role.GUEST]).select_related('instrument', 'section')
 
     if status_filter == 'inactive':
         members = members.filter(is_active=False)
@@ -203,7 +203,7 @@ def member_directory_report(request):
         return redirect('accounts:member_directory')
 
     status_filter = request.GET.get('status', '')
-    members = User.objects.exclude(role=User.Role.ADMIN).select_related('instrument', 'section')
+    members = User.objects.exclude(role__in=[User.Role.ADMIN, User.Role.GUEST]).select_related('instrument', 'section')
 
     if status_filter == 'inactive':
         members = members.filter(is_active=False)
@@ -434,6 +434,196 @@ def member_create(request):
         'instruments': InstrumentFamily.objects.order_by('category', 'name'),
         'sections': SectionType.objects.all(),
     })
+
+
+# ── 客座團員（槍手）管理 ──────────────────────────────────────────
+# 槍手是 role=GUEST 的 User（純名冊人物、set_unusable_password 不可登入），與正式團員同一張人員表，
+# 但另用獨立頁管理，讓通訊錄維持只含正式團員（見 DESIGN 附錄五 §5）。
+
+
+@login_required
+def guest_list(request):
+    """客座團員（槍手）管理列表，幹部限定。"""
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('/')
+
+    query = request.GET.get('q', '').strip()
+    guests = User.objects.filter(role=User.Role.GUEST).select_related('instrument', 'section')
+    if query:
+        guests = guests.filter(Q(name__icontains=query) | Q(from_band__icontains=query))
+    guests = guests.order_by('instrument__category', 'instrument__name', 'name')
+
+    return render(request, 'accounts/guest_list.html', {
+        'guests': guests,
+        'query': query,
+    })
+
+
+def _apply_guest_form(request, guest):
+    """把 POST 資料寫進槍手 User 實例（新建或既有皆可），回傳 errors 清單。email 空白存 NULL。"""
+    name = request.POST.get('name', '').strip()
+    email = request.POST.get('email', '').strip()
+    instrument_id = request.POST.get('instrument', '')
+    section_id = request.POST.get('section', '')
+    from_band = request.POST.get('from_band', '').strip()
+    phone = request.POST.get('phone', '').strip()
+
+    errors = []
+    if not name:
+        errors.append('請填寫姓名。')
+    if email and User.objects.exclude(pk=guest.pk).filter(email=email).exists():
+        errors.append('此 Email 已被使用。')
+
+    if not errors:
+        guest.name = name
+        guest.email = email or None  # 空字串要存 NULL，否則多個槍手的 '' 會違反 unique
+        guest.instrument = InstrumentFamily.objects.filter(pk=instrument_id).first() if instrument_id else None
+        guest.section = SectionType.objects.filter(pk=section_id).first() if section_id else None
+        guest.from_band = from_band
+        guest.phone = phone
+    return errors
+
+
+def _guest_form_context(action, guest=None, form_data=None):
+    return {
+        'action': action,
+        'guest': guest,
+        'form_data': form_data if form_data is not None else {},
+        'instruments': InstrumentFamily.objects.order_by('category', 'name'),
+        'sections': SectionType.objects.all(),
+    }
+
+
+@login_required
+def guest_create(request):
+    """新增槍手：set_unusable_password 不可登入、不寄帳密信、role=GUEST、is_active=True。"""
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('accounts:guest_list')
+
+    if request.method == 'POST':
+        guest = User(
+            role=User.Role.GUEST,
+            is_active=True,
+            must_change_password=False,
+        )
+        errors = _apply_guest_form(request, guest)
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+            return render(request, 'accounts/guest_form.html',
+                          _guest_form_context('create', form_data=request.POST))
+        guest.username = _unique_username(guest.name or 'guest')
+        guest.set_unusable_password()  # 關鍵：槍手不可登入系統
+        guest.save()
+        messages.success(request, f'已新增槍手 {guest.name}。')
+        return redirect('accounts:guest_list')
+
+    return render(request, 'accounts/guest_form.html', _guest_form_context('create'))
+
+
+@login_required
+def guest_edit(request, pk):
+    """編輯槍手基本資料（幹部限定）。"""
+    guest = get_object_or_404(User, pk=pk, role=User.Role.GUEST)
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('accounts:guest_list')
+
+    if request.method == 'POST':
+        errors = _apply_guest_form(request, guest)
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+            return render(request, 'accounts/guest_form.html',
+                          _guest_form_context('edit', guest=guest, form_data=request.POST))
+        guest.save()
+        messages.success(request, f'已更新槍手 {guest.name} 的資料。')
+        return redirect('accounts:guest_list')
+
+    form_data = {
+        'name': guest.name,
+        'email': guest.email or '',
+        'instrument': str(guest.instrument_id or ''),
+        'section': str(guest.section_id or ''),
+        'from_band': guest.from_band,
+        'phone': guest.phone,
+    }
+    return render(request, 'accounts/guest_form.html',
+                  _guest_form_context('edit', guest=guest, form_data=form_data))
+
+
+@login_required
+def guest_promote(request, pk):
+    """
+    槍手轉正為正式團員：role guest→member、補 email、發臨時密碼並開通登入
+    （複用「臨時密碼 + 強制改密碼」機制）。過去的分譜分配/出席都指向同一 User pk，履歷天然接上。
+    """
+    guest = get_object_or_404(User, pk=pk, role=User.Role.GUEST)
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('accounts:guest_list')
+
+    if request.method == 'POST':
+        email = request.POST.get('email', '').strip()
+        errors = []
+        if not email:
+            errors.append('轉正需要 Email（用於寄送登入帳密）。')
+        elif User.objects.exclude(pk=guest.pk).filter(email=email).exists():
+            errors.append('此 Email 已被使用。')
+
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+        else:
+            password = get_random_string(10)
+            guest.role = User.Role.MEMBER
+            guest.email = email
+            guest.set_password(password)
+            guest.must_change_password = True
+            guest.save()
+            email_sent = send_temp_password_email(guest, guest.username, password)
+            if email_sent:
+                messages.success(request, f'已將 {guest.name} 轉為正式團員，帳密已寄送至 {email}。')
+            else:
+                messages.warning(
+                    request,
+                    f'已將 {guest.name} 轉為正式團員，但寄信失敗，請自行告知本人：'
+                    f'帳號：{guest.username}，臨時密碼：{password}。'
+                )
+            return redirect('accounts:member_directory')
+
+    return render(request, 'accounts/guest_promote.html', {'guest': guest})
+
+
+@login_required
+def guest_delete(request, pk):
+    """刪除槍手：比照 member_delete——無關聯可刪、有關聯擋下（管理員可強制）。"""
+    guest = get_object_or_404(User, pk=pk, role=User.Role.GUEST)
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('accounts:guest_list')
+
+    can_force_delete = request.user.is_superuser or request.user.is_admin_role
+
+    if request.method == 'POST':
+        if not can_force_delete and _user_has_related_records(guest):
+            messages.error(
+                request,
+                f'{guest.name} 已有相關紀錄（分譜分配／出席等），無法直接刪除。'
+            )
+        else:
+            name = guest.name
+            try:
+                guest.delete()
+                messages.success(request, f'已刪除槍手 {name}。')
+            except ProtectedError:
+                messages.error(
+                    request,
+                    f'{name} 有無法自動處理的關聯資料，請先於 Django Admin 處理後再刪除。'
+                )
+    return redirect('accounts:guest_list')
 
 
 def registration_apply(request):

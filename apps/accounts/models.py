@@ -53,9 +53,12 @@ class User(AbstractUser):
         MEMBER = 'member', '團員'
         OFFICER = 'officer', '幹部'
         ADMIN = 'admin', '管理員'
+        GUEST = 'guest', '槍手'
 
     name = models.CharField('真實姓名', max_length=50)
-    email = models.EmailField('Email', unique=True)
+    # email 可空：槍手（role=GUEST）常沒有 email。保留 unique（Postgres 允許多個 NULL 不衝突），
+    # 所以「無 email」必須存成 NULL，不能存空字串 ''（多個 '' 會違反 unique）。
+    email = models.EmailField('Email', unique=True, null=True, blank=True)
     role = models.CharField('角色', max_length=10, choices=Role, default=Role.MEMBER)
     instrument = models.ForeignKey(
         InstrumentFamily, on_delete=models.SET_NULL,
@@ -67,13 +70,14 @@ class User(AbstractUser):
     )
     grad_year = models.PositiveSmallIntegerField('畢業年份', null=True, blank=True)
     phone = models.CharField('電話', max_length=20, blank=True)
+    from_band = models.CharField('來自樂團', max_length=100, blank=True, help_text='僅槍手（role=guest）適用')
     line_user_id = models.CharField('LINE User ID', max_length=100, blank=True)
     must_change_password = models.BooleanField(
         '需重設密碼', default=False,
         help_text='幹部代為建立帳號時設為 True，登入後會被強制導向設定新密碼頁面'
     )
 
-    REQUIRED_FIELDS = ['name', 'email']
+    REQUIRED_FIELDS = ['name']
 
     class Meta:
         verbose_name = '使用者'
@@ -98,6 +102,10 @@ class User(AbstractUser):
     @property
     def is_admin_role(self):
         return self.role == self.Role.ADMIN
+
+    @property
+    def is_guest(self):
+        return self.role == self.Role.GUEST
 
 
 class Registration(models.Model):

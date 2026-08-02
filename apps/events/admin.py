@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from apps.notifications.utils import fmt_dt, push_line_message
 
-from .models import (GuestMember, LeaveRequest, PartAssignment,
+from .models import (LeaveRequest, PartAssignment,
                      PerformanceAttendance, PerformanceEvent, Rehearsal,
                      RehearsalAttendance, RehearsalQRToken, Setlist)
 
@@ -81,13 +81,6 @@ class RehearsalQRTokenAdmin(admin.ModelAdmin):
     list_filter = ['is_active']
 
 
-@admin.register(GuestMember)
-class GuestMemberAdmin(admin.ModelAdmin):
-    list_display = ['name', 'instrument', 'section', 'from_band', 'event']
-    list_filter = ['event', 'instrument']
-    search_fields = ['name', 'from_band']
-
-
 @admin.register(RehearsalAttendance)
 class RehearsalAttendanceAdmin(admin.ModelAdmin):
     list_display = ['rehearsal', 'member', 'status', 'checked_in_at']
@@ -110,7 +103,7 @@ class SetlistAdmin(admin.ModelAdmin):
 
 @admin.register(PartAssignment)
 class PartAssignmentAdmin(admin.ModelAdmin):
-    list_display = ['setlist', 'member', 'guest_member', 'instrument', 'section']
+    list_display = ['setlist', 'member', 'instrument', 'section']
     list_filter = ['setlist__event', 'instrument']
 
 

@@ -94,29 +94,6 @@ class RehearsalQRToken(models.Model):
         return self.is_active and timezone.now() <= self.expires_at
 
 
-class GuestMember(models.Model):
-    name = models.CharField('姓名', max_length=50)
-    instrument = models.ForeignKey(
-        'accounts.InstrumentType', on_delete=models.PROTECT, verbose_name='樂器'
-    )
-    section = models.ForeignKey(
-        'accounts.SectionType', on_delete=models.PROTECT, verbose_name='聲部'
-    )
-    from_band = models.CharField('來自樂團', max_length=100, blank=True)
-    event = models.ForeignKey(
-        PerformanceEvent, on_delete=models.CASCADE,
-        related_name='guest_members', verbose_name='參與演出'
-    )
-    phone = models.CharField('聯絡電話', max_length=20, blank=True)
-
-    class Meta:
-        verbose_name = '客座團員'
-        verbose_name_plural = '客座團員列表'
-
-    def __str__(self):
-        return f'{self.name}（{self.from_band}）'
-
-
 class RehearsalAttendance(models.Model):
     class Status(models.TextChoices):
         PRESENT = 'present', '出席'
@@ -193,11 +170,7 @@ class PartAssignment(models.Model):
     )
     member = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
-        null=True, blank=True, related_name='part_assignments', verbose_name='正式團員'
-    )
-    guest_member = models.ForeignKey(
-        GuestMember, on_delete=models.CASCADE,
-        null=True, blank=True, related_name='part_assignments', verbose_name='客座團員'
+        related_name='part_assignments', verbose_name='團員'
     )
     instrument = models.ForeignKey(
         'accounts.InstrumentType', on_delete=models.PROTECT, verbose_name='樂器'
@@ -214,15 +187,8 @@ class PartAssignment(models.Model):
         verbose_name = '分譜分配'
         verbose_name_plural = '分譜分配列表'
 
-    def clean(self):
-        if self.member and self.guest_member:
-            raise ValidationError('正式團員與客座團員只能填一個。')
-        if not self.member and not self.guest_member:
-            raise ValidationError('正式團員與客座團員必須填一個。')
-
     def __str__(self):
-        person = self.member.name if self.member else self.guest_member.name
-        return f'{self.setlist} - {person}'
+        return f'{self.setlist} - {self.member.name}'
 
 
 class LeaveRequest(models.Model):

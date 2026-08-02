@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}客座團員 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0">客座團員（槍手）</h2>
+  <a href="{% url 'accounts:guest_create' %}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg"></i> 新增槍手
+  </a>
+</div>
+
+{% if messages %}
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+{% endif %}
+
+<div class="alert alert-info small">
+  槍手是臨時外援，<strong>不會有登入帳號</strong>，也不會出現在團員通訊錄。可在此管理，並於需要時「轉正」為正式團員。
+</div>
+
+<form method="get" class="row g-2 mb-4">
+  <div class="col-sm-4 col-md-3">
+    <input type="text" name="q" class="form-control form-control-sm"
+           placeholder="搜尋姓名或樂團…" value="{{ query }}">
+  </div>
+  <div class="col-auto">
+    <button type="submit" class="btn btn-sm btn-primary">搜尋</button>
+    {% if query %}
+    <a href="{% url 'accounts:guest_list' %}" class="btn btn-sm btn-outline-secondary">清除</a>
+    {% endif %}
+  </div>
+</form>
+
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>姓名</th>
+        <th>樂器族群</th>
+        <th>聲部</th>
+        <th>來自樂團</th>
+        <th>電話</th>
+        <th>Email</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for g in guests %}
+      <tr>
+        <td>{{ g.name }}</td>
+        <td>{{ g.instrument.name|default:"—" }}</td>
+        <td>{{ g.section.name|default:"—" }}</td>
+        <td>{{ g.from_band|default:"—" }}</td>
+        <td>{{ g.phone|default:"—" }}</td>
+        <td>{{ g.email|default:"—" }}</td>
+        <td>
+          <div class="d-flex gap-1 flex-wrap">
+            <a href="{% url 'accounts:guest_edit' g.pk %}" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <a href="{% url 'accounts:guest_promote' g.pk %}" class="btn btn-sm btn-outline-success">轉正</a>
+            <form method="post" action="{% url 'accounts:guest_delete' g.pk %}" class="d-inline">
+              {% csrf_token %}
+              <button class="btn btn-sm btn-outline-danger"
+                      onclick="return confirm('刪除槍手 {{ g.name }}？若已有分譜分配等紀錄將無法刪除。')">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7" class="text-muted text-center py-3">目前沒有客座團員。</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -30,6 +30,7 @@
           {% endif %}
           {% if user.is_officer %}
           <li class="nav-item"><a class="nav-link" href="{% url 'accounts:member_directory' %}">團員通訊錄</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'accounts:guest_list' %}">客座團員</a></li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">審核</a>
             <ul class="dropdown-menu">

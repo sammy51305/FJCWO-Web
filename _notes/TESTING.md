@@ -63,9 +63,9 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 
 ## 目前測試總覽
 
-共 **358 個測試**，分布在 8 個 app。
+共 **371 個測試**，分布在 8 個 app。
 
-### `apps/accounts/tests.py`（99 個）
+### `apps/accounts/tests.py`（112 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -81,6 +81,7 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 | `MemberCreateTest` | 存取控制（未登入/一般團員/幹部）、POST 新增團員成功（角色固定 member）、帳號依 Email 自動產生、Email 重複不建立記錄、寄送臨時密碼信件 |
 | `ForcePasswordChangeTest` | `must_change_password` 使用者任何頁面都被導向設定密碼頁、一般使用者不受影響、設定密碼頁本身不被攔截、成功設定後清除 flag 並可用新密碼登入、密碼不一致/太弱被擋、臨時密碼登入後仍被導向設定密碼頁（含錯誤密碼登入失敗的驗證）|
 | `MemberDirectoryReportTest` | 通訊錄列印報表：存取控制（未登入/一般團員無權限含電話Email→導回通訊錄/幹部可看）、顯示姓名電話Email、依樂器族群分組、列印按鈕、status 篩選（預設在團排除退團、inactive、all）|
+| `GuestManageTest` | 客座團員（槍手）管理：存取控制、CRUD（新增設 role=guest／不可登入／空 email 存 NULL、姓名必填、email 重複擋、編輯、刪除）、轉正（改 member／補 email／開通登入／強制改密碼、缺 email 擋）、資安（guest 即使有密碼也被登入表單擋、通訊錄排除 guest、guest 列表顯示）|
 
 ### `apps/events/tests.py`（106 個）
 

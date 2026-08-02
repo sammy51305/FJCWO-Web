@@ -155,7 +155,7 @@ Venue ──→ VenueTimeSlot
   │
   ├── PerformanceEvent ──→ Setlist ──→ Score
   │         │                │
-  │         │                └──→ PartAssignment ──→ User / GuestMember
+  │         │                └──→ PartAssignment ──→ User（含 role=guest 槍手）
   │         │
   │         └──→ Rehearsal ──→ RehearsalQRToken
   │                   │
@@ -1590,7 +1590,6 @@ charter.save()
 | `MembershipFee` | `amount` 無正數驗證，可存入 0 或負數 |
 | `FinanceRecord` | `amount` 無正數驗證 |
 | `Score` | `parent_score` self-FK 無防循環參照機制 |
-| `PartAssignment` | member / guest_member 互斥驗證只在 `clean()`，ORM 直接建立可繞過 |
 
 ---
 
@@ -1748,13 +1747,17 @@ Migration 順序：① accounts（Role 加 GUEST 僅 choices + 新增 from_band 
 4. **`is_active` 取捨**：槍手保持 `is_active=True`（`attendance_report`／分譜下拉用 `is_active=True` 撈人，False 會使槍手無法被指派）。登入安全由第 2 點保證，不靠 `is_active=False`。
 5. **根本原則（列為 (b) 前置條件）**：關鍵資源（全庫樂譜、團員通訊錄、團員限定公告）從「只 `@login_required`」升級為明文白名單 `role in (MEMBER, OFFICER, ADMIN)`，令未來任何新身分**預設拿不到**。改動面較大，(a) 階段可不做，但 (b) 開放登入前必做。
 
-**管理 UI 放法（2026-08-02 定案）—— 整合進通訊錄用篩選切換**
-不另開「客座團員」頁，沿用現有團員通訊錄頁（`member_directory`，accounts/views.py:155），加一個「身分」篩選（正式團員／槍手），比照現有「在團／退團」切換的做法，幹部在同一頁切換檢視。
-- 選它的理由：少開一個頁面、少一套權限判斷、少一套 template；與現有 UI 一致（幹部已習慣此頁篩選）。
-- 落地注意：此頁基礎查詢正是資安守則第 3 點要 `.exclude(role=GUEST)` 的地方——「正式團員」檢視必須排除槍手，「槍手」檢視才顯示 GUEST；兩者靠篩選參數切換，別讓槍手漏進正式名冊。
-- 未採獨立頁的取捨：獨立頁職責較清楚、槍手專屬操作（轉正、來自樂團）不污染通訊錄，但要多維護一頁 view/template/權限且「新增/編輯人」邏輯會與通訊錄重複。若日後槍手專屬操作明顯變多，再考慮拆頁。
+**管理 UI 放法（2026-08-03 改定案）—— 獨立「客座團員」頁**
+另開獨立的「客座團員」管理頁（幹部限定 CRUD），比照通訊錄／場地管理模式；團員通訊錄與名冊報表維持只含正式團員（查詢一律 `.exclude(role=GUEST)`）。
+- 選它的理由：真正複雜的是「新增／編輯／轉正」的身分分岔邏輯（槍手 email 選填、不寄信、`set_unusable_password`、有「來自樂團」、有「轉正」鈕），這些**無論整合或獨立都要寫**；獨立頁能把它們與通訊錄核心 view 乾淨隔開，通訊錄只需在查詢加 `exclude` 即可。整合只省下簡單的「列表頁」，卻把身分分岔塞進通訊錄核心 view，長期更難維護。
+- 資安上更穩：通訊錄查詢**永遠**排除槍手（不靠篩選參數切換），沒有「切換沒帶對參數就把槍手漏進正式名冊」的風險面。
+- 代價：多維護一頁 view/template（可接受）。
+- 沿革：原 2026-08-02 曾定案「整合進通訊錄篩選」，2026-08-03 改為獨立頁，理由如上（整合低估了新增/編輯的身分分岔成本，且切換式查詢的資安面較脆）。
 
-> ⚠️ 設計全數定案（登入層 (a) + 顯式拒絕登入 + 管理 UI 走通訊錄篩選），但**尚未實作**。GuestMember 目前仍是現況所述的樣子。
+> ✅ **已於 2026-08-03 實作完成**：`User` 加 `role=guest` / `from_band` / `email` 可空；
+> 淘汰 `GuestMember` 與 `PartAssignment.guest_member`（`member` 改必填）；登入表單顯式拒絕 guest；
+> 通訊錄 / 名冊報表 / 排練出席報表一律排除 guest；新增幹部限定「客座團員」CRUD ＋ 轉正頁。
+> 附錄四原「PartAssignment 互斥驗證可被 ORM 繞過」一條隨 `guest_member` 移除而消失，已刪除。
 
 ~~### 6. 首頁 Dashboard 應該顯示請假審核結果~~ → 已完成，見 §4.11「為什麼待審核清單看不到核准/拒絕結果」
 

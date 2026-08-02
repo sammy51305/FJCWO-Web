@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}{% if action == 'edit' %}編輯槍手{% else %}新增槍手{% endif %} — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'accounts:guest_list' %}">客座團員</a></li>
+    <li class="breadcrumb-item active">{% if action == 'edit' %}編輯槍手{% else %}新增槍手{% endif %}</li>
+  </ol>
+</nav>
+
+{% if messages %}
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+{% endif %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <h2 class="mb-2">{% if action == 'edit' %}編輯槍手{% else %}新增槍手{% endif %}</h2>
+    <p class="text-muted small mb-4">
+      槍手是臨時外援，登記後會出現在分譜分配等處，但<strong>不會有登入帳號</strong>。
+      日後若轉為正式團員，再於列表按「轉正」開通登入。
+    </p>
+
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="row">
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">姓名 <span class="text-danger">*</span></label>
+          <input type="text" name="name" class="form-control" value="{{ form_data.name }}" required>
+        </div>
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">來自樂團 <span class="text-muted small">（選填）</span></label>
+          <input type="text" name="from_band" class="form-control" value="{{ form_data.from_band }}">
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">樂器族群 <span class="text-muted small">（選填）</span></label>
+          <select name="instrument" class="form-select">
+            <option value="">未指定</option>
+            {% for inst in instruments %}
+            <option value="{{ inst.pk }}" {% if form_data.instrument == inst.pk|stringformat:"s" %}selected{% endif %}>
+              {{ inst.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">聲部 <span class="text-muted small">（選填）</span></label>
+          <select name="section" class="form-select">
+            <option value="">未指定</option>
+            {% for sec in sections %}
+            <option value="{{ sec.pk }}" {% if form_data.section == sec.pk|stringformat:"s" %}selected{% endif %}>
+              {{ sec.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-sm-6 mb-4">
+          <label class="form-label fw-semibold">電話 <span class="text-muted small">（選填）</span></label>
+          <input type="text" name="phone" class="form-control" value="{{ form_data.phone }}">
+        </div>
+        <div class="col-sm-6 mb-4">
+          <label class="form-label fw-semibold">Email <span class="text-muted small">（選填）</span></label>
+          <input type="email" name="email" class="form-control" value="{{ form_data.email }}">
+          <div class="form-text">槍手通常不需要；轉正時才必填。</div>
+        </div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">{% if action == 'edit' %}儲存變更{% else %}新增槍手{% endif %}</button>
+        <a href="{% url 'accounts:guest_list' %}" class="btn btn-outline-secondary">取消</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
