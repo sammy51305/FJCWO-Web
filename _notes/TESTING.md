@@ -59,6 +59,22 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 
 `fjcwo_user` 需要 `CREATEDB` 權限，詳見 [SETUP.md](SETUP.md) 步驟三。
 
+### 測試被中斷後，下次卡在「要不要刪除測試資料庫」
+
+若上一次測試被中途強制中斷（關掉終端、背景工作被 kill、session teardown），`test_fjcwo`
+可能沒被清乾淨而殘留。下次跑測試時 Django 會停下來互動詢問：
+
+```
+Type 'yes' if you would like to try deleting the test database 'test_fjcwo', or 'no' to cancel:
+```
+
+在無法互動的環境（背景執行、CI）這會直接 `EOFError` 中止，測試根本沒跑到。
+加上 `--noinput` 讓它自動刪掉殘留的舊測試庫再重建即可：
+
+```bash
+python manage.py test --noinput
+```
+
 ---
 
 ## 目前測試總覽
