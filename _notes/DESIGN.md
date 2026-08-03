@@ -1637,6 +1637,10 @@ if not attendance.on_leave:
 - **團員退團用 `is_active=False`（軟刪除），不是真的刪除**：`User` 被出席/請假/借用/財務/公告等多張表
   CASCADE 參照，真刪除會連帶砍光歷史紀錄。只有完全沒有關聯紀錄的帳號（如剛新增打錯）才允許真刪除，
   用 Django `Collector` 判斷，注意 `collector.fast_deletes` 這個坑（見 §4.2「fast_deletes 的坑」）。
+- **`PerformanceAttendance` 用 `confirmed` + `on_leave` 兩個正交布林，而非單一 status 欄位**：
+  `confirmed` 是「演出當天事後是否到場」、`on_leave` 是「事前核准的演出請假」，兩者語意不同且可同時成立
+  （核准請假的人 `on_leave=True`、當天到場與否另計）。刻意不學 `RehearsalAttendance` 的單一 status，
+  就是為了讓兩種語意各自獨立、核准演出請假時不覆寫既有到場狀態（見 §4.22）。
 
 ---
 
