@@ -16,8 +16,8 @@ from apps.public.models import Venue
 from apps.scores.models import Score
 
 from .models import (
-    LeaveRequest, PerformanceEvent, Rehearsal,
-    RehearsalAttendance, RehearsalQRToken, Setlist,
+    LeaveRequest, PerformanceAttendance, PerformanceEvent, PerformanceLeaveRequest,
+    Rehearsal, RehearsalAttendance, RehearsalQRToken, Setlist,
 )
 
 
@@ -103,7 +103,118 @@ def my_leave_requests(request):
         .select_related('rehearsal__event', 'reviewed_by')
         .order_by('-rehearsal__date')
     )
-    return render(request, 'events/my_leave_requests.html', {'leaves': leaves})
+    performance_leaves = (
+        PerformanceLeaveRequest.objects
+        .filter(member=request.user)
+        .select_related('event', 'reviewed_by')
+        .order_by('-event__performance_date')
+    )
+    return render(request, 'events/my_leave_requests.html', {
+        'leaves': leaves,
+        'performance_leaves': performance_leaves,
+    })
+
+
+@login_required
+def performance_leave_create(request, event_pk):
+    event = get_object_or_404(PerformanceEvent, pk=event_pk)
+    existing = PerformanceLeaveRequest.objects.filter(member=request.user, event=event).first()
+
+    if request.method == 'POST':
+        reason = request.POST.get('reason', '').strip()
+        if event.performance_date <= timezone.now():
+            messages.error(request, '演出已結束，無法申請請假。')
+        elif not reason:
+            messages.error(request, '請填寫請假原因。')
+        elif existing:
+            messages.error(request, '您已提交過此場演出的請假申請。')
+        else:
+            PerformanceLeaveRequest.objects.create(
+                member=request.user,
+                event=event,
+                reason=reason,
+            )
+            messages.success(request, '演出請假申請已送出。')
+            return redirect('events:my_leave_requests')
+
+    return render(request, 'events/performance_leave_form.html', {
+        'event': event,
+        'existing': existing,
+    })
+
+
+@login_required
+def performance_leave_review_list(request):
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('events:event_list')
+
+    if request.method == 'POST':
+        leave_id = request.POST.get('leave_id')
+        action = request.POST.get('action')
+        leave = get_object_or_404(PerformanceLeaveRequest, pk=leave_id)
+        if leave.status != PerformanceLeaveRequest.Status.PENDING:
+            messages.error(request, '此申請已審核，無法重複操作。')
+            return redirect('events:performance_leave_review_list')
+        if action == 'approve':
+            leave.status = PerformanceLeaveRequest.Status.APPROVED
+            leave.reviewed_by = request.user
+            leave.reviewed_at = timezone.now()
+            leave.result_seen = False
+            leave.save()
+            # 同步演出出席紀錄：核准演出請假 → 標記 on_leave
+            # on_leave 與 confirmed（到場）正交，不覆寫既有到場狀態
+            attendance, _ = PerformanceAttendance.objects.get_or_create(
+                event=leave.event,
+                member=leave.member,
+            )
+            if not attendance.on_leave:
+                attendance.on_leave = True
+                attendance.save()
+            messages.success(request, f'已核准 {leave.member.name} 的演出請假申請。')
+        elif action == 'reject':
+            leave.status = PerformanceLeaveRequest.Status.REJECTED
+            leave.reviewed_by = request.user
+            leave.reviewed_at = timezone.now()
+            leave.result_seen = False
+            leave.save()
+            messages.success(request, f'已拒絕 {leave.member.name} 的演出請假申請。')
+        return redirect('events:performance_leave_review_list')
+
+    pending = (
+        PerformanceLeaveRequest.objects
+        .filter(status=PerformanceLeaveRequest.Status.PENDING)
+        .select_related('member', 'event')
+        .order_by('event__performance_date')
+    )
+    reviewed = (
+        PerformanceLeaveRequest.objects
+        .exclude(status=PerformanceLeaveRequest.Status.PENDING)
+        .select_related('member', 'event', 'reviewed_by')
+        .order_by('-reviewed_at')[:50]
+    )
+    return render(request, 'events/performance_leave_review_list.html', {
+        'pending': pending,
+        'reviewed': reviewed,
+    })
+
+
+@login_required
+def performance_leave_delete(request, pk):
+    """
+    刪除演出請假申請紀錄，限管理員（admin 角色或 superuser），比照 leave_delete。
+    沒有其他表格參照 PerformanceLeaveRequest，直接刪除即可。
+    """
+    leave = get_object_or_404(PerformanceLeaveRequest, pk=pk)
+    if not (request.user.is_superuser or request.user.is_admin_role):
+        messages.error(request, '權限不足，僅管理員可刪除請假紀錄。')
+        return redirect('events:performance_leave_review_list')
+
+    if request.method == 'POST':
+        member_name = leave.member.name
+        leave.delete()
+        messages.success(request, f'已刪除 {member_name} 的演出請假紀錄。')
+    return redirect('events:performance_leave_review_list')
 
 
 @login_required

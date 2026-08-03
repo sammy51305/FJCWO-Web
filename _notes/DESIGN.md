@@ -2,7 +2,7 @@
 
 > 本文件說明 Phase 1 & 2 的設計決策、資料庫結構與各系統的運作邏輯。
 > 目標讀者：接手開發或複習程式碼的人（包含自己）。
-> 最後更新：2026-05-06（組織章程管理 §4.21、§4.1 更新 rules view 說明）
+> 最後更新：2026-08-04（演出請假 §4.22，附錄五 §2 定案實作完成）
 
 ---
 
@@ -34,6 +34,7 @@
    - [演出分譜下載（scores）](#419-演出分譜下載scores)
    - [關於百韻內容管理（public）](#420-關於百韻內容管理public)
    - [組織章程管理（public）](#421-組織章程管理public)
+   - [演出請假（events）](#422-演出請假events)
 
 ---
 
@@ -157,12 +158,14 @@ Venue ──→ VenueTimeSlot
   │         │                │
   │         │                └──→ PartAssignment ──→ User（含 role=guest 槍手）
   │         │
-  │         └──→ Rehearsal ──→ RehearsalQRToken
-  │                   │
-  │                   ├──→ RehearsalAttendance ──→ User
-  │                   └──→ LeaveRequest ──→ User
+  │         ├──→ Rehearsal ──→ RehearsalQRToken
+  │         │         │
+  │         │         ├──→ RehearsalAttendance ──→ User
+  │         │         └──→ LeaveRequest ──→ User
+  │         │
+  │         └──→ PerformanceLeaveRequest ──→ User（演出請假，綁 event）
   │
-  └── PerformanceAttendance ──→ User
+  └── PerformanceAttendance ──→ User（confirmed 到場 ／ on_leave 演出請假）
 
 FinanceRecord ──→ PerformanceEvent（選填）
                ──→ User（登記者）
@@ -1548,6 +1551,63 @@ charter.save()
 
 ---
 
+### 4.22 演出請假（events）
+
+**檔案**：`apps/events/views.py`（`performance_leave_create`、`performance_leave_review_list`、
+`performance_leave_delete`、`my_leave_requests`）、`apps/events/models.py`（`PerformanceLeaveRequest`）
+
+附錄五 §2 定案的「演出請假」，**整套流程比照排練請假（§4.6）**：團員在演出詳情頁點「這場演出請假」→
+填原因送出 → 幹部審核（核准／拒絕）→ 核准後在 `PerformanceAttendance` 標記請假。首頁 Dashboard
+的待審／審核結果通知也與排練請假共用同一套 `result_seen` 機制（§4.11）。
+
+#### 為什麼另建 model，而不是綁 Rehearsal 或塞進 PerformanceAttendance
+
+`LeaveRequest` 綁 `Rehearsal`，演出請假的對象是整場 `PerformanceEvent`。實作前評估過三條路：
+
+| 做法 | 問題 |
+|------|------|
+| 擴充 `LeaveRequest` 讓它可綁 rehearsal **或** event | 引入「二選一互斥」欄位，正是槍手案剛淘汰 `PartAssignment.member/guest` 互斥的坑（可被 ORM 繞過）|
+| 把請假狀態＋原因＋審核欄位全塞進 `PerformanceAttendance` | `confirmed`（事後到場）與「事前請假意願」語意不同，混在一張表會讓 confirmed 語意糊掉 |
+| **另建 `PerformanceLeaveRequest`（採用）** | 只綁 `event`，無互斥；審核工作流獨立，與 `PerformanceAttendance` 各司其職 |
+
+`PerformanceLeaveRequest` 的欄位與 `LeaveRequest` 幾乎一對一（member / event / reason / status /
+created_at / reviewed_by / reviewed_at / result_seen），`unique_together = [['member', 'event']]`
+擋重複申請，讓 view 層可沿用同一套寫法。
+
+#### 核准如何「標記為請假」：PerformanceAttendance.on_leave
+
+`PerformanceAttendance` 原本只有 `confirmed`（是否到場）。演出請假核准時，`get_or_create` 出席紀錄
+並把新增的 `on_leave` 設為 `True`：
+
+```python
+attendance, _ = PerformanceAttendance.objects.get_or_create(event=leave.event, member=leave.member)
+if not attendance.on_leave:
+    attendance.on_leave = True
+    attendance.save()
+```
+
+`on_leave`（事前請假）與 `confirmed`（事後到場）是**正交的兩個布林值**，不互相覆寫——這解決了
+附錄五 §2「核准後如何標記出席狀態、與 confirmed 如何並存」的待定問題。這一點和排練請假不同：
+`RehearsalAttendance` 只有單一 `status` 欄位，核准請假時要用「不覆寫既有 PRESENT」的守衛避免蓋掉
+簽到；演出這邊兩個欄位分開，天然共存，不需要守衛。
+
+#### 過期演出的 server-side 阻擋
+
+跟排練請假一樣，view 層在 POST 時檢查 `event.performance_date <= timezone.now()` 直接擋下，
+不只靠前端把按鈕改成 disabled——避免有人直接 POST 到 URL 繞過前端限制
+（測試 `test_post_to_past_event_is_blocked`）。
+
+#### 入口與審核頁
+
+- **申請入口**：`event_detail` 標題列的「這場演出請假」鈕（未來演出可點、已結束停用），
+  比照排練列表每列的「請假」捷徑寫法。
+- **我的紀錄**：`my_leave_requests` 頁同時列「排練請假」與「演出請假」兩區，一頁看完。
+- **審核頁**：獨立的 `performance_leave_review_list`（nav「審核 → 演出請假審核」），與排練請假審核
+  分開兩頁而非合併——POST handler 各自 `get_object_or_404` 自己的 model，結構乾淨、真正「比照」。
+  刪除近期審核紀錄同樣限管理員。
+
+---
+
 ## 附錄二：確認無問題的項目
 
 審計過程中懷疑但確認正確的項目，避免日後重複誤判。
@@ -1635,7 +1695,10 @@ unique(event, member)）目前只有 Admin、無前端；`confirmed` 是「事�
   候選：擴充 `PerformanceAttendance` 承載請假狀態＋原因＋審核欄位，或另建演出請假記錄。
 - 核准後如何標記出席狀態、與 `confirmed`（到場）如何並存，實作時一併定。
 
-> ⚠️ 方向已定案（演出請假、需審核、比照排練請假），但**尚未實作**。
+> ✅ **已於 2026-08-04 實作完成**（見 §4.22「演出請假」）：新增 `PerformanceLeaveRequest`（只綁 event、
+> 平行 `LeaveRequest`）；`PerformanceAttendance` 加 `on_leave`，核准時標記、與 `confirmed` 正交並存；
+> 申請入口在演出詳情頁、審核採獨立的「演出請假審核」頁、首頁通知與「我的請假」比照排練請假。
+> 前述「實作方向」的兩個待定點（避免互斥坑、on_leave 與 confirmed 並存）皆按此定案。
 
 ~~### 3. 演出分譜統一下載入口（`performance_parts`）~~ → 已完成（2026-07-31），見 §4.19「演出分譜下載」
 

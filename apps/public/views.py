@@ -22,7 +22,7 @@ def _parse_time(value):
 def index(request):
     context = {}
     if request.user.is_authenticated:
-        from apps.events.models import LeaveRequest, Rehearsal
+        from apps.events.models import LeaveRequest, PerformanceLeaveRequest, Rehearsal
         # 下次排練（最近一場未來的排練）
         context['next_rehearsal'] = (
             Rehearsal.objects
@@ -50,6 +50,26 @@ def index(request):
         if reviewed_leaves:
             LeaveRequest.objects.filter(
                 pk__in=[leave.pk for leave in reviewed_leaves]
+            ).update(result_seen=True)
+        # 我的待審演出請假（比照排練請假）
+        context['pending_performance_leaves'] = (
+            PerformanceLeaveRequest.objects
+            .filter(member=request.user, status=PerformanceLeaveRequest.Status.PENDING)
+            .select_related('event')
+            .order_by('event__performance_date')
+        )
+        # 我的演出請假審核結果（尚未在首頁看過的通知）
+        reviewed_performance_leaves = list(
+            PerformanceLeaveRequest.objects
+            .filter(member=request.user, result_seen=False)
+            .exclude(status=PerformanceLeaveRequest.Status.PENDING)
+            .select_related('event')
+            .order_by('-reviewed_at')
+        )
+        context['reviewed_performance_leaves'] = reviewed_performance_leaves
+        if reviewed_performance_leaves:
+            PerformanceLeaveRequest.objects.filter(
+                pk__in=[leave.pk for leave in reviewed_performance_leaves]
             ).update(result_seen=True)
         # 幹部：待審核的校友報到申請數
         if request.user.is_officer:

@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-07-12（共 341 個測試）
+> 最後更新：2026-08-04（共 406 個測試）
 
 ---
 
@@ -63,7 +63,7 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 
 ## 目前測試總覽
 
-共 **388 個測試**，分布在 8 個 app。
+共 **406 個測試**，分布在 8 個 app。
 
 ### `apps/accounts/tests.py`（112 個）
 
@@ -83,11 +83,12 @@ Django 測試框架會自動建立一個獨立的測試資料庫（名稱為 `te
 | `MemberDirectoryReportTest` | 通訊錄列印報表：存取控制（未登入/一般團員無權限含電話Email→導回通訊錄/幹部可看）、顯示姓名電話Email、依樂器族群分組、列印按鈕、status 篩選（預設在團排除退團、inactive、all）|
 | `GuestManageTest` | 客座團員（槍手）管理：存取控制、CRUD（新增設 role=guest／不可登入／空 email 存 NULL、姓名必填、email 重複擋、編輯、刪除）、轉正（改 member／補 email／開通登入／強制改密碼、缺 email 擋）、資安（guest 即使有密碼也被登入表單擋、通訊錄排除 guest、guest 列表顯示）|
 
-### `apps/events/tests.py`（106 個）
+### `apps/events/tests.py`（124 個）
 
 | Class | 測試內容 |
 |-------|---------|
 | `LeaveRequestTestCase` | 請假申請的存取控制、空白/空白原因被擋、正常送出、重複申請防止、我的紀錄、幹部審核（核准/拒絕）、核准後同步出席紀錄、核准不覆寫已簽到的 PRESENT 紀錄、核准/拒絕後 result_seen 設為 False、刪除請假紀錄限管理員 |
+| `PerformanceLeaveRequestTestCase` | 演出請假（比照排練請假）：存取控制、空白原因被擋、正常送出、重複申請防止、過期演出 server-side 阻擋、我的紀錄含演出請假、幹部審核（核准/拒絕）、核准標記 PerformanceAttendance.on_leave 且不覆寫既有 confirmed、已審核不可重複操作、刪除限管理員、活動詳情頁演出請假捷徑（未來顯示/過去停用）|
 | `EventViewsTest` | 演出活動列表/詳情、排練詳情、摘要/備註顯示、申請請假按鈕（未來啟用/過去停用）、活動詳情頁請假捷徑連結（未來顯示/過去不顯示）|
 | `QRCodeTest` | QR 管理頁存取控制、產生 token、重新產生換 UUID、小時數邊界、停用/啟用 toggle、簽到頁顯示、已簽到提示、簽到確認建立出席紀錄 |
 | `SetlistManageTest` | 曲目管理存取控制、新增總譜成功、新增分譜被擋（404）、重複順序被擋、移除曲目 |

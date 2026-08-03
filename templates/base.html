@@ -34,7 +34,8 @@
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">審核</a>
             <ul class="dropdown-menu">
-              <li><a class="dropdown-item" href="{% url 'events:leave_review_list' %}">請假審核</a></li>
+              <li><a class="dropdown-item" href="{% url 'events:leave_review_list' %}">排練請假審核</a></li>
+              <li><a class="dropdown-item" href="{% url 'events:performance_leave_review_list' %}">演出請假審核</a></li>
               <li><a class="dropdown-item" href="{% url 'accounts:registration_review' %}">校友報到審核</a></li>
             </ul>
           </li>

@@ -3,8 +3,8 @@ from django.contrib import admin
 from apps.notifications.utils import fmt_dt, push_line_message
 
 from .models import (LeaveRequest, PartAssignment,
-                     PerformanceAttendance, PerformanceEvent, Rehearsal,
-                     RehearsalAttendance, RehearsalQRToken, Setlist)
+                     PerformanceAttendance, PerformanceEvent, PerformanceLeaveRequest,
+                     Rehearsal, RehearsalAttendance, RehearsalQRToken, Setlist)
 
 
 class RehearsalInline(admin.TabularInline):
@@ -111,4 +111,11 @@ class PartAssignmentAdmin(admin.ModelAdmin):
 class LeaveRequestAdmin(admin.ModelAdmin):
     list_display = ['member', 'rehearsal', 'status', 'reviewed_by', 'reviewed_at']
     list_filter = ['status', 'rehearsal__event']
+    search_fields = ['member__name']
+
+
+@admin.register(PerformanceLeaveRequest)
+class PerformanceLeaveRequestAdmin(admin.ModelAdmin):
+    list_display = ['member', 'event', 'status', 'reviewed_by', 'reviewed_at']
+    list_filter = ['status', 'event']
     search_fields = ['member__name']

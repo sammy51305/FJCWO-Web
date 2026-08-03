@@ -130,6 +130,10 @@ class PerformanceAttendance(models.Model):
         related_name='performance_attendances', verbose_name='團員'
     )
     confirmed = models.BooleanField('是否到場', default=False)
+    on_leave = models.BooleanField(
+        '請假', default=False,
+        help_text='演出請假核准後標記為 True，與 confirmed（到場）正交並存'
+    )
     checked_in_at = models.DateTimeField('確認到場時間', null=True, blank=True)
     notes = models.TextField('備註', blank=True)
 
@@ -225,3 +229,44 @@ class LeaveRequest(models.Model):
 
     def __str__(self):
         return f'{self.member.name} - {self.rehearsal}'
+
+
+class PerformanceLeaveRequest(models.Model):
+    """
+    演出請假：團員臨時無法出席正式演出時提出，幹部審核。
+    刻意獨立於 LeaveRequest（綁 Rehearsal）之外、只綁 event，避免「rehearsal / event
+    二選一互斥」那種可被 ORM 繞過的坑；核准後標記於 PerformanceAttendance.on_leave。
+    """
+    class Status(models.TextChoices):
+        PENDING = 'pending', '待審核'
+        APPROVED = 'approved', '核准'
+        REJECTED = 'rejected', '拒絕'
+
+    member = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='performance_leave_requests', verbose_name='申請者'
+    )
+    event = models.ForeignKey(
+        PerformanceEvent, on_delete=models.CASCADE,
+        related_name='leave_requests', verbose_name='演出活動'
+    )
+    reason = models.TextField('請假原因')
+    status = models.CharField('狀態', max_length=10, choices=Status, default=Status.PENDING)
+    created_at = models.DateTimeField('申請時間', auto_now_add=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='reviewed_performance_leaves', verbose_name='審核幹部'
+    )
+    reviewed_at = models.DateTimeField('審核時間', null=True, blank=True)
+    result_seen = models.BooleanField(
+        '團員已讀審核結果', default=True,
+        help_text='核准/拒絕時設為 False，團員在首頁看到通知後設回 True；預設 True 避免既有資料被當成新結果'
+    )
+
+    class Meta:
+        verbose_name = '演出請假申請'
+        verbose_name_plural = '演出請假申請列表'
+        unique_together = [['member', 'event']]
+
+    def __str__(self):
+        return f'{self.member.name} - {self.event.name}'

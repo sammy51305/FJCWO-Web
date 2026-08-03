@@ -5,7 +5,10 @@ from datetime import timedelta
 
 from apps.accounts.models import User
 from apps.public.models import Venue
-from .models import LeaveRequest, PerformanceEvent, Rehearsal, RehearsalAttendance
+from .models import (
+    LeaveRequest, PerformanceAttendance, PerformanceEvent,
+    PerformanceLeaveRequest, Rehearsal, RehearsalAttendance,
+)
 
 
 class LeaveRequestTestCase(TestCase):
@@ -133,7 +136,7 @@ class LeaveRequestTestCase(TestCase):
         self.client.force_login(self.member)
         r = self.client.get(self.mine_url)
         self.assertEqual(r.status_code, 200)
-        self.assertContains(r, '沒有請假紀錄')
+        self.assertContains(r, '目前沒有排練請假紀錄')
 
     # ── T07 member 無法進審核頁 ──────────────────────────────
 
@@ -1288,3 +1291,231 @@ class RehearsalManageTest(TestCase):
         )
         rehearsal.refresh_from_db()
         self.assertEqual(rehearsal.sequence, 2)
+
+
+class PerformanceLeaveRequestTestCase(TestCase):
+    """演出請假功能整合測試（比照排練請假）"""
+
+    def setUp(self):
+        self.member = User.objects.create_user(
+            username='pl_member', email='pl_member@test.local',
+            password='testpass123', name='演假測試團員', role=User.Role.MEMBER,
+        )
+        self.officer = User.objects.create_user(
+            username='pl_officer', email='pl_officer@test.local',
+            password='testpass123', name='演假測試幹部', role=User.Role.OFFICER,
+        )
+        self.admin = User.objects.create_user(
+            username='pl_admin', email='pl_admin@test.local',
+            password='testpass123', name='演假測試管理員', role=User.Role.ADMIN,
+        )
+        self.venue = Venue.objects.create(name='演假測試場地', type='performance')
+        self.event = PerformanceEvent.objects.create(
+            name='演假測試音樂會', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + timedelta(days=30),
+            performance_venue=self.venue,
+        )
+        self.leave_url = reverse('events:performance_leave_create', args=[self.event.pk])
+        self.mine_url = reverse('events:my_leave_requests')
+        self.review_url = reverse('events:performance_leave_review_list')
+
+    # ── 存取控制 ────────────────────────────────────────────
+
+    def test_unauthenticated_redirects_to_login(self):
+        """未登入應導向登入頁"""
+        r = self.client.get(self.leave_url)
+        self.assertRedirects(r, f'/accounts/login/?next={self.leave_url}', fetch_redirect_response=False)
+
+    # ── 申請表單顯示 ─────────────────────────────────────────
+
+    def test_member_can_view_leave_form(self):
+        """member 可看到演出請假表單"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.leave_url)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, '請假原因')
+        self.assertContains(r, self.event.name)
+
+    # ── 送出空白原因 ─────────────────────────────────────────
+
+    def test_empty_reason_is_rejected(self):
+        """空白原因不建立資料"""
+        self.client.force_login(self.member)
+        r = self.client.post(self.leave_url, {'reason': '   '})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(PerformanceLeaveRequest.objects.count(), 0)
+
+    # ── 正常送出 ─────────────────────────────────────────────
+
+    def test_valid_leave_request_created(self):
+        """正常送出建立 PerformanceLeaveRequest，初始狀態為 pending"""
+        self.client.force_login(self.member)
+        r = self.client.post(self.leave_url, {'reason': '出國無法出席'})
+        self.assertRedirects(r, self.mine_url, fetch_redirect_response=False)
+        leave = PerformanceLeaveRequest.objects.get()
+        self.assertEqual(leave.member, self.member)
+        self.assertEqual(leave.event, self.event)
+        self.assertEqual(leave.status, PerformanceLeaveRequest.Status.PENDING)
+
+    # ── 重複申請 ─────────────────────────────────────────────
+
+    def test_duplicate_request_blocked(self):
+        """同一場演出不能重複申請"""
+        self.client.force_login(self.member)
+        self.client.post(self.leave_url, {'reason': '第一次'})
+        r = self.client.post(self.leave_url, {'reason': '重複'})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(PerformanceLeaveRequest.objects.count(), 1)
+
+    # ── 過期演出 server-side 阻擋 ────────────────────────────
+
+    def test_post_to_past_event_is_blocked(self):
+        """直接 POST 到已結束演出的請假 URL 應被擋下，不建立資料"""
+        past_event = PerformanceEvent.objects.create(
+            name='已結束音樂會', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() - timedelta(days=1),
+            performance_venue=self.venue,
+        )
+        url = reverse('events:performance_leave_create', args=[past_event.pk])
+        self.client.force_login(self.member)
+        r = self.client.post(url, {'reason': '想繞過限制'})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(PerformanceLeaveRequest.objects.count(), 0)
+
+    # ── 我的請假紀錄含演出請假 ───────────────────────────────
+
+    def test_my_leave_requests_shows_performance_leave(self):
+        """我的請假紀錄頁顯示自己的演出請假"""
+        PerformanceLeaveRequest.objects.create(
+            member=self.member, event=self.event, reason='我的演出請假',
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(self.mine_url)
+        self.assertContains(r, '我的演出請假')
+
+    # ── 審核頁存取控制 ───────────────────────────────────────
+
+    def test_member_cannot_access_review_page(self):
+        """一般 member 存取審核頁應被導向演出活動列表"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.review_url)
+        self.assertRedirects(r, reverse('events:event_list'), fetch_redirect_response=False)
+
+    def test_officer_can_view_review_page(self):
+        """幹部可進入演出請假審核頁，並看到待審核申請"""
+        PerformanceLeaveRequest.objects.create(
+            member=self.member, event=self.event, reason='待審核測試',
+        )
+        self.client.force_login(self.officer)
+        r = self.client.get(self.review_url)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, '待審核測試')
+
+    # ── 核准 ─────────────────────────────────────────────────
+
+    def test_officer_can_approve(self):
+        """幹部核准後狀態變 approved，記錄 reviewed_by / reviewed_at，result_seen 變 False"""
+        leave = PerformanceLeaveRequest.objects.create(
+            member=self.member, event=self.event, reason='請假',
+        )
+        self.client.force_login(self.officer)
+        r = self.client.post(self.review_url, {'leave_id': leave.pk, 'action': 'approve'})
+        self.assertRedirects(r, self.review_url, fetch_redirect_response=False)
+        leave.refresh_from_db()
+        self.assertEqual(leave.status, PerformanceLeaveRequest.Status.APPROVED)
+        self.assertEqual(leave.reviewed_by, self.officer)
+        self.assertIsNotNone(leave.reviewed_at)
+        self.assertFalse(leave.result_seen)
+
+    def test_approve_marks_attendance_on_leave(self):
+        """核准演出請假後自動建立 PerformanceAttendance 並標記 on_leave"""
+        leave = PerformanceLeaveRequest.objects.create(
+            member=self.member, event=self.event, reason='請假',
+        )
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'leave_id': leave.pk, 'action': 'approve'})
+        attendance = PerformanceAttendance.objects.get(event=self.event, member=self.member)
+        self.assertTrue(attendance.on_leave)
+
+    def test_approve_preserves_confirmed_attendance(self):
+        """核准演出請假不覆寫既有 confirmed（到場）狀態，兩者正交並存"""
+        PerformanceAttendance.objects.create(
+            event=self.event, member=self.member, confirmed=True,
+        )
+        leave = PerformanceLeaveRequest.objects.create(
+            member=self.member, event=self.event, reason='請假',
+        )
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'leave_id': leave.pk, 'action': 'approve'})
+        attendance = PerformanceAttendance.objects.get(event=self.event, member=self.member)
+        self.assertTrue(attendance.confirmed)
+        self.assertTrue(attendance.on_leave)
+
+    # ── 拒絕 ─────────────────────────────────────────────────
+
+    def test_officer_can_reject(self):
+        """幹部拒絕後狀態變 rejected，不建立出席紀錄"""
+        leave = PerformanceLeaveRequest.objects.create(
+            member=self.member, event=self.event, reason='請假',
+        )
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'leave_id': leave.pk, 'action': 'reject'})
+        leave.refresh_from_db()
+        self.assertEqual(leave.status, PerformanceLeaveRequest.Status.REJECTED)
+        self.assertFalse(
+            PerformanceAttendance.objects.filter(event=self.event, member=self.member).exists()
+        )
+
+    def test_cannot_re_review_processed_request(self):
+        """已審核的申請不可重複操作（防止瀏覽器上一頁重送）"""
+        leave = PerformanceLeaveRequest.objects.create(
+            member=self.member, event=self.event, reason='請假',
+            status=PerformanceLeaveRequest.Status.APPROVED,
+        )
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'leave_id': leave.pk, 'action': 'reject'})
+        leave.refresh_from_db()
+        self.assertEqual(leave.status, PerformanceLeaveRequest.Status.APPROVED)
+
+    # ── 刪除：限管理員 ───────────────────────────────────────
+
+    def test_officer_cannot_delete_leave(self):
+        """一般幹部無法刪除演出請假紀錄"""
+        leave = PerformanceLeaveRequest.objects.create(
+            member=self.member, event=self.event, reason='請假',
+            status=PerformanceLeaveRequest.Status.APPROVED,
+        )
+        self.client.force_login(self.officer)
+        r = self.client.post(reverse('events:performance_leave_delete', args=[leave.pk]), follow=True)
+        self.assertTrue(PerformanceLeaveRequest.objects.filter(pk=leave.pk).exists())
+        self.assertContains(r, '權限不足')
+
+    def test_admin_can_delete_leave(self):
+        """管理員可刪除演出請假紀錄"""
+        leave = PerformanceLeaveRequest.objects.create(
+            member=self.member, event=self.event, reason='請假',
+            status=PerformanceLeaveRequest.Status.APPROVED,
+        )
+        self.client.force_login(self.admin)
+        self.client.post(reverse('events:performance_leave_delete', args=[leave.pk]))
+        self.assertFalse(PerformanceLeaveRequest.objects.filter(pk=leave.pk).exists())
+
+    # ── event_detail 演出請假捷徑 ────────────────────────────
+
+    def test_event_detail_has_performance_leave_button(self):
+        """未來演出的活動詳情頁應提供演出請假捷徑連結"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:event_detail', args=[self.event.pk]))
+        self.assertContains(r, reverse('events:performance_leave_create', args=[self.event.pk]))
+
+    def test_event_detail_performance_leave_disabled_for_past(self):
+        """已結束演出的請假捷徑應為停用狀態，不含可點擊連結"""
+        past_event = PerformanceEvent.objects.create(
+            name='過去演出', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() - timedelta(days=1),
+            performance_venue=self.venue,
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:event_detail', args=[past_event.pk]))
+        self.assertNotContains(r, reverse('events:performance_leave_create', args=[past_event.pk]))
+        self.assertContains(r, '演出已結束')
