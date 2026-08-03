@@ -10,15 +10,6 @@
   </a>
 </div>
 
-{% if messages %}
-  {% for msg in messages %}
-  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
-    {{ msg }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-  </div>
-  {% endfor %}
-{% endif %}
-
 <div class="d-flex gap-3 mb-4 flex-wrap">
   <div class="card text-center px-4 py-2">
     <div class="fs-5 fw-bold text-success">{{ income }}</div>

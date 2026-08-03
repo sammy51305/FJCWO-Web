@@ -26,15 +26,6 @@
   </div>
 </div>
 
-{% if messages %}
-  {% for msg in messages %}
-  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show d-print-none" role="alert">
-    {{ msg }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-  </div>
-  {% endfor %}
-{% endif %}
-
 {# ── 期別選擇 ─────────────────────────────────── #}
 <form method="get" class="d-flex align-items-center gap-2 mb-4 d-print-none">
   <label class="fw-semibold text-nowrap" for="period">期別</label>

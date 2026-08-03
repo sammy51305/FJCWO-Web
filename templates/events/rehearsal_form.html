@@ -14,17 +14,6 @@
 <h2 class="mb-1">{% if action == 'create' %}新增排練{% else %}編輯排練{% endif %}</h2>
 <p class="text-muted mb-4">{{ event.name }}</p>
 
-{% if messages %}
-<div class="mb-3">
-  {% for msg in messages %}
-  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
-    {{ msg }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
-
 <div class="card" style="max-width: 600px;">
   <div class="card-body">
     <form method="post">

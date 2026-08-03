@@ -10,15 +10,6 @@
   </a>
 </div>
 
-{% if messages %}
-  {% for msg in messages %}
-  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
-    {{ msg }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-  </div>
-  {% endfor %}
-{% endif %}
-
 <!-- 搜尋／篩選列 -->
 <form method="get" class="row g-2 mb-4">
   <div class="col-sm-4 col-md-3">

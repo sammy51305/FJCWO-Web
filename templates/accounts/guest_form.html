@@ -10,15 +10,6 @@
   </ol>
 </nav>
 
-{% if messages %}
-  {% for msg in messages %}
-  <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
-    {{ msg }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-  </div>
-  {% endfor %}
-{% endif %}
-
 <div class="row justify-content-center">
   <div class="col-lg-7">
     <h2 class="mb-2">{% if action == 'edit' %}編輯槍手{% else %}新增槍手{% endif %}</h2>
