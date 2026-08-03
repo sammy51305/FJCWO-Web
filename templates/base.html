@@ -53,8 +53,8 @@
         <ul class="navbar-nav">
           {% if user.is_authenticated %}
             <li class="nav-item"><a class="nav-link" href="{% url 'accounts:profile' %}">{{ user.name }}</a></li>
-            {% if user.is_officer %}
-              <li class="nav-item"><a class="nav-link" href="{% url 'admin:index' %}">幹部後台</a></li>
+            {% if user.is_superuser or user.is_admin_role %}
+              <li class="nav-item"><a class="nav-link" href="{% url 'admin:index' %}">管理後台</a></li>
             {% endif %}
             <li class="nav-item">
               <form method="post" action="{% url 'accounts:logout' %}" class="d-inline">
