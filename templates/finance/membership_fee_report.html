@@ -16,10 +16,14 @@
 <div class="d-flex align-items-center justify-content-between mb-4">
   <h2 class="mb-0">會費繳納狀況</h2>
   <div class="d-flex gap-2 d-print-none">
-    <a href="{% url 'finance:fee_edit' %}{% if selected_period %}?period={{ selected_period }}{% endif %}"
-       class="btn btn-primary btn-sm">
+    <a href="{% url 'finance:fee_period_list' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-calendar3"></i> 管理期別
+    </a>
+    {% if selected_period %}
+    <a href="{% url 'finance:fee_edit' %}?period={{ selected_period.pk }}" class="btn btn-primary btn-sm">
       <i class="bi bi-plus-lg"></i> 登記繳費
     </a>
+    {% endif %}
     <button class="btn btn-outline-secondary btn-sm" onclick="window.print()">
       <i class="bi bi-printer"></i> 列印
     </button>
@@ -29,18 +33,20 @@
 {# ── 期別選擇 ─────────────────────────────────── #}
 <form method="get" class="d-flex align-items-center gap-2 mb-4 d-print-none">
   <label class="fw-semibold text-nowrap" for="period">期別</label>
-  <select name="period" id="period" class="form-select" style="max-width:220px;" onchange="this.form.submit()">
+  <select name="period" id="period" class="form-select" style="max-width:260px;" onchange="this.form.submit()">
     {% for p in periods %}
-    <option value="{{ p }}" {% if p == selected_period %}selected{% endif %}>{{ p }}</option>
+    <option value="{{ p.pk }}" {% if selected_period and p.pk == selected_period.pk %}selected{% endif %}>
+      {{ p }}（{{ p.amount|floatformat:"0" }} 元）
+    </option>
     {% endfor %}
   </select>
   {% if not periods %}
-  <span class="text-muted">尚無任何期別資料</span>
+  <span class="text-muted">尚無任何期別，請先<a href="{% url 'finance:fee_period_create' %}">新增期別</a></span>
   {% endif %}
 </form>
 
 {% if selected_period %}
-<p class="text-muted d-print-block mb-3">期別：{{ selected_period }}</p>
+<p class="text-muted d-print-block mb-3">期別：{{ selected_period }}・團費 {{ selected_period.amount|floatformat:"0" }} 元</p>
 
 {# ── 摘要徽章 ─────────────────────────────────── #}
 <div class="d-flex flex-wrap gap-3 mb-4">
@@ -94,7 +100,7 @@
         <td>{% if row.fee and row.fee.paid_at %}{{ row.fee.paid_at|date:"Y/m/d" }}{% else %}—{% endif %}</td>
         <td class="text-muted small">{% if row.fee and row.fee.collected_by %}{{ row.fee.collected_by.name }}{% else %}—{% endif %}</td>
         <td class="d-print-none">
-          <a href="{% url 'finance:fee_edit' %}?member={{ row.member.pk }}&period={{ selected_period }}"
+          <a href="{% url 'finance:fee_edit' %}?member={{ row.member.pk }}&period={{ selected_period.pk }}"
              class="btn btn-sm btn-outline-secondary">
             {% if row.status == 'no_record' %}登記{% else %}編輯{% endif %}
           </a>
@@ -107,6 +113,6 @@
 {% endif %}
 
 {% else %}
-<p class="text-muted">尚無任何會費紀錄。點右上角「登記繳費」開始建立第一筆（可自行輸入期別）。</p>
+<p class="text-muted">尚無任何期別。請先點右上角「管理期別」<a href="{% url 'finance:fee_period_create' %}">新增期別</a>（設定年份、上/下期與團費金額），再登記繳費。</p>
 {% endif %}
 {% endblock %}

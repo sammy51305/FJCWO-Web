@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-08-04（共 406 個測試）
+> 最後更新：2026-08-04（共 417 個測試）
 
 ---
 
@@ -79,7 +79,7 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **406 個測試**，分布在 8 個 app。
+共 **417 個測試**，分布在 8 個 app。
 
 ### `apps/accounts/tests.py`（112 個）
 
@@ -135,13 +135,14 @@ python manage.py test --noinput
 |-------|---------|
 | `BorrowStatusReportTest` | 存取控制、空狀態訊息、借出中財產顯示、已還財產不顯示、逾期標記（overdue flag）、未到期不標記、overdue_count 正確計算 |
 
-### `apps/finance/tests.py`（27 個）
+### `apps/finance/tests.py`（38 個）
 
 | Class | 測試內容 |
 |-------|---------|
-| `MembershipFeeReportTest` | 存取控制、無期別時顯示提示、預設最新期別、GET 切換期別、已繳/未繳/無紀錄三種狀態分類計數、rows 涵蓋全體活躍非 admin 團員 |
+| `MembershipFeeReportTest` | 存取控制、無期別時提示新增期別、預設最新期別、GET（期別 pk）切換、已繳/未繳/作廢(視為無紀錄)/無紀錄分類計數、rows 涵蓋活躍非 admin 團員、槍手排除 |
+| `FeePeriodTest` | 會費期別主檔 CRUD：存取控制（團員無權限/幹部可看）、新增、同年份+期別重複被擋、金額 0 被擋、編輯、刪除限管理員（幹部擋下/管理員可刪）、已有繳費紀錄時 PROTECT 擋下 |
 | `FinanceRecordCRUDTest` | 收支明細：存取控制（未登入/團員/幹部）、新增（登記者自動帶入）、amount 0/負數/缺說明被擋、編輯、刪除限管理員（幹部擋下、管理員可刪）、列表收入/支出/結餘摘要 |
-| `FeeEditTest` | 會費登記：一般團員無權限、登記已繳（設 paid_at 與收款幹部）、未繳（兩者為空）、同 member+period 再登記更新不重複、金額 0 被擋、缺團員/期別被擋 |
+| `FeeEditTest` | 會費登記：一般團員無權限、登記已繳（status=paid、設 paid_at 與收款幹部）、未繳（status=unpaid、兩者為空）、金額一律自期別快照（不受表單影響）、同 member+period 再登記更新不重複、缺團員/期別被擋 |
 
 ### `apps/announcements/tests.py`（23 個）
 

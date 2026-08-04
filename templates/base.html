@@ -40,7 +40,14 @@
             </ul>
           </li>
           <li class="nav-item"><a class="nav-link" href="{% url 'public:venue_list' %}">場地管理</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'finance:finance_list' %}">財務</a></li>
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">財務</a>
+            <ul class="dropdown-menu">
+              <li><a class="dropdown-item" href="{% url 'finance:finance_list' %}">收支明細</a></li>
+              <li><a class="dropdown-item" href="{% url 'finance:membership_fee_report' %}">會費繳納</a></li>
+              <li><a class="dropdown-item" href="{% url 'finance:fee_period_list' %}">會費期別</a></li>
+            </ul>
+          </li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">報表</a>
             <ul class="dropdown-menu">

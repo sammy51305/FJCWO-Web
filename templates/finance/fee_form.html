@@ -29,17 +29,19 @@
         </select>
       </div>
 
-      <div class="row">
-        <div class="col-sm-6 mb-3">
-          <label class="form-label fw-semibold">繳費期別 <span class="text-danger">*</span></label>
-          <input type="text" name="period" class="form-control" value="{{ form_data.period }}"
-                 placeholder="如：2026 上半年" required>
-        </div>
-        <div class="col-sm-6 mb-3">
-          <label class="form-label fw-semibold">金額 <span class="text-danger">*</span></label>
-          <input type="number" name="amount" class="form-control" min="1" step="1"
-                 value="{{ form_data.amount }}" required>
-          <div class="form-text">須大於 0 的整數（元）。</div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold">繳費期別 <span class="text-danger">*</span></label>
+        <select name="period" class="form-select" required>
+          <option value="">請選擇</option>
+          {% for p in periods %}
+          <option value="{{ p.pk }}" {% if form_data.period == p.pk|stringformat:"s" %}selected{% endif %}>
+            {{ p }}（團費 {{ p.amount|floatformat:"0" }} 元）
+          </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">
+          金額由期別的固定團費決定，登記時自動帶入。
+          尚無期別？<a href="{% url 'finance:fee_period_create' %}">先新增期別</a>。
         </div>
       </div>
 

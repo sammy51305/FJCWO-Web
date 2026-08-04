@@ -42,14 +42,55 @@ class FinanceRecord(models.Model):
         return f'{self.date} {self.get_type_display()} {self.amount}'
 
 
+class FeePeriod(models.Model):
+    """
+    會費期別主檔（附錄五 §9 P1）。幹部/管理員建立某一期，金額全團固定、繳費時段不定可調。
+    建立後每位在團團員對這期天然就是「應繳未繳」（報表以團員 × 期別 join 導出，不預建列）。
+    """
+    class Term(models.TextChoices):
+        FIRST = 'first', '上期'
+        SECOND = 'second', '下期'
+
+    year = models.PositiveIntegerField('年份')
+    term = models.CharField('期', max_length=10, choices=Term)
+    amount = models.DecimalField('團費金額', max_digits=8, decimal_places=0,
+                                 validators=[MinValueValidator(1)])
+    start_date = models.DateField('繳費開始日', null=True, blank=True)
+    end_date = models.DateField('繳費截止日', null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='created_fee_periods', verbose_name='建立者'
+    )
+
+    class Meta:
+        verbose_name = '會費期別'
+        verbose_name_plural = '會費期別列表'
+        ordering = ['-year', 'term']
+        unique_together = [['year', 'term']]
+
+    def __str__(self):
+        return f'{self.year} {self.get_term_display()}'
+
+
 class MembershipFee(models.Model):
+    class Status(models.TextChoices):
+        UNPAID = 'unpaid', '應繳未繳'
+        REPORTED = 'reported', '待確認'
+        PAID = 'paid', '已繳'
+        VOID = 'void', '作廢'
+
     member = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
         related_name='membership_fees', verbose_name='團員'
     )
-    period = models.CharField('繳費期別', max_length=50)
+    period = models.ForeignKey(
+        FeePeriod, on_delete=models.PROTECT,
+        related_name='fees', verbose_name='期別'
+    )
     amount = models.DecimalField('金額', max_digits=8, decimal_places=0,
-                                 validators=[MinValueValidator(1)])
+                                 validators=[MinValueValidator(1)],
+                                 help_text='繳費當下自期別金額快照，之後改期別金額不竄改此筆')
+    status = models.CharField('狀態', max_length=10, choices=Status, default=Status.UNPAID)
     paid_at = models.DateField('繳費日期', null=True, blank=True)
     collected_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
@@ -59,7 +100,7 @@ class MembershipFee(models.Model):
     class Meta:
         verbose_name = '會費繳納紀錄'
         verbose_name_plural = '會費繳納紀錄列表'
-        ordering = ['-period', 'member__name']
+        ordering = ['-period__year', '-period__term', 'member__name']
         unique_together = [['member', 'period']]
 
     def __str__(self):
@@ -67,4 +108,4 @@ class MembershipFee(models.Model):
 
     @property
     def is_paid(self):
-        return self.paid_at is not None
+        return self.status == self.Status.PAID

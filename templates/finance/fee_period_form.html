@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}{% if action == 'create' %}新增期別{% else %}編輯期別{% endif %} — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'finance:membership_fee_report' %}">會費繳納狀況</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'finance:fee_period_list' %}">會費期別</a></li>
+    <li class="breadcrumb-item active">{% if action == 'create' %}新增{% else %}編輯{% endif %}</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <h2 class="mb-4">{% if action == 'create' %}新增期別{% else %}編輯期別{% endif %}</h2>
+
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="row">
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">年份 <span class="text-danger">*</span></label>
+          <input type="number" name="year" class="form-control" min="2000" max="2100" step="1"
+                 value="{{ form_data.year }}" required>
+        </div>
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">期 <span class="text-danger">*</span></label>
+          <select name="term" class="form-select" required>
+            <option value="">請選擇</option>
+            {% for value, label in term_choices %}
+            <option value="{{ value }}" {% if form_data.term == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">團費金額 <span class="text-danger">*</span></label>
+        <input type="number" name="amount" class="form-control" min="1" step="1"
+               value="{{ form_data.amount }}" required>
+        <div class="form-text">全團固定金額（元），登記繳費時自動帶入。</div>
+      </div>
+
+      <div class="row">
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">繳費開始日</label>
+          <input type="date" name="start_date" class="form-control" value="{{ form_data.start_date }}">
+        </div>
+        <div class="col-sm-6 mb-3">
+          <label class="form-label fw-semibold">繳費截止日</label>
+          <input type="date" name="end_date" class="form-control" value="{{ form_data.end_date }}">
+        </div>
+      </div>
+      <div class="form-text mb-4">繳費時段可留空、日後再調整。</div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">儲存</button>
+        <a href="{% url 'finance:fee_period_list' %}" class="btn btn-outline-secondary">取消</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

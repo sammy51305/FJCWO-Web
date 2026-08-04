@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db.models.deletion import ProtectedError
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -9,7 +10,7 @@ from django.utils.dateparse import parse_date
 from apps.accounts.models import User
 from apps.events.models import PerformanceEvent
 
-from .models import FinanceRecord, MembershipFee
+from .models import FeePeriod, FinanceRecord, MembershipFee
 
 
 @login_required
@@ -18,17 +19,15 @@ def membership_fee_report(request):
         messages.error(request, '權限不足。')
         return redirect('/')
 
-    # 取得所有已建立的期別，從新到舊排序
-    periods = (
-        MembershipFee.objects
-        .values_list('period', flat=True)
-        .distinct()
-        .order_by('-period')
-    )
+    # 期別主檔（附錄五 §9）：從新到舊
+    periods = FeePeriod.objects.all()
 
-    selected_period = request.GET.get('period', '')
-    if not selected_period and periods:
-        selected_period = periods[0]
+    selected_period_id = request.GET.get('period', '')
+    selected_period = None
+    if selected_period_id:
+        selected_period = periods.filter(pk=selected_period_id).first()
+    elif periods:
+        selected_period = periods.first()
 
     rows = []
     paid_count = unpaid_count = no_record_count = 0
@@ -36,7 +35,7 @@ def membership_fee_report(request):
     if selected_period:
         members = (
             User.objects.filter(is_active=True)
-            .exclude(role=User.Role.ADMIN)
+            .exclude(role__in=[User.Role.ADMIN, User.Role.GUEST])
             .select_related('instrument')
             .order_by('instrument__category', 'instrument__name', 'name')
         )
@@ -46,13 +45,14 @@ def membership_fee_report(request):
         }
         for member in members:
             fee = fee_map.get(member.pk)
-            if fee is None:
+            # 無列、或已作廢 → 視為無紀錄（應繳未繳）
+            if fee is None or fee.status == MembershipFee.Status.VOID:
                 status = 'no_record'
                 no_record_count += 1
-            elif fee.is_paid:
+            elif fee.status == MembershipFee.Status.PAID:
                 status = 'paid'
                 paid_count += 1
-            else:
+            else:  # unpaid / reported
                 status = 'unpaid'
                 unpaid_count += 1
             rows.append({'member': member, 'fee': fee, 'status': status})
@@ -65,6 +65,132 @@ def membership_fee_report(request):
         'unpaid_count': unpaid_count,
         'no_record_count': no_record_count,
     })
+
+
+# ── 會費期別主檔（FeePeriod）CRUD ─────────────────────────────
+# 幹部可新增/編輯期別；刪除限管理員（比照其他管理員限定刪除）。
+
+
+def _parse_fee_period_form(request):
+    """解析期別表單，回傳 (cleaned:dict, errors:list)。"""
+    errors = []
+    year_raw = request.POST.get('year', '').strip()
+    term = request.POST.get('term', '')
+    amount_raw = request.POST.get('amount', '').strip()
+
+    try:
+        year = int(year_raw)
+        if year < 2000 or year > 2100:
+            errors.append('年份需在 2000～2100 之間。')
+    except (ValueError, TypeError):
+        year = None
+        errors.append('年份必須是數字。')
+
+    if term not in FeePeriod.Term.values:
+        errors.append('請選擇上期或下期。')
+
+    try:
+        amount = int(amount_raw)
+        if amount < 1:
+            errors.append('團費金額必須大於 0。')
+    except (ValueError, TypeError):
+        amount = None
+        errors.append('團費金額必須是數字。')
+
+    cleaned = {
+        'year': year, 'term': term, 'amount': amount,
+        'start_date': parse_date(request.POST.get('start_date', '').strip() or ''),
+        'end_date': parse_date(request.POST.get('end_date', '').strip() or ''),
+    }
+    return cleaned, errors
+
+
+@login_required
+def fee_period_list(request):
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('/')
+    periods = FeePeriod.objects.all()
+    return render(request, 'finance/fee_period_list.html', {'periods': periods})
+
+
+@login_required
+def fee_period_create(request):
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('finance:fee_period_list')
+
+    if request.method == 'POST':
+        cleaned, errors = _parse_fee_period_form(request)
+        if not errors and FeePeriod.objects.filter(year=cleaned['year'], term=cleaned['term']).exists():
+            errors.append('這個年份與期別已存在。')
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+            return render(request, 'finance/fee_period_form.html', {
+                'action': 'create', 'form_data': request.POST,
+                'term_choices': FeePeriod.Term.choices,
+            })
+        FeePeriod.objects.create(created_by=request.user, **cleaned)
+        messages.success(request, f'已新增期別 {cleaned["year"]} {dict(FeePeriod.Term.choices)[cleaned["term"]]}。')
+        return redirect('finance:fee_period_list')
+
+    return render(request, 'finance/fee_period_form.html', {
+        'action': 'create', 'form_data': {}, 'term_choices': FeePeriod.Term.choices,
+    })
+
+
+@login_required
+def fee_period_edit(request, pk):
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('finance:fee_period_list')
+
+    period = get_object_or_404(FeePeriod, pk=pk)
+    if request.method == 'POST':
+        cleaned, errors = _parse_fee_period_form(request)
+        if not errors and FeePeriod.objects.filter(
+                year=cleaned['year'], term=cleaned['term']).exclude(pk=period.pk).exists():
+            errors.append('這個年份與期別已存在。')
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+            return render(request, 'finance/fee_period_form.html', {
+                'action': 'edit', 'period': period, 'form_data': request.POST,
+                'term_choices': FeePeriod.Term.choices,
+            })
+        for k, v in cleaned.items():
+            setattr(period, k, v)
+        period.save()
+        messages.success(request, '期別已更新。')
+        return redirect('finance:fee_period_list')
+
+    form_data = {
+        'year': period.year, 'term': period.term, 'amount': period.amount,
+        'start_date': period.start_date.isoformat() if period.start_date else '',
+        'end_date': period.end_date.isoformat() if period.end_date else '',
+    }
+    return render(request, 'finance/fee_period_form.html', {
+        'action': 'edit', 'period': period, 'form_data': form_data,
+        'term_choices': FeePeriod.Term.choices,
+    })
+
+
+@login_required
+def fee_period_delete(request, pk):
+    """刪除期別限管理員；已有繳費紀錄（PROTECT）時擋下。"""
+    period = get_object_or_404(FeePeriod, pk=pk)
+    if not (request.user.is_superuser or request.user.is_admin_role):
+        messages.error(request, '權限不足，僅管理員可刪除期別。')
+        return redirect('finance:fee_period_list')
+    if request.method == 'POST':
+        try:
+            label = str(period)
+            period.delete()
+            messages.success(request, f'已刪除期別 {label}。')
+        except ProtectedError:
+            messages.error(request, '此期別已有繳費紀錄，無法刪除。')
+    return redirect('finance:fee_period_list')
 
 
 # ── 收支明細（FinanceRecord）前端 CRUD ─────────────────────────
@@ -236,8 +362,9 @@ def receipt_download(request, pk):
 @login_required
 def fee_edit(request):
     """
-    會費登記／編輯（幹部限定）。以 member + period 定位一筆 MembershipFee（get_or_create），
-    設定金額、是否已繳（paid_at）與收款幹部。從會費繳納報表每列進入，或新增新期別紀錄。
+    會費登記／編輯（幹部限定）。以 member + period(FeePeriod) 定位一筆 MembershipFee
+    （get_or_create），設定狀態（已繳/未繳）與收款幹部；金額由期別固定金額快照，幹部不填。
+    從會費繳納報表每列進入。
     """
     if not request.user.is_officer:
         messages.error(request, '權限不足。')
@@ -248,63 +375,57 @@ def fee_edit(request):
         .exclude(role__in=[User.Role.ADMIN, User.Role.GUEST])
         .order_by('instrument__category', 'instrument__name', 'name')
     )
+    periods = FeePeriod.objects.all()
 
     if request.method == 'POST':
         member_id = request.POST.get('member', '')
-        period = request.POST.get('period', '').strip()
-        amount_raw = request.POST.get('amount', '').strip()
+        period_id = request.POST.get('period', '')
         paid = request.POST.get('paid') == 'on'
         paid_at_raw = request.POST.get('paid_at', '').strip()
 
         errors = []
         member = User.objects.filter(pk=member_id).first() if member_id else None
+        period = FeePeriod.objects.filter(pk=period_id).first() if period_id else None
         if not member:
             errors.append('請選擇團員。')
         if not period:
-            errors.append('請填寫繳費期別。')
-        try:
-            amount = int(amount_raw)
-        except (ValueError, TypeError):
-            amount = None
-            errors.append('金額必須是數字。')
-        else:
-            if amount < 1:
-                errors.append('金額必須大於 0。')
+            errors.append('請選擇期別。')
 
         if errors:
             for e in errors:
                 messages.error(request, e)
             return render(request, 'finance/fee_form.html', {
-                'members': members,
+                'members': members, 'periods': periods,
                 'form_data': request.POST,
                 'today': timezone.localdate().isoformat(),
             })
 
         paid_at = (parse_date(paid_at_raw) or timezone.localdate()) if paid else None
+        S = MembershipFee.Status
         fee, _ = MembershipFee.objects.get_or_create(
-            member=member, period=period, defaults={'amount': amount},
+            member=member, period=period, defaults={'amount': period.amount},
         )
-        fee.amount = amount
+        fee.amount = period.amount   # 金額快照：以期別當下的固定金額為準
+        fee.status = S.PAID if paid else S.UNPAID
         fee.paid_at = paid_at
         fee.collected_by = request.user if paid else None
         fee.save()
         messages.success(request, f'已更新 {member.name} 的「{period}」會費紀錄。')
-        return redirect(f"{reverse('finance:membership_fee_report')}?period={period}")
+        return redirect(f"{reverse('finance:membership_fee_report')}?period={period.pk}")
 
     selected_member_id = request.GET.get('member', '')
-    period = request.GET.get('period', '')
+    period_id = request.GET.get('period', '')
     fee = None
-    if selected_member_id and period:
-        fee = MembershipFee.objects.filter(member_id=selected_member_id, period=period).first()
+    if selected_member_id and period_id:
+        fee = MembershipFee.objects.filter(member_id=selected_member_id, period_id=period_id).first()
     form_data = {
         'member': selected_member_id,
-        'period': period,
-        'amount': fee.amount if fee else '',
+        'period': period_id,
         'paid': fee.is_paid if fee else False,
         'paid_at': fee.paid_at.isoformat() if fee and fee.paid_at else timezone.localdate().isoformat(),
     }
     return render(request, 'finance/fee_form.html', {
-        'members': members,
+        'members': members, 'periods': periods,
         'form_data': form_data,
         'today': timezone.localdate().isoformat(),
     })

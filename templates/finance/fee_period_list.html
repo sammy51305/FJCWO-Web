@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}會費期別 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'finance:membership_fee_report' %}">會費繳納狀況</a></li>
+    <li class="breadcrumb-item active">會費期別</li>
+  </ol>
+</nav>
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h2 class="mb-0">會費期別</h2>
+  <a href="{% url 'finance:fee_period_create' %}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg"></i> 新增期別
+  </a>
+</div>
+
+<p class="text-muted">每一期團費為全團固定金額；建立後，每位在團團員對這期即為「應繳未繳」，於「會費繳納狀況」登記繳費。</p>
+
+{% if periods %}
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>期別</th>
+        <th>團費金額</th>
+        <th>繳費起訖</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in periods %}
+      <tr>
+        <td class="fw-semibold">{{ p }}</td>
+        <td>{{ p.amount|floatformat:"0" }} 元</td>
+        <td class="text-muted">
+          {% if p.start_date or p.end_date %}
+            {{ p.start_date|date:"Y/m/d"|default:"—" }} ～ {{ p.end_date|date:"Y/m/d"|default:"—" }}
+          {% else %}—{% endif %}
+        </td>
+        <td class="d-flex gap-1">
+          <a href="{% url 'finance:fee_period_edit' p.pk %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-pencil"></i> 編輯
+          </a>
+          {% if user.is_superuser or user.is_admin_role %}
+          <form method="post" action="{% url 'finance:fee_period_delete' p.pk %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-danger"
+                    onclick="return confirm('確定要刪除期別「{{ p }}」嗎？已有繳費紀錄時無法刪除。')">
+              <i class="bi bi-trash"></i>
+            </button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted">尚無任何期別，點右上角「新增期別」建立第一期。</p>
+{% endif %}
+{% endblock %}
