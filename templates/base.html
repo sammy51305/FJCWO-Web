@@ -27,6 +27,7 @@
           <li class="nav-item"><a class="nav-link" href="{% url 'events:event_list' %}">演出活動</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'scores:score_list' %}">樂譜庫存</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'events:my_leave_requests' %}">我的請假</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'finance:my_fees' %}">我的會費</a></li>
           {% endif %}
           {% if user.is_officer %}
           <li class="nav-item"><a class="nav-link" href="{% url 'accounts:member_directory' %}">團員通訊錄</a></li>
@@ -36,6 +37,7 @@
             <ul class="dropdown-menu">
               <li><a class="dropdown-item" href="{% url 'events:leave_review_list' %}">排練請假審核</a></li>
               <li><a class="dropdown-item" href="{% url 'events:performance_leave_review_list' %}">演出請假審核</a></li>
+              <li><a class="dropdown-item" href="{% url 'finance:fee_review_list' %}">會費確認</a></li>
               <li><a class="dropdown-item" href="{% url 'accounts:registration_review' %}">校友報到審核</a></li>
             </ul>
           </li>

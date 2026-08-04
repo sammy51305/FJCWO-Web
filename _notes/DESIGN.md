@@ -2,7 +2,7 @@
 
 > 本文件說明 Phase 1 & 2 的設計決策、資料庫結構與各系統的運作邏輯。
 > 目標讀者：接手開發或複習程式碼的人（包含自己）。
-> 最後更新：2026-08-04（會費系統重構 §9 P1 完成：期別主檔＋MembershipFee 改 FK，§4.7 更新）
+> 最後更新：2026-08-04（會費系統重構 §9 P1+P2 完成：期別主檔、團員自助申報＋幹部確認）
 
 ---
 
@@ -1997,7 +1997,7 @@ Migration 順序：① accounts（Role 加 GUEST 僅 choices + 新增 from_band 
 | 階段 | 內容 | 狀態 |
 |------|------|------|
 | P1 | `FeePeriod` 主檔 CRUD；`MembershipFee` 改 FK + status + amount 快照；會費繳納報表改讀期別；nav 把會費移進財務 | ✅ 已完成（2026-08-04）|
-| P2 | 團員自助申報（**現金**）＋ 幹部確認工作流；刪除層級（撤回/作廢/管理員硬刪）；首頁通知 | 待實作 |
+| P2 | 團員自助申報（**現金**）＋ 幹部確認工作流；刪除層級（撤回/作廢/管理員硬刪）；首頁通知 | ✅ 已完成（2026-08-04）|
 | P3 | 確認繳費自動產生 FinanceRecord 入帳；`當年度收支` 列印報表（按收款日年份）| 待實作 |
 | P4 | 轉帳掃碼繳費：管理員上傳固定 QRCode + 轉帳帳號文字；末五碼對帳；財務確認 | 待實作 |
 
@@ -2005,10 +2005,18 @@ Migration 順序：① accounts（Role 加 GUEST 僅 choices + 新增 from_band 
 ① `0003` 建 `FeePeriod`、加 `status`、加暫時 FK `period_ref`；
 ② `0004` 資料搬遷：把自由文字 `period`（如「2026上半年」）解析成 FeePeriod（年份+上/下期）、依 `paid_at` 設 status；
 ③ `0005` 移除舊 `period` 文字欄、`period_ref` 改名為 `period` 並設必填 PROTECT。
-（`payment_method` / `account_last5` / `finance_record` 欄位延後到 P2–P4 各自階段再加，不在 P1 塞入未用欄位。）
+（`account_last5` / `finance_record` 欄位延後到 P3/P4 階段再加。）
+
+**P2 實作重點**：
+- migration `0006` 加 `payment_method`（現金/轉帳，P2 只用現金）、`result_seen`（首頁通知，同 LeaveRequest）。
+- 團員：`my_fees`（各期狀態）→ `fee_report_create`（選收款幹部、現金，建 reported）→ `fee_report_withdraw`
+  （僅限本人、僅 reported 可撤回）。作廢的紀錄可重新申報（沿用同一列，不違反 `unique(member, period)`）。
+- 幹部：`fee_review_list`（比照請假審核）確認（→paid、記 paid_at、金額再快照）或作廢（→void）；
+  兩者都把 `result_seen=False`。管理員硬刪走 `fee_delete`（比照 `leave_delete`）。
+- 報表新增「待確認」分類；首頁：團員看確認/作廢結果（result_seen 機制）、幹部看待確認會費筆數。
 
 > ✅ 方向全部定案（2026-08-04）：FeePeriod 固定金額、現金+轉帳兩種繳費、團員撤回/幹部作廢/管理員硬刪、
-> 現金收付制按收款日認列、確認自動入帳、會費移進財務。**P1 已完成**，P2–P4 依上表續做。
+> 現金收付制按收款日認列、確認自動入帳、會費移進財務。**P1、P2 已完成**，P3–P4 依上表續做。
 
 ---
 

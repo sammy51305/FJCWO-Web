@@ -7,7 +7,7 @@
 
 <h2 class="mb-4">嗨，{{ user.name }} 👋</h2>
 
-{% if reviewed_leaves or reviewed_performance_leaves %}
+{% if reviewed_leaves or reviewed_performance_leaves or reviewed_fees %}
 <div class="mb-4">
   {% for leave in reviewed_leaves %}
   <div class="alert {% if leave.status == 'approved' %}alert-success{% else %}alert-danger{% endif %} d-flex align-items-center gap-3 mb-2">
@@ -26,6 +26,16 @@
       你申請的「{{ leave.event.name }}」演出請假，
       已{% if leave.status == 'approved' %}核准{% else %}被拒絕{% endif %}。
       <a href="{% url 'events:my_leave_requests' %}" class="alert-link ms-2">查看詳情 →</a>
+    </div>
+  </div>
+  {% endfor %}
+  {% for fee in reviewed_fees %}
+  <div class="alert {% if fee.status == 'paid' %}alert-success{% else %}alert-secondary{% endif %} d-flex align-items-center gap-3 mb-2">
+    <i class="bi {% if fee.status == 'paid' %}bi-check-circle{% else %}bi-dash-circle{% endif %} fs-4"></i>
+    <div>
+      你申報的「{{ fee.period }}」會費，
+      {% if fee.status == 'paid' %}已由幹部確認繳費。{% else %}被作廢（可能登記有誤），如仍需繳費請重新申報或洽幹部。{% endif %}
+      <a href="{% url 'finance:my_fees' %}" class="alert-link ms-2">查看 →</a>
     </div>
   </div>
   {% endfor %}
@@ -96,6 +106,19 @@
       <div>
         有 <strong>{{ pending_registrations_count }}</strong> 筆校友報到申請待審核。
         <a href="{% url 'accounts:registration_review' %}" class="alert-link ms-2">前往審核 →</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if user.is_officer and pending_fees_count %}
+  <!-- 幹部：待確認會費 -->
+  <div class="col-12">
+    <div class="alert alert-warning d-flex align-items-center gap-3 mb-0">
+      <i class="bi bi-cash-coin fs-4"></i>
+      <div>
+        有 <strong>{{ pending_fees_count }}</strong> 筆會費繳納待確認。
+        <a href="{% url 'finance:fee_review_list' %}" class="alert-link ms-2">前往確認 →</a>
       </div>
     </div>
   </div>

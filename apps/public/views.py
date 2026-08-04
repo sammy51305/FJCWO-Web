@@ -71,11 +71,28 @@ def index(request):
             PerformanceLeaveRequest.objects.filter(
                 pk__in=[leave.pk for leave in reviewed_performance_leaves]
             ).update(result_seen=True)
-        # 幹部：待審核的校友報到申請數
+        # 我的會費審核結果（幹部確認/作廢後尚未在首頁看過的通知）
+        from apps.finance.models import MembershipFee
+        reviewed_fees = list(
+            MembershipFee.objects
+            .filter(member=request.user, result_seen=False,
+                    status__in=[MembershipFee.Status.PAID, MembershipFee.Status.VOID])
+            .select_related('period')
+            .order_by('-id')
+        )
+        context['reviewed_fees'] = reviewed_fees
+        if reviewed_fees:
+            MembershipFee.objects.filter(
+                pk__in=[fee.pk for fee in reviewed_fees]
+            ).update(result_seen=True)
+        # 幹部：待審核的校友報到申請數、待確認會費筆數
         if request.user.is_officer:
             from apps.accounts.models import Registration
             context['pending_registrations_count'] = Registration.objects.filter(
                 status=Registration.Status.PENDING
+            ).count()
+            context['pending_fees_count'] = MembershipFee.objects.filter(
+                status=MembershipFee.Status.REPORTED
             ).count()
     return render(request, 'public/index.html', context)
 

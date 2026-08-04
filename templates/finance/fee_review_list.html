@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}會費確認 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">會費確認</h2>
+
+<h5 class="text-muted mb-3">待確認（團員已申報）</h5>
+{% if pending %}
+<div class="table-responsive mb-5">
+  <table class="table table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>團員</th>
+        <th>期別</th>
+        <th>金額</th>
+        <th>繳費方式</th>
+        <th>收款幹部</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for fee in pending %}
+      <tr>
+        <td class="fw-semibold">{{ fee.member.name }}</td>
+        <td>{{ fee.period }}</td>
+        <td>{{ fee.period.amount|floatformat:"0" }} 元</td>
+        <td>{{ fee.get_payment_method_display }}</td>
+        <td class="text-muted small">{{ fee.collected_by.name|default:"—" }}</td>
+        <td>
+          <form method="post" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="fee_id" value="{{ fee.pk }}">
+            <button type="submit" name="action" value="confirm" class="btn btn-sm btn-success me-1">確認繳費</button>
+            <button type="submit" name="action" value="void" class="btn btn-sm btn-outline-danger"
+                    onclick="return confirm('作廢 {{ fee.member.name }} 的「{{ fee.period }}」申報？（登記錯誤時使用）')">作廢</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted mb-5">目前沒有待確認的繳費申報。</p>
+{% endif %}
+
+<h5 class="text-muted mb-3">近期處理紀錄</h5>
+{% if reviewed %}
+<div class="table-responsive">
+  <table class="table table-sm align-middle text-muted">
+    <thead class="table-light">
+      <tr>
+        <th>團員</th>
+        <th>期別</th>
+        <th>狀態</th>
+        <th>繳費日期</th>
+        <th>收款幹部</th>
+        {% if user.is_superuser or user.is_admin_role %}<th></th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for fee in reviewed %}
+      <tr>
+        <td>{{ fee.member.name }}</td>
+        <td>{{ fee.period }}</td>
+        <td>
+          {% if fee.status == 'paid' %}
+            <span class="badge bg-success">已繳</span>
+          {% else %}
+            <span class="badge bg-secondary">作廢</span>
+          {% endif %}
+        </td>
+        <td>{{ fee.paid_at|date:"Y/m/d"|default:"—" }}</td>
+        <td>{{ fee.collected_by.name|default:"—" }}</td>
+        {% if user.is_superuser or user.is_admin_role %}
+        <td>
+          <form method="post" action="{% url 'finance:fee_delete' fee.pk %}" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{% url 'finance:fee_review_list' %}">
+            <button type="submit" class="btn btn-sm btn-outline-danger"
+                    onclick="return confirm('確定刪除 {{ fee.member.name }} 的這筆會費紀錄嗎？無法復原。')">
+              <i class="bi bi-trash"></i>
+            </button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted">尚無處理紀錄。</p>
+{% endif %}
+{% endblock %}

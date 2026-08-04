@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}我的會費 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">我的會費</h2>
+
+{% if rows %}
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>期別</th>
+        <th>團費</th>
+        <th>狀態</th>
+        <th>收款幹部</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td class="fw-semibold">{{ row.period }}</td>
+        <td>{{ row.period.amount|floatformat:"0" }} 元</td>
+        <td>
+          {% if row.fee and row.fee.status == 'reported' %}
+            <span class="badge bg-warning text-dark">待幹部確認</span>
+          {% elif row.fee and row.fee.status == 'paid' %}
+            <span class="badge bg-success">已繳費</span>
+            {% if row.fee.paid_at %}<small class="text-muted ms-1">{{ row.fee.paid_at|date:"Y/m/d" }}</small>{% endif %}
+          {% else %}
+            <span class="badge bg-danger">應繳未繳</span>
+          {% endif %}
+        </td>
+        <td class="text-muted small">{% if row.fee and row.fee.collected_by %}{{ row.fee.collected_by.name }}{% else %}—{% endif %}</td>
+        <td>
+          {% if row.fee and row.fee.status == 'reported' %}
+          <form method="post" action="{% url 'finance:fee_report_withdraw' row.fee.pk %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-secondary"
+                    onclick="return confirm('確定撤回「{{ row.period }}」的繳費申報嗎？')">撤回申報</button>
+          </form>
+          {% elif row.fee and row.fee.status == 'paid' %}
+            <span class="text-muted small">—</span>
+          {% else %}
+          <a href="{% url 'finance:fee_report_create' row.period.pk %}" class="btn btn-sm btn-primary">申報繳費</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="text-muted small">申報後由幹部確認；確認前可撤回。目前先支援現金繳費（交給指定收款幹部）。</p>
+{% else %}
+<p class="text-muted">目前尚無任何會費期別。</p>
+{% endif %}
+{% endblock %}

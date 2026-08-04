@@ -30,7 +30,7 @@ def membership_fee_report(request):
         selected_period = periods.first()
 
     rows = []
-    paid_count = unpaid_count = no_record_count = 0
+    paid_count = reported_count = unpaid_count = no_record_count = 0
 
     if selected_period:
         members = (
@@ -39,6 +39,7 @@ def membership_fee_report(request):
             .select_related('instrument')
             .order_by('instrument__category', 'instrument__name', 'name')
         )
+        S = MembershipFee.Status
         fee_map = {
             f.member_id: f
             for f in MembershipFee.objects.filter(period=selected_period).select_related('collected_by')
@@ -46,13 +47,16 @@ def membership_fee_report(request):
         for member in members:
             fee = fee_map.get(member.pk)
             # 無列、或已作廢 → 視為無紀錄（應繳未繳）
-            if fee is None or fee.status == MembershipFee.Status.VOID:
+            if fee is None or fee.status == S.VOID:
                 status = 'no_record'
                 no_record_count += 1
-            elif fee.status == MembershipFee.Status.PAID:
+            elif fee.status == S.PAID:
                 status = 'paid'
                 paid_count += 1
-            else:  # unpaid / reported
+            elif fee.status == S.REPORTED:
+                status = 'reported'
+                reported_count += 1
+            else:  # unpaid
                 status = 'unpaid'
                 unpaid_count += 1
             rows.append({'member': member, 'fee': fee, 'status': status})
@@ -62,6 +66,7 @@ def membership_fee_report(request):
         'selected_period': selected_period,
         'rows': rows,
         'paid_count': paid_count,
+        'reported_count': reported_count,
         'unpaid_count': unpaid_count,
         'no_record_count': no_record_count,
     })
@@ -429,3 +434,140 @@ def fee_edit(request):
         'form_data': form_data,
         'today': timezone.localdate().isoformat(),
     })
+
+
+# ── 團員自助申報繳費（附錄五 §9 P2，現金）────────────────────────
+# 團員在「我的會費」看各期狀態，對應繳未繳的期別申報（選收款幹部），
+# 待確認狀態可自行撤回；一旦幹部確認為已繳即不可撤回。
+
+
+@login_required
+def my_fees(request):
+    """團員檢視自己各期會費狀態，並可對應繳未繳的期別申報繳費。"""
+    periods = FeePeriod.objects.all()
+    fee_map = {
+        f.period_id: f
+        for f in MembershipFee.objects.filter(member=request.user).select_related('collected_by')
+    }
+    rows = []
+    for period in periods:
+        fee = fee_map.get(period.pk)
+        rows.append({'period': period, 'fee': fee})
+    return render(request, 'finance/my_fees.html', {'rows': rows})
+
+
+@login_required
+def fee_report_create(request, period_pk):
+    """團員對某期申報繳費（現金）：選收款幹部，建立待確認紀錄。"""
+    period = get_object_or_404(FeePeriod, pk=period_pk)
+    existing = MembershipFee.objects.filter(member=request.user, period=period).first()
+    officers = (
+        User.objects.filter(is_active=True, role__in=[User.Role.OFFICER, User.Role.ADMIN])
+        .order_by('name')
+    )
+    S = MembershipFee.Status
+
+    # 已在待確認或已繳，不可重複申報（作廢的可重新申報）
+    blocked = existing and existing.status in (S.REPORTED, S.PAID)
+
+    if request.method == 'POST':
+        collected_by_id = request.POST.get('collected_by', '')
+        officer = officers.filter(pk=collected_by_id).first() if collected_by_id else None
+        if blocked:
+            messages.error(request, '您已申報或已繳納此期會費，無需重複申報。')
+        elif not officer:
+            messages.error(request, '請選擇收款幹部。')
+        else:
+            fee = existing or MembershipFee(member=request.user, period=period)
+            fee.amount = period.amount
+            fee.status = S.REPORTED
+            fee.payment_method = MembershipFee.PaymentMethod.CASH
+            fee.collected_by = officer
+            fee.paid_at = None
+            fee.result_seen = True
+            fee.save()
+            messages.success(request, f'已申報「{period}」會費（現金交予 {officer.name}），等待幹部確認。')
+            return redirect('finance:my_fees')
+
+    return render(request, 'finance/fee_report_form.html', {
+        'period': period, 'officers': officers, 'existing': existing, 'blocked': blocked,
+    })
+
+
+@login_required
+def fee_report_withdraw(request, pk):
+    """團員撤回自己的待確認申報（僅限本人、僅限 reported 狀態）。"""
+    fee = get_object_or_404(MembershipFee, pk=pk)
+    if fee.member_id != request.user.pk:
+        messages.error(request, '權限不足。')
+        return redirect('finance:my_fees')
+    if request.method == 'POST':
+        if fee.status == MembershipFee.Status.REPORTED:
+            fee.delete()
+            messages.success(request, '已撤回繳費申報。')
+        else:
+            messages.error(request, '此申報已被幹部處理，無法撤回。')
+    return redirect('finance:my_fees')
+
+
+# ── 幹部確認/作廢、管理員硬刪（附錄五 §9 P2）────────────────────
+
+
+@login_required
+def fee_review_list(request):
+    """幹部確認團員申報的繳費（→已繳）或作廢（→void，登記錯）。比照請假審核。"""
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('finance:membership_fee_report')
+
+    S = MembershipFee.Status
+    if request.method == 'POST':
+        fee_id = request.POST.get('fee_id')
+        action = request.POST.get('action')
+        fee = get_object_or_404(MembershipFee.objects.select_related('member', 'period'), pk=fee_id)
+        if fee.status != S.REPORTED:
+            messages.error(request, '此申報已處理，無法重複操作。')
+            return redirect('finance:fee_review_list')
+        if action == 'confirm':
+            fee.status = S.PAID
+            fee.paid_at = timezone.localdate()
+            fee.amount = fee.period.amount   # 確認當下再快照一次期別金額
+            fee.result_seen = False
+            fee.save()
+            messages.success(request, f'已確認 {fee.member.name} 的「{fee.period}」繳費。')
+        elif action == 'void':
+            fee.status = S.VOID
+            fee.result_seen = False
+            fee.save()
+            messages.success(request, f'已作廢 {fee.member.name} 的「{fee.period}」申報。')
+        return redirect('finance:fee_review_list')
+
+    pending = (
+        MembershipFee.objects.filter(status=S.REPORTED)
+        .select_related('member', 'period', 'collected_by')
+        .order_by('period__year', 'period__term', 'member__name')
+    )
+    reviewed = (
+        MembershipFee.objects.filter(status__in=[S.PAID, S.VOID])
+        .select_related('member', 'period', 'collected_by')
+        .order_by('-id')[:30]
+    )
+    return render(request, 'finance/fee_review_list.html', {
+        'pending': pending,
+        'reviewed': reviewed,
+    })
+
+
+@login_required
+def fee_delete(request, pk):
+    """刪除會費紀錄，限管理員（比照 leave_delete）。可從審核頁或繳納報表進入。"""
+    fee = get_object_or_404(MembershipFee.objects.select_related('member'), pk=pk)
+    if not (request.user.is_superuser or request.user.is_admin_role):
+        messages.error(request, '權限不足，僅管理員可刪除會費紀錄。')
+        return redirect('finance:fee_review_list')
+    next_url = request.POST.get('next') or reverse('finance:fee_review_list')
+    if request.method == 'POST':
+        name = fee.member.name
+        fee.delete()
+        messages.success(request, f'已刪除 {name} 的會費紀錄。')
+    return redirect(next_url)

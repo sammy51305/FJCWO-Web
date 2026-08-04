@@ -411,3 +411,206 @@ class FeeEditTest(TestCase):
         self.client.force_login(self.officer)
         self.client.post(self.url, {'member': '', 'period': ''})
         self.assertFalse(MembershipFee.objects.exists())
+
+
+class FeeReportTest(TestCase):
+    """團員自助申報繳費（附錄五 §9 P2，現金）"""
+
+    def setUp(self):
+        self.member = User.objects.create_user(
+            username='rpt_member', email='rpt_member@test.local', password='x',
+            name='申報團員', role=User.Role.MEMBER,
+        )
+        self.other = User.objects.create_user(
+            username='rpt_other', email='rpt_other@test.local', password='x',
+            name='其他團員', role=User.Role.MEMBER,
+        )
+        self.officer = User.objects.create_user(
+            username='rpt_officer', email='rpt_officer@test.local', password='x',
+            name='收款幹部', role=User.Role.OFFICER,
+        )
+        self.period = FeePeriod.objects.create(
+            year=2026, term='first', amount=500, created_by=self.officer,
+        )
+        self.mine_url = reverse('finance:my_fees')
+        self.report_url = reverse('finance:fee_report_create', args=[self.period.pk])
+
+    def test_my_fees_requires_login(self):
+        r = self.client.get(self.mine_url)
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    def test_my_fees_shows_period_and_report_action(self):
+        """我的會費列出期別，應繳未繳可申報"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.mine_url)
+        self.assertContains(r, str(self.period))
+        self.assertContains(r, '申報繳費')
+
+    def test_member_can_report_cash(self):
+        """申報現金：建立 reported 紀錄，記收款幹部、金額自期別快照"""
+        self.client.force_login(self.member)
+        self.client.post(self.report_url, {'collected_by': self.officer.pk})
+        fee = MembershipFee.objects.get(member=self.member, period=self.period)
+        self.assertEqual(fee.status, MembershipFee.Status.REPORTED)
+        self.assertEqual(fee.payment_method, MembershipFee.PaymentMethod.CASH)
+        self.assertEqual(fee.collected_by, self.officer)
+        self.assertEqual(fee.amount, 500)
+        self.assertIsNone(fee.paid_at)
+
+    def test_report_requires_officer(self):
+        """未選收款幹部不建立紀錄"""
+        self.client.force_login(self.member)
+        self.client.post(self.report_url, {'collected_by': ''})
+        self.assertFalse(MembershipFee.objects.exists())
+
+    def test_cannot_report_when_reported(self):
+        """已在待確認狀態不可重複申報"""
+        MembershipFee.objects.create(
+            member=self.member, period=self.period, amount=500,
+            status=MembershipFee.Status.REPORTED, collected_by=self.officer,
+        )
+        self.client.force_login(self.member)
+        self.client.post(self.report_url, {'collected_by': self.officer.pk})
+        self.assertEqual(MembershipFee.objects.filter(member=self.member, period=self.period).count(), 1)
+
+    def test_cannot_report_when_paid(self):
+        """已繳不可再申報"""
+        MembershipFee.objects.create(
+            member=self.member, period=self.period, amount=500,
+            status=MembershipFee.Status.PAID,
+        )
+        self.client.force_login(self.member)
+        self.client.post(self.report_url, {'collected_by': self.officer.pk})
+        fee = MembershipFee.objects.get(member=self.member, period=self.period)
+        self.assertEqual(fee.status, MembershipFee.Status.PAID)
+
+    def test_can_rereport_after_void(self):
+        """作廢後可重新申報（沿用同一列，不違反 unique）"""
+        MembershipFee.objects.create(
+            member=self.member, period=self.period, amount=500,
+            status=MembershipFee.Status.VOID,
+        )
+        self.client.force_login(self.member)
+        self.client.post(self.report_url, {'collected_by': self.officer.pk})
+        fees = MembershipFee.objects.filter(member=self.member, period=self.period)
+        self.assertEqual(fees.count(), 1)
+        self.assertEqual(fees.first().status, MembershipFee.Status.REPORTED)
+
+    def test_withdraw_own_reported(self):
+        """團員可撤回自己的待確認申報"""
+        fee = MembershipFee.objects.create(
+            member=self.member, period=self.period, amount=500,
+            status=MembershipFee.Status.REPORTED, collected_by=self.officer,
+        )
+        self.client.force_login(self.member)
+        self.client.post(reverse('finance:fee_report_withdraw', args=[fee.pk]))
+        self.assertFalse(MembershipFee.objects.filter(pk=fee.pk).exists())
+
+    def test_cannot_withdraw_paid(self):
+        """已確認繳費不可撤回"""
+        fee = MembershipFee.objects.create(
+            member=self.member, period=self.period, amount=500,
+            status=MembershipFee.Status.PAID,
+        )
+        self.client.force_login(self.member)
+        self.client.post(reverse('finance:fee_report_withdraw', args=[fee.pk]))
+        self.assertTrue(MembershipFee.objects.filter(pk=fee.pk).exists())
+
+    def test_cannot_withdraw_others(self):
+        """不能撤回他人的申報"""
+        fee = MembershipFee.objects.create(
+            member=self.other, period=self.period, amount=500,
+            status=MembershipFee.Status.REPORTED, collected_by=self.officer,
+        )
+        self.client.force_login(self.member)
+        self.client.post(reverse('finance:fee_report_withdraw', args=[fee.pk]))
+        self.assertTrue(MembershipFee.objects.filter(pk=fee.pk).exists())
+
+
+class FeeReviewTest(TestCase):
+    """幹部確認/作廢會費 ＋ 管理員硬刪（附錄五 §9 P2）"""
+
+    def setUp(self):
+        self.member = User.objects.create_user(
+            username='rv_member', email='rv_member@test.local', password='x',
+            name='繳費團員', role=User.Role.MEMBER,
+        )
+        self.officer = User.objects.create_user(
+            username='rv_officer', email='rv_officer@test.local', password='x',
+            name='審核幹部', role=User.Role.OFFICER,
+        )
+        self.admin = User.objects.create_user(
+            username='rv_admin', email='rv_admin@test.local', password='x',
+            name='審核管理員', role=User.Role.ADMIN,
+        )
+        self.period = FeePeriod.objects.create(
+            year=2026, term='first', amount=500, created_by=self.officer,
+        )
+        self.url = reverse('finance:fee_review_list')
+
+    def _reported(self):
+        return MembershipFee.objects.create(
+            member=self.member, period=self.period, amount=500,
+            status=MembershipFee.Status.REPORTED, collected_by=self.officer,
+        )
+
+    def test_member_cannot_access(self):
+        self.client.force_login(self.member)
+        r = self.client.get(self.url, follow=True)
+        self.assertContains(r, '權限不足')
+
+    def test_officer_can_view(self):
+        self._reported()
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, '繳費團員')
+
+    def test_confirm_sets_paid(self):
+        """確認：status=paid、記 paid_at、result_seen=False、金額再快照"""
+        self.period.amount = 800   # 確認時應以期別當下金額為準
+        self.period.save()
+        fee = self._reported()
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {'fee_id': fee.pk, 'action': 'confirm'})
+        fee.refresh_from_db()
+        self.assertEqual(fee.status, MembershipFee.Status.PAID)
+        self.assertIsNotNone(fee.paid_at)
+        self.assertFalse(fee.result_seen)
+        self.assertEqual(fee.amount, 800)
+
+    def test_void_sets_void(self):
+        """作廢：status=void、result_seen=False"""
+        fee = self._reported()
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {'fee_id': fee.pk, 'action': 'void'})
+        fee.refresh_from_db()
+        self.assertEqual(fee.status, MembershipFee.Status.VOID)
+        self.assertFalse(fee.result_seen)
+
+    def test_cannot_review_processed(self):
+        """已處理的申報不可重複操作"""
+        fee = MembershipFee.objects.create(
+            member=self.member, period=self.period, amount=500,
+            status=MembershipFee.Status.PAID,
+        )
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {'fee_id': fee.pk, 'action': 'void'})
+        fee.refresh_from_db()
+        self.assertEqual(fee.status, MembershipFee.Status.PAID)
+
+    def test_officer_cannot_delete(self):
+        """一般幹部不可硬刪會費紀錄"""
+        fee = self._reported()
+        self.client.force_login(self.officer)
+        r = self.client.post(reverse('finance:fee_delete', args=[fee.pk]), follow=True)
+        self.assertTrue(MembershipFee.objects.filter(pk=fee.pk).exists())
+        self.assertContains(r, '僅管理員')
+
+    def test_admin_can_delete(self):
+        """管理員可硬刪會費紀錄"""
+        fee = self._reported()
+        self.client.force_login(self.admin)
+        self.client.post(reverse('finance:fee_delete', args=[fee.pk]))
+        self.assertFalse(MembershipFee.objects.filter(pk=fee.pk).exists())

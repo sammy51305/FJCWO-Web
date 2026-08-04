@@ -54,6 +54,12 @@
     <div class="fs-4 fw-bold text-success">{{ paid_count }}</div>
     <div class="text-muted small">已繳費</div>
   </div>
+  {% if reported_count %}
+  <div class="card text-center px-4 py-2 border-warning">
+    <div class="fs-4 fw-bold text-warning">{{ reported_count }}</div>
+    <div class="text-muted small">待確認</div>
+  </div>
+  {% endif %}
   <div class="card text-center px-4 py-2 border-danger">
     <div class="fs-4 fw-bold text-danger">{{ unpaid_count }}</div>
     <div class="text-muted small">未繳費</div>
@@ -90,6 +96,8 @@
         <td>
           {% if row.status == 'paid' %}
             <span class="badge bg-success">已繳費</span>
+          {% elif row.status == 'reported' %}
+            <span class="badge bg-warning text-dark">待確認</span>
           {% elif row.status == 'unpaid' %}
             <span class="badge bg-danger">未繳費</span>
           {% else %}
@@ -99,11 +107,21 @@
         <td>{% if row.fee %}{{ row.fee.amount|floatformat:"0" }} 元{% else %}—{% endif %}</td>
         <td>{% if row.fee and row.fee.paid_at %}{{ row.fee.paid_at|date:"Y/m/d" }}{% else %}—{% endif %}</td>
         <td class="text-muted small">{% if row.fee and row.fee.collected_by %}{{ row.fee.collected_by.name }}{% else %}—{% endif %}</td>
-        <td class="d-print-none">
+        <td class="d-print-none d-flex gap-1">
           <a href="{% url 'finance:fee_edit' %}?member={{ row.member.pk }}&period={{ selected_period.pk }}"
              class="btn btn-sm btn-outline-secondary">
             {% if row.status == 'no_record' %}登記{% else %}編輯{% endif %}
           </a>
+          {% if row.fee and user.is_superuser or row.fee and user.is_admin_role %}
+          <form method="post" action="{% url 'finance:fee_delete' row.fee.pk %}" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{% url 'finance:membership_fee_report' %}?period={{ selected_period.pk }}">
+            <button type="submit" class="btn btn-sm btn-outline-danger"
+                    onclick="return confirm('確定刪除 {{ row.member.name }} 的這筆會費紀錄嗎？無法復原。')">
+              <i class="bi bi-trash"></i>
+            </button>
+          </form>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}

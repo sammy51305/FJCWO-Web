@@ -79,6 +79,10 @@ class MembershipFee(models.Model):
         PAID = 'paid', '已繳'
         VOID = 'void', '作廢'
 
+    class PaymentMethod(models.TextChoices):
+        CASH = 'cash', '現金'
+        TRANSFER = 'transfer', '轉帳'
+
     member = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
         related_name='membership_fees', verbose_name='團員'
@@ -91,10 +95,16 @@ class MembershipFee(models.Model):
                                  validators=[MinValueValidator(1)],
                                  help_text='繳費當下自期別金額快照，之後改期別金額不竄改此筆')
     status = models.CharField('狀態', max_length=10, choices=Status, default=Status.UNPAID)
+    payment_method = models.CharField('繳費方式', max_length=10, choices=PaymentMethod,
+                                      default=PaymentMethod.CASH)
     paid_at = models.DateField('繳費日期', null=True, blank=True)
     collected_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='collected_fees', verbose_name='收款幹部'
+    )
+    result_seen = models.BooleanField(
+        '團員已讀審核結果', default=True,
+        help_text='幹部確認/作廢時設為 False，團員在首頁看到通知後設回 True；預設 True 避免既有資料被當成新結果'
     )
 
     class Meta:
