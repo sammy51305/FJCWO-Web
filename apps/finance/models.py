@@ -102,6 +102,11 @@ class MembershipFee(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='collected_fees', verbose_name='收款幹部'
     )
+    finance_record = models.ForeignKey(
+        'FinanceRecord', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='membership_fee', verbose_name='對應收入紀錄',
+        help_text='確認繳費時自動產生的那筆收支明細收入，作廢/退回時連動移除'
+    )
     result_seen = models.BooleanField(
         '團員已讀審核結果', default=True,
         help_text='幹部確認/作廢時設為 False，團員在首頁看到通知後設回 True；預設 True 避免既有資料被當成新結果'

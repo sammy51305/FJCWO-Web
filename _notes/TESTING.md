@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-08-04（共 434 個測試）
+> 最後更新：2026-08-06（共 444 個測試）
 
 ---
 
@@ -79,7 +79,7 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **434 個測試**，分布在 8 個 app。
+共 **444 個測試**，分布在 8 個 app。
 
 ### `apps/accounts/tests.py`（112 個）
 
@@ -135,7 +135,7 @@ python manage.py test --noinput
 |-------|---------|
 | `BorrowStatusReportTest` | 存取控制、空狀態訊息、借出中財產顯示、已還財產不顯示、逾期標記（overdue flag）、未到期不標記、overdue_count 正確計算 |
 
-### `apps/finance/tests.py`（55 個）
+### `apps/finance/tests.py`（65 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -143,6 +143,8 @@ python manage.py test --noinput
 | `FeePeriodTest` | 會費期別主檔 CRUD：存取控制（團員無權限/幹部可看）、新增、同年份+期別重複被擋、金額 0 被擋、編輯、刪除限管理員（幹部擋下/管理員可刪）、已有繳費紀錄時 PROTECT 擋下 |
 | `FeeReportTest` | 團員自助申報（P2 現金）：我的會費列期別/可申報、申報建 reported（記收款幹部、金額快照）、缺收款幹部被擋、已申報/已繳不可重複申報、作廢後可重新申報（沿用同列）、撤回自己的待確認、不可撤回已繳/他人 |
 | `FeeReviewTest` | 幹部確認/作廢（P2）：存取控制、確認→已繳(記 paid_at、result_seen=False、金額再快照)、作廢→void、已處理不可重複、管理員可硬刪/一般幹部不可刪 |
+| `FeeIncomeTest` | 確認繳費自動入帳（P3）：確認→產生會費收入(金額/日期=收款日、連結 finance_record)、作廢待確認不產生收入、幹部代登記已繳也入帳、已繳改未繳連動移除收入、管理員硬刪連動刪收入 |
+| `AnnualReportTest` | 當年度收支（P3）：存取控制、預設最新年度、當年收入/支出/結餘彙總（跨年不計入）、確認繳費的會費收入計入當年度 |
 | `FinanceRecordCRUDTest` | 收支明細：存取控制（未登入/團員/幹部）、新增（登記者自動帶入）、amount 0/負數/缺說明被擋、編輯、刪除限管理員（幹部擋下、管理員可刪）、列表收入/支出/結餘摘要 |
 | `FeeEditTest` | 會費登記（幹部代登記）：一般團員無權限、登記已繳（status=paid、設 paid_at 與收款幹部）、未繳（status=unpaid、兩者為空）、金額一律自期別快照（不受表單影響）、同 member+period 再登記更新不重複、缺團員/期別被擋 |
 

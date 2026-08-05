@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models.deletion import ProtectedError
@@ -364,12 +366,44 @@ def receipt_download(request, pk):
 # ── 會費登記（MembershipFee）前端 ──────────────────────────────
 
 
+def _sync_fee_income(fee, user):
+    """
+    依 fee 狀態同步對應的收支明細收入（附錄五 §9 P3，現金收付制）：
+    - status=已繳：確保有一筆對應 FinanceRecord 收入（金額、日期=收款日 同步）
+    - 其他狀態：移除既有對應收入（作廢/退回/未繳時不留帳）
+
+    收入日期以「實際收款日」（paid_at）認列，故「當年度收支」按 FinanceRecord.date 篩年份即可，
+    與期別的年份脫鉤（見附錄五 §9 收入認列一節）。
+    """
+    if fee.status == MembershipFee.Status.PAID:
+        rec = fee.finance_record
+        if rec is None:
+            rec = FinanceRecord(
+                type=FinanceRecord.Type.INCOME,
+                category=FinanceRecord.Category.MEMBERSHIP,
+                created_by=user,
+            )
+        rec.amount = fee.amount
+        rec.date = fee.paid_at or timezone.localdate()
+        rec.description = f'{fee.member.name}（{fee.period}）會費'
+        rec.save()
+        if fee.finance_record_id != rec.pk:
+            fee.finance_record = rec
+            fee.save(update_fields=['finance_record'])
+    else:
+        rec = fee.finance_record
+        if rec is not None:
+            fee.finance_record = None
+            fee.save(update_fields=['finance_record'])
+            rec.delete()
+
+
 @login_required
 def fee_edit(request):
     """
     會費登記／編輯（幹部限定）。以 member + period(FeePeriod) 定位一筆 MembershipFee
     （get_or_create），設定狀態（已繳/未繳）與收款幹部；金額由期別固定金額快照，幹部不填。
-    從會費繳納報表每列進入。
+    從會費繳納報表每列進入。確認為已繳時自動同步一筆收支明細收入。
     """
     if not request.user.is_officer:
         messages.error(request, '權限不足。')
@@ -415,6 +449,7 @@ def fee_edit(request):
         fee.paid_at = paid_at
         fee.collected_by = request.user if paid else None
         fee.save()
+        _sync_fee_income(fee, request.user)   # 已繳→產生收入；未繳→移除
         messages.success(request, f'已更新 {member.name} 的「{period}」會費紀錄。')
         return redirect(f"{reverse('finance:membership_fee_report')}?period={period.pk}")
 
@@ -534,11 +569,13 @@ def fee_review_list(request):
             fee.amount = fee.period.amount   # 確認當下再快照一次期別金額
             fee.result_seen = False
             fee.save()
-            messages.success(request, f'已確認 {fee.member.name} 的「{fee.period}」繳費。')
+            _sync_fee_income(fee, request.user)   # 自動入帳（收支明細收入）
+            messages.success(request, f'已確認 {fee.member.name} 的「{fee.period}」繳費，已計入收支明細。')
         elif action == 'void':
             fee.status = S.VOID
             fee.result_seen = False
             fee.save()
+            _sync_fee_income(fee, request.user)   # 移除先前若有的入帳
             messages.success(request, f'已作廢 {fee.member.name} 的「{fee.period}」申報。')
         return redirect('finance:fee_review_list')
 
@@ -568,6 +605,57 @@ def fee_delete(request, pk):
     next_url = request.POST.get('next') or reverse('finance:fee_review_list')
     if request.method == 'POST':
         name = fee.member.name
+        rec = fee.finance_record   # 連動刪除自動產生的收入紀錄
         fee.delete()
+        if rec is not None:
+            rec.delete()
         messages.success(request, f'已刪除 {name} 的會費紀錄。')
     return redirect(next_url)
+
+
+# ── 當年度收支報表（附錄五 §9 P3）─────────────────────────────
+# 按收支明細日期的年份彙總收入/支出/結餘與分類明細，可列印。
+# 會費收入已於「確認繳費」時自動計入收支明細，故此報表天然涵蓋會費。
+
+
+@login_required
+def annual_report(request):
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('/')
+
+    years = sorted(
+        {d.year for d in FinanceRecord.objects.values_list('date', flat=True)},
+        reverse=True,
+    )
+    selected_year = request.GET.get('year', '')
+    year = int(selected_year) if selected_year.isdigit() else (years[0] if years else None)
+
+    income = expense = 0
+    rows = []
+    if year:
+        cat = defaultdict(lambda: {'income': 0, 'expense': 0})
+        for r in FinanceRecord.objects.filter(date__year=year):
+            if r.type == FinanceRecord.Type.INCOME:
+                income += r.amount
+                cat[r.category]['income'] += r.amount
+            else:
+                expense += r.amount
+                cat[r.category]['expense'] += r.amount
+        labels = dict(FinanceRecord.Category.choices)
+        for c, v in cat.items():
+            rows.append({
+                'category': labels.get(c, c),
+                'income': v['income'],
+                'expense': v['expense'],
+            })
+        rows.sort(key=lambda x: x['income'] + x['expense'], reverse=True)
+
+    return render(request, 'finance/annual_report.html', {
+        'years': years,
+        'selected_year': year,
+        'income': income,
+        'expense': expense,
+        'balance': income - expense,
+        'rows': rows,
+    })

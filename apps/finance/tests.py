@@ -614,3 +614,151 @@ class FeeReviewTest(TestCase):
         self.client.force_login(self.admin)
         self.client.post(reverse('finance:fee_delete', args=[fee.pk]))
         self.assertFalse(MembershipFee.objects.filter(pk=fee.pk).exists())
+
+
+class FeeIncomeTest(TestCase):
+    """確認繳費自動入帳到收支明細（附錄五 §9 P3）"""
+
+    def setUp(self):
+        self.member = User.objects.create_user(
+            username='fi_member', email='fi_member@test.local', password='x',
+            name='入帳團員', role=User.Role.MEMBER,
+        )
+        self.officer = User.objects.create_user(
+            username='fi_officer', email='fi_officer@test.local', password='x',
+            name='入帳幹部', role=User.Role.OFFICER,
+        )
+        self.admin = User.objects.create_user(
+            username='fi_admin', email='fi_admin@test.local', password='x',
+            name='入帳管理員', role=User.Role.ADMIN,
+        )
+        self.period = FeePeriod.objects.create(
+            year=2026, term='first', amount=500, created_by=self.officer,
+        )
+        self.review_url = reverse('finance:fee_review_list')
+        self.edit_url = reverse('finance:fee_edit')
+
+    def _reported(self):
+        return MembershipFee.objects.create(
+            member=self.member, period=self.period, amount=500,
+            status=MembershipFee.Status.REPORTED, collected_by=self.officer,
+        )
+
+    def test_confirm_creates_income(self):
+        """確認繳費 → 自動產生一筆會費收入（金額、日期=收款日），並連結 finance_record"""
+        fee = self._reported()
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'fee_id': fee.pk, 'action': 'confirm'})
+        fee.refresh_from_db()
+        self.assertIsNotNone(fee.finance_record)
+        rec = fee.finance_record
+        self.assertEqual(rec.type, FinanceRecord.Type.INCOME)
+        self.assertEqual(rec.category, FinanceRecord.Category.MEMBERSHIP)
+        self.assertEqual(rec.amount, 500)
+        self.assertEqual(rec.date, fee.paid_at)
+        self.assertEqual(FinanceRecord.objects.count(), 1)
+
+    def test_void_reported_creates_no_income(self):
+        """作廢待確認的申報不會產生收入（尚未繳費）"""
+        fee = self._reported()
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'fee_id': fee.pk, 'action': 'void'})
+        self.assertFalse(FinanceRecord.objects.exists())
+
+    def test_fee_edit_paid_creates_income(self):
+        """幹部代登記為已繳也會自動入帳"""
+        self.client.force_login(self.officer)
+        self.client.post(self.edit_url, {
+            'member': self.member.pk, 'period': self.period.pk, 'paid': 'on',
+        })
+        fee = MembershipFee.objects.get(member=self.member, period=self.period)
+        self.assertIsNotNone(fee.finance_record)
+        self.assertEqual(FinanceRecord.objects.filter(category='membership').count(), 1)
+
+    def test_fee_edit_unpaid_removes_income(self):
+        """已繳改回未繳 → 連動移除先前的收入紀錄"""
+        self.client.force_login(self.officer)
+        # 先登記已繳（產生收入）
+        self.client.post(self.edit_url, {
+            'member': self.member.pk, 'period': self.period.pk, 'paid': 'on',
+        })
+        self.assertEqual(FinanceRecord.objects.count(), 1)
+        # 再改回未繳
+        self.client.post(self.edit_url, {
+            'member': self.member.pk, 'period': self.period.pk,
+        })
+        fee = MembershipFee.objects.get(member=self.member, period=self.period)
+        self.assertIsNone(fee.finance_record)
+        self.assertFalse(FinanceRecord.objects.exists())
+
+    def test_admin_delete_removes_linked_income(self):
+        """管理員硬刪已繳會費 → 連動刪除那筆收入"""
+        fee = self._reported()
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'fee_id': fee.pk, 'action': 'confirm'})
+        self.assertEqual(FinanceRecord.objects.count(), 1)
+        self.client.force_login(self.admin)
+        self.client.post(reverse('finance:fee_delete', args=[fee.pk]))
+        self.assertFalse(MembershipFee.objects.filter(pk=fee.pk).exists())
+        self.assertFalse(FinanceRecord.objects.exists())
+
+
+class AnnualReportTest(TestCase):
+    """當年度收支報表（附錄五 §9 P3）"""
+
+    def setUp(self):
+        self.officer = User.objects.create_user(
+            username='an_officer', email='an_officer@test.local', password='x',
+            name='年度幹部', role=User.Role.OFFICER,
+        )
+        self.member = User.objects.create_user(
+            username='an_member', email='an_member@test.local', password='x',
+            name='年度團員', role=User.Role.MEMBER,
+        )
+        self.url = reverse('finance:annual_report')
+
+    def _rec(self, type_, category, amount, date):
+        return FinanceRecord.objects.create(
+            type=type_, category=category, amount=amount, date=date,
+            description='x', created_by=self.officer,
+        )
+
+    def test_member_forbidden(self):
+        self.client.force_login(self.member)
+        r = self.client.get(self.url, follow=True)
+        self.assertContains(r, '權限不足')
+
+    def test_officer_can_view(self):
+        self.client.force_login(self.officer)
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+
+    def test_defaults_to_recent_year(self):
+        self._rec('income', 'other', 100, '2025-06-01')
+        self._rec('income', 'other', 100, '2026-06-01')
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertEqual(r.context['selected_year'], 2026)
+
+    def test_year_totals(self):
+        self._rec('income', 'membership', 1000, '2026-03-01')
+        self._rec('expense', 'venue', 300, '2026-04-01')
+        self._rec('income', 'other', 999, '2025-01-01')  # 不同年，不計入
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url, {'year': '2026'})
+        self.assertEqual(r.context['income'], 1000)
+        self.assertEqual(r.context['expense'], 300)
+        self.assertEqual(r.context['balance'], 700)
+
+    def test_confirmed_fee_counts_into_year_income(self):
+        """整合：確認繳費產生的會費收入，會出現在當年度收支"""
+        from django.utils import timezone as tz
+        period = FeePeriod.objects.create(year=2026, term='first', amount=500, created_by=self.officer)
+        fee = MembershipFee.objects.create(
+            member=self.member, period=period, amount=500,
+            status=MembershipFee.Status.REPORTED, collected_by=self.officer,
+        )
+        self.client.force_login(self.officer)
+        self.client.post(reverse('finance:fee_review_list'), {'fee_id': fee.pk, 'action': 'confirm'})
+        this_year = tz.localdate().year
+        r = self.client.get(self.url, {'year': this_year})
+        self.assertEqual(r.context['income'], 500)

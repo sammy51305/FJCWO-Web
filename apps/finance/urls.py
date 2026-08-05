@@ -16,6 +16,7 @@ urlpatterns = [
     path('membership/report/<int:pk>/withdraw/', views.fee_report_withdraw, name='fee_report_withdraw'),
     path('membership/review/', views.fee_review_list, name='fee_review_list'),
     path('membership/fee/<int:pk>/delete/', views.fee_delete, name='fee_delete'),
+    path('annual/', views.annual_report, name='annual_report'),
     path('records/', views.finance_list, name='finance_list'),
     path('records/create/', views.finance_create, name='finance_create'),
     path('records/<int:pk>/edit/', views.finance_edit, name='finance_edit'),

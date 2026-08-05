@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}當年度收支 — 百韻管樂團{% endblock %}
+
+{% block extra_css %}
+<style>
+  @media print {
+    .d-print-none { display: none !important; }
+    body { font-size: 12px; }
+    .table th, .table td { padding: 4px 8px !important; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h2 class="mb-0">當年度收支{% if selected_year %}・{{ selected_year }} 年{% endif %}</h2>
+  <div class="d-flex gap-2 d-print-none">
+    <button class="btn btn-outline-secondary btn-sm" onclick="window.print()">
+      <i class="bi bi-printer"></i> 列印
+    </button>
+  </div>
+</div>
+
+<form method="get" class="d-flex align-items-center gap-2 mb-4 d-print-none">
+  <label class="fw-semibold text-nowrap" for="year">年度</label>
+  <select name="year" id="year" class="form-select" style="max-width:160px;" onchange="this.form.submit()">
+    {% for y in years %}
+    <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }} 年</option>
+    {% endfor %}
+  </select>
+  {% if not years %}<span class="text-muted">尚無任何收支紀錄</span>{% endif %}
+</form>
+
+{% if selected_year %}
+<p class="text-muted d-print-block mb-3">收入以實際收款日認列；會費於「確認繳費」時自動計入。</p>
+
+<div class="d-flex flex-wrap gap-3 mb-4">
+  <div class="card text-center px-4 py-2 border-success">
+    <div class="fs-4 fw-bold text-success">{{ income|floatformat:"0" }}</div>
+    <div class="text-muted small">總收入</div>
+  </div>
+  <div class="card text-center px-4 py-2 border-danger">
+    <div class="fs-4 fw-bold text-danger">{{ expense|floatformat:"0" }}</div>
+    <div class="text-muted small">總支出</div>
+  </div>
+  <div class="card text-center px-4 py-2 {% if balance < 0 %}border-danger{% else %}border-primary{% endif %}">
+    <div class="fs-4 fw-bold {% if balance < 0 %}text-danger{% else %}text-primary{% endif %}">{{ balance|floatformat:"0" }}</div>
+    <div class="text-muted small">結餘</div>
+  </div>
+</div>
+
+{% if rows %}
+<div class="table-responsive">
+  <table class="table table-bordered align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>分類</th>
+        <th class="text-end">收入</th>
+        <th class="text-end">支出</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.category }}</td>
+        <td class="text-end text-success">{% if row.income %}{{ row.income|floatformat:"0" }}{% else %}—{% endif %}</td>
+        <td class="text-end text-danger">{% if row.expense %}{{ row.expense|floatformat:"0" }}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot class="table-light fw-semibold">
+      <tr>
+        <td>合計</td>
+        <td class="text-end text-success">{{ income|floatformat:"0" }}</td>
+        <td class="text-end text-danger">{{ expense|floatformat:"0" }}</td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{% else %}
+<p class="text-muted">{{ selected_year }} 年沒有收支紀錄。</p>
+{% endif %}
+
+{% else %}
+<p class="text-muted">尚無任何收支紀錄。請先在「收支明細」登記，或於「會費確認」確認團員繳費（會自動計入收入）。</p>
+{% endif %}
+{% endblock %}
