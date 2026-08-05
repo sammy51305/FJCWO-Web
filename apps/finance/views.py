@@ -12,7 +12,7 @@ from django.utils.dateparse import parse_date
 from apps.accounts.models import User
 from apps.events.models import PerformanceEvent
 
-from .models import FeePeriod, FinanceRecord, MembershipFee
+from .models import FeePeriod, FinanceRecord, MembershipFee, PaymentConfig
 
 
 @login_required
@@ -493,39 +493,67 @@ def my_fees(request):
 
 @login_required
 def fee_report_create(request, period_pk):
-    """團員對某期申報繳費（現金）：選收款幹部，建立待確認紀錄。"""
+    """
+    團員對某期申報繳費，兩種方式（附錄五 §9 P2 現金／P4 轉帳）：
+    - 現金：選收款幹部。
+    - 轉帳：頁面顯示樂團帳戶 QRCode 與帳號，填匯款末五碼供財務對帳。
+    建立待確認（reported）紀錄，等幹部確認。
+    """
     period = get_object_or_404(FeePeriod, pk=period_pk)
     existing = MembershipFee.objects.filter(member=request.user, period=period).first()
     officers = (
         User.objects.filter(is_active=True, role__in=[User.Role.OFFICER, User.Role.ADMIN])
         .order_by('name')
     )
+    payment_config = PaymentConfig.objects.first()
     S = MembershipFee.Status
+    M = MembershipFee.PaymentMethod
 
     # 已在待確認或已繳，不可重複申報（作廢的可重新申報）
     blocked = existing and existing.status in (S.REPORTED, S.PAID)
 
     if request.method == 'POST':
+        method = request.POST.get('payment_method', M.CASH)
         collected_by_id = request.POST.get('collected_by', '')
+        account_last5 = request.POST.get('account_last5', '').strip()
         officer = officers.filter(pk=collected_by_id).first() if collected_by_id else None
+
+        errors = []
         if blocked:
-            messages.error(request, '您已申報或已繳納此期會費，無需重複申報。')
-        elif not officer:
-            messages.error(request, '請選擇收款幹部。')
+            errors.append('您已申報或已繳納此期會費，無需重複申報。')
+        elif method == M.TRANSFER:
+            if not (account_last5.isdigit() and len(account_last5) == 5):
+                errors.append('請填寫正確的匯款帳號末五碼（5 位數字）。')
+        else:  # 現金
+            method = M.CASH
+            if not officer:
+                errors.append('請選擇收款幹部。')
+
+        if errors:
+            for e in errors:
+                messages.error(request, e)
         else:
             fee = existing or MembershipFee(member=request.user, period=period)
             fee.amount = period.amount
             fee.status = S.REPORTED
-            fee.payment_method = MembershipFee.PaymentMethod.CASH
-            fee.collected_by = officer
+            fee.payment_method = method
             fee.paid_at = None
             fee.result_seen = True
+            if method == M.TRANSFER:
+                fee.collected_by = None
+                fee.account_last5 = account_last5
+                note = f'轉帳（末五碼 {account_last5}）'
+            else:
+                fee.collected_by = officer
+                fee.account_last5 = ''
+                note = f'現金交予 {officer.name}'
             fee.save()
-            messages.success(request, f'已申報「{period}」會費（現金交予 {officer.name}），等待幹部確認。')
+            messages.success(request, f'已申報「{period}」會費（{note}），等待幹部確認。')
             return redirect('finance:my_fees')
 
     return render(request, 'finance/fee_report_form.html', {
         'period': period, 'officers': officers, 'existing': existing, 'blocked': blocked,
+        'payment_config': payment_config,
     })
 
 
@@ -659,3 +687,23 @@ def annual_report(request):
         'balance': income - expense,
         'rows': rows,
     })
+
+
+@login_required
+def payment_config_edit(request):
+    """轉帳收款設定（幹部限定，附錄五 §9 P4）：上傳樂團帳戶 QRCode 與帳號文字。單一列 pk=1。"""
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('finance:membership_fee_report')
+
+    config, _ = PaymentConfig.objects.get_or_create(pk=1)
+    if request.method == 'POST':
+        config.account_info = request.POST.get('account_info', '').strip()
+        f = request.FILES.get('qrcode')
+        if f:
+            config.qrcode = f
+        config.save()
+        messages.success(request, '轉帳收款設定已更新。')
+        return redirect('finance:payment_config_edit')
+
+    return render(request, 'finance/payment_config_form.html', {'config': config})

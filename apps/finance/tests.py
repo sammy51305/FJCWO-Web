@@ -4,7 +4,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 
-from .models import FeePeriod, FinanceRecord, MembershipFee
+from .models import FeePeriod, FinanceRecord, MembershipFee, PaymentConfig
 
 
 class MembershipFeeReportTest(TestCase):
@@ -459,9 +459,27 @@ class FeeReportTest(TestCase):
         self.assertIsNone(fee.paid_at)
 
     def test_report_requires_officer(self):
-        """未選收款幹部不建立紀錄"""
+        """現金：未選收款幹部不建立紀錄"""
         self.client.force_login(self.member)
-        self.client.post(self.report_url, {'collected_by': ''})
+        self.client.post(self.report_url, {'payment_method': 'cash', 'collected_by': ''})
+        self.assertFalse(MembershipFee.objects.exists())
+
+    def test_member_can_report_transfer(self):
+        """轉帳申報（P4）：建 reported、記末五碼、payment_method=transfer、無收款幹部"""
+        self.client.force_login(self.member)
+        self.client.post(self.report_url, {'payment_method': 'transfer', 'account_last5': '12345'})
+        fee = MembershipFee.objects.get(member=self.member, period=self.period)
+        self.assertEqual(fee.status, MembershipFee.Status.REPORTED)
+        self.assertEqual(fee.payment_method, MembershipFee.PaymentMethod.TRANSFER)
+        self.assertEqual(fee.account_last5, '12345')
+        self.assertIsNone(fee.collected_by)
+
+    def test_transfer_requires_valid_last5(self):
+        """轉帳末五碼須為 5 位數字，否則不建立"""
+        self.client.force_login(self.member)
+        self.client.post(self.report_url, {'payment_method': 'transfer', 'account_last5': '12'})
+        self.assertFalse(MembershipFee.objects.exists())
+        self.client.post(self.report_url, {'payment_method': 'transfer', 'account_last5': 'abcde'})
         self.assertFalse(MembershipFee.objects.exists())
 
     def test_cannot_report_when_reported(self):
@@ -762,3 +780,35 @@ class AnnualReportTest(TestCase):
         this_year = tz.localdate().year
         r = self.client.get(self.url, {'year': this_year})
         self.assertEqual(r.context['income'], 500)
+
+
+class PaymentConfigTest(TestCase):
+    """轉帳收款設定（附錄五 §9 P4）"""
+
+    def setUp(self):
+        self.officer = User.objects.create_user(
+            username='pc_officer', email='pc_officer@test.local', password='x',
+            name='設定幹部', role=User.Role.OFFICER,
+        )
+        self.member = User.objects.create_user(
+            username='pc_member', email='pc_member@test.local', password='x',
+            name='設定團員', role=User.Role.MEMBER,
+        )
+        self.url = reverse('finance:payment_config_edit')
+
+    def test_member_forbidden(self):
+        self.client.force_login(self.member)
+        r = self.client.get(self.url, follow=True)
+        self.assertContains(r, '權限不足')
+
+    def test_officer_can_view(self):
+        self.client.force_login(self.officer)
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+
+    def test_save_account_info(self):
+        """儲存轉帳帳號文字到單例設定"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {'account_info': '台灣銀行 戶名：百韻 帳號：123'})
+        config = PaymentConfig.objects.first()
+        self.assertIsNotNone(config)
+        self.assertEqual(config.account_info, '台灣銀行 戶名：百韻 帳號：123')

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}轉帳收款設定 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'finance:membership_fee_report' %}">會費繳納狀況</a></li>
+    <li class="breadcrumb-item active">轉帳收款設定</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <h2 class="mb-1">轉帳收款設定</h2>
+    <p class="text-muted mb-4">設定樂團帳戶的收款 QR Code 與帳號文字，團員在申報頁選「轉帳」時會看到。</p>
+
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">轉帳帳號資訊</label>
+        <textarea name="account_info" class="form-control" rows="4"
+                  placeholder="例如：&#10;台灣銀行（004）新莊分行&#10;戶名：輔仁百韻管樂團&#10;帳號：123-456-789012">{{ config.account_info }}</textarea>
+        <div class="form-text">銀行/分行、戶名、帳號等，逐行填寫即可。</div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold">收款 QR Code 圖檔</label>
+        {% if config.qrcode %}
+        <div class="mb-2">
+          <img src="{{ config.qrcode.url }}" alt="目前的收款 QR Code" class="img-fluid" style="max-width:200px;">
+          <div class="text-muted small">目前的 QR Code（重新上傳可替換）</div>
+        </div>
+        {% endif %}
+        <input type="file" name="qrcode" class="form-control" accept="image/*">
+        <div class="form-text">上傳銀行 App 產生的收款 QR Code 圖片；不重新選檔則保留原圖。</div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">儲存</button>
+        <a href="{% url 'finance:membership_fee_report' %}" class="btn btn-outline-secondary">返回</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

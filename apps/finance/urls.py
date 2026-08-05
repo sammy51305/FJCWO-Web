@@ -17,6 +17,7 @@ urlpatterns = [
     path('membership/review/', views.fee_review_list, name='fee_review_list'),
     path('membership/fee/<int:pk>/delete/', views.fee_delete, name='fee_delete'),
     path('annual/', views.annual_report, name='annual_report'),
+    path('membership/payment-config/', views.payment_config_edit, name='payment_config_edit'),
     path('records/', views.finance_list, name='finance_list'),
     path('records/create/', views.finance_create, name='finance_create'),
     path('records/<int:pk>/edit/', views.finance_edit, name='finance_edit'),

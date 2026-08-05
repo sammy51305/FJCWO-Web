@@ -15,7 +15,7 @@
         <th>期別</th>
         <th>金額</th>
         <th>繳費方式</th>
-        <th>收款幹部</th>
+        <th>收款幹部／末五碼</th>
         <th>操作</th>
       </tr>
     </thead>
@@ -26,7 +26,13 @@
         <td>{{ fee.period }}</td>
         <td>{{ fee.period.amount|floatformat:"0" }} 元</td>
         <td>{{ fee.get_payment_method_display }}</td>
-        <td class="text-muted small">{{ fee.collected_by.name|default:"—" }}</td>
+        <td class="text-muted small">
+          {% if fee.payment_method == 'transfer' %}
+            末五碼 <span class="font-monospace fw-semibold">{{ fee.account_last5|default:"—" }}</span>
+          {% else %}
+            {{ fee.collected_by.name|default:"—" }}
+          {% endif %}
+        </td>
         <td>
           <form method="post" class="d-inline">
             {% csrf_token %}

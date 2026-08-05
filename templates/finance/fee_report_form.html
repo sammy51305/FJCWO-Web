@@ -26,18 +26,45 @@
         {% csrf_token %}
         <div class="mb-3">
           <label class="form-label fw-semibold">繳費方式</label>
-          <input type="text" class="form-control" value="現金" disabled>
-          <div class="form-text">目前先支援現金；線上轉帳繳費將於後續開放。</div>
+          <div class="btn-group d-block" role="group">
+            <input type="radio" class="btn-check" name="payment_method" id="pm_cash" value="cash" checked>
+            <label class="btn btn-outline-primary" for="pm_cash">現金</label>
+            <input type="radio" class="btn-check" name="payment_method" id="pm_transfer" value="transfer">
+            <label class="btn btn-outline-primary" for="pm_transfer">轉帳（掃碼）</label>
+          </div>
         </div>
-        <div class="mb-4">
+
+        {# ── 現金：選收款幹部 ── #}
+        <div id="cash_block" class="mb-4">
           <label class="form-label fw-semibold">收款幹部 <span class="text-danger">*</span></label>
-          <select name="collected_by" class="form-select" required>
+          <select name="collected_by" class="form-select">
             <option value="">請選擇你把現金交給哪位幹部</option>
             {% for o in officers %}
             <option value="{{ o.pk }}">{{ o.name }}</option>
             {% endfor %}
           </select>
         </div>
+
+        {# ── 轉帳：顯示 QRCode + 帳號，填末五碼 ── #}
+        <div id="transfer_block" class="mb-4" style="display:none;">
+          <div class="card mb-3">
+            <div class="card-body">
+              {% if payment_config and payment_config.qrcode %}
+              <img src="{{ payment_config.qrcode.url }}" alt="收款 QR Code" class="img-fluid mb-2" style="max-width:220px;">
+              {% endif %}
+              {% if payment_config and payment_config.account_info %}
+              <div class="small" style="white-space:pre-wrap;">{{ payment_config.account_info }}</div>
+              {% else %}
+              <div class="text-muted small">尚未設定轉帳帳戶資訊，請洽幹部確認匯款方式。</div>
+              {% endif %}
+            </div>
+          </div>
+          <label class="form-label fw-semibold">匯款帳號末五碼 <span class="text-danger">*</span></label>
+          <input type="text" name="account_last5" class="form-control" maxlength="5"
+                 inputmode="numeric" pattern="[0-9]{5}" placeholder="例如 12345">
+          <div class="form-text">請填你轉出帳號的末 5 碼，供財務對帳。</div>
+        </div>
+
         <div class="d-flex gap-2">
           <button type="submit" class="btn btn-primary">送出申報</button>
           <a href="{% url 'finance:my_fees' %}" class="btn btn-outline-secondary">取消</a>
@@ -46,4 +73,22 @@
     {% endif %}
   </div>
 </div>
+
+<script>
+  (function () {
+    const cash = document.getElementById('pm_cash');
+    const transfer = document.getElementById('pm_transfer');
+    const cashBlock = document.getElementById('cash_block');
+    const transferBlock = document.getElementById('transfer_block');
+    if (!cash) return;
+    function toggle() {
+      const isTransfer = transfer.checked;
+      cashBlock.style.display = isTransfer ? 'none' : '';
+      transferBlock.style.display = isTransfer ? '' : 'none';
+    }
+    cash.addEventListener('change', toggle);
+    transfer.addEventListener('change', toggle);
+    toggle();
+  })();
+</script>
 {% endblock %}

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import FeePeriod, FinanceRecord, MembershipFee
+from .models import FeePeriod, FinanceRecord, MembershipFee, PaymentConfig
 
 
 @admin.register(FinanceRecord)
@@ -19,6 +19,12 @@ class FeePeriodAdmin(admin.ModelAdmin):
 
 @admin.register(MembershipFee)
 class MembershipFeeAdmin(admin.ModelAdmin):
-    list_display = ['member', 'period', 'amount', 'status', 'paid_at', 'collected_by']
-    list_filter = ['status', 'period']
+    list_display = ['member', 'period', 'amount', 'status', 'payment_method',
+                    'paid_at', 'collected_by', 'account_last5']
+    list_filter = ['status', 'payment_method', 'period']
     search_fields = ['member__name']
+
+
+@admin.register(PaymentConfig)
+class PaymentConfigAdmin(admin.ModelAdmin):
+    list_display = ['__str__', 'updated_at']

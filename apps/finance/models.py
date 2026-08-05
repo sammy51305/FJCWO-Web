@@ -97,10 +97,12 @@ class MembershipFee(models.Model):
     status = models.CharField('狀態', max_length=10, choices=Status, default=Status.UNPAID)
     payment_method = models.CharField('繳費方式', max_length=10, choices=PaymentMethod,
                                       default=PaymentMethod.CASH)
+    account_last5 = models.CharField('匯款帳號末五碼', max_length=5, blank=True,
+                                     help_text='轉帳繳費時填，供財務對帳；確認後可清除')
     paid_at = models.DateField('繳費日期', null=True, blank=True)
     collected_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
-        null=True, blank=True, related_name='collected_fees', verbose_name='收款幹部'
+        null=True, blank=True, related_name='collected_fees', verbose_name='收款幹部（現金）'
     )
     finance_record = models.ForeignKey(
         'FinanceRecord', on_delete=models.SET_NULL,
@@ -124,3 +126,21 @@ class MembershipFee(models.Model):
     @property
     def is_paid(self):
         return self.status == self.Status.PAID
+
+
+class PaymentConfig(models.Model):
+    """
+    轉帳收款設定（附錄五 §9 P4，單一列 pk=1，比照 CharterContent）。
+    幹部上傳樂團帳戶 QRCode 與帳號文字，供團員掃碼轉帳；用 FileField 存圖檔（免 Pillow 依賴）。
+    """
+    qrcode = models.FileField('收款 QR Code 圖檔', upload_to='payment/', blank=True)
+    account_info = models.TextField('轉帳帳號資訊', blank=True,
+                                    help_text='銀行/分行、戶名、帳號等文字，顯示在申報頁供團員轉帳')
+    updated_at = models.DateTimeField('更新時間', auto_now=True)
+
+    class Meta:
+        verbose_name = '轉帳收款設定'
+        verbose_name_plural = '轉帳收款設定'
+
+    def __str__(self):
+        return '轉帳收款設定'
