@@ -22,7 +22,9 @@ Thumbs.db
 *.tmp
 
 # --- Claude Code local config ---
-.claude/
+.claude/*
+# 例外：dev server 啟動設定納入版控（方便跑畫面走查），其餘 .claude 個人/工作階段狀態仍忽略
+!.claude/launch.json
 
 # --- [Security Isolation] ---
 # 這裡排除所有機敏資料夾與檔案
