@@ -35,6 +35,7 @@ CLAUDE.md（專案根目錄 — 工作指引：概述 / 環境 / 慣例）
 | 目前有幾個測試、測了什麼 | [TESTING.md](TESTING.md) |
 | 要新增測試，慣例是什麼 | [TESTING.md](TESTING.md) 新增測試的慣例 |
 | 第一次建立開發環境 | [SETUP.md](SETUP.md) |
+| 怎麼啟動開發伺服器 | [SETUP.md](SETUP.md) 步驟八；指令速查看 `../CLAUDE.md` 開發環境 |
 | commit 前要確認哪些文件 | [WORKFLOW.md](WORKFLOW.md) |
 
 ---
