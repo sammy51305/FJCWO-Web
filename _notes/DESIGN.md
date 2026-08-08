@@ -2048,6 +2048,7 @@ Migration 順序：① accounts（Role 加 GUEST 僅 choices + 新增 from_band 
 - **帳號 normalize**：`account_number` 在 `PaymentConfig.save()` 去除 dash 與空白，存成純數字，確保團員複製出來即可直接輸入銀行 App。
 - **幹部端** `payment_config_form.html`：代號欄加前綴 autocomplete（內建 30 家常見銀行代號的 vanilla JS，無框架），輸入數字即列出開頭符合的銀行、點選自動帶入 `bank_name`；清單外的代號（如 7 碼分行代號）仍可自由手打（欄位為 free text，autocomplete 僅輔助）。
 - **團員端** `fee_report_form.html`：轉帳區改為結構化顯示「銀行 名稱（代號）／戶名／帳號」，代號與帳號各一個複製按鈕（clipboard API ＋ `execCommand` fallback）。
+- **測試**：`PaymentConfigTest` 涵蓋結構化欄位儲存、帳號 dash normalize，並補上先前未覆蓋的 **QR Code 圖檔上傳回歸測試**（隔離到暫存 `MEDIA_ROOT`，不污染真實 media）。
 
 > ✅ 方向全部定案（2026-08-04）：FeePeriod 固定金額、現金+轉帳兩種繳費、團員撤回/幹部作廢/管理員硬刪、
 > 現金收付制按收款日認列、確認自動入帳、會費移進財務。**P1–P4 全數完成（2026-08-06），會費系統重構收尾。**
