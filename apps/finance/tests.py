@@ -1,4 +1,7 @@
-from django.test import TestCase
+import tempfile
+
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -827,3 +830,14 @@ class PaymentConfigTest(TestCase):
         })
         config = PaymentConfig.objects.first()
         self.assertEqual(config.account_number, '123456789012')
+
+    def test_qrcode_upload(self):
+        """上傳收款 QR Code 圖檔並保存（隔離到暫存 MEDIA_ROOT，不污染真實 media）"""
+        self.client.force_login(self.officer)
+        img = SimpleUploadedFile('qr.png', b'\x89PNG\r\n\x1a\nfake-png', content_type='image/png')
+        with tempfile.TemporaryDirectory() as tmp:
+            with override_settings(MEDIA_ROOT=tmp):
+                self.client.post(self.url, {'bank_code': '004', 'qrcode': img})
+                config = PaymentConfig.objects.first()
+                self.assertTrue(config.qrcode.name)
+                self.assertTrue(config.qrcode.name.startswith('payment/'))
