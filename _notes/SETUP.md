@@ -25,7 +25,7 @@
 
 | 軟體 | 版本 | 用途 |
 |------|------|------|
-| Python | 3.12 | 執行 Django |
+| Python | 3.12+（開發機實測 3.14） | 執行 Django |
 | PostgreSQL | 16 | 資料庫 |
 | Git | 任意 | 版本控制 |
 
@@ -86,7 +86,7 @@ ALTER USER fjcwo_user CREATEDB;   -- 讓 fjcwo_user 可建測試 DB
 
 ## 步驟四：建立 .env
 
-在專案根目錄建立 `.env`（此檔案不進 git）：
+在專案根目錄建立 `.env`（此檔案不進 git）。最快的方式是複製專案內的 `.env.example` 再改，範本已含分區註解與各變數用途；本機開發填入下列值即可：
 
 ```
 DJANGO_SECRET_KEY=django-insecure-)fcwve=n7xb1cg26twc!(#wlz2xv0z#)4bl6hh91%61mzdigp6

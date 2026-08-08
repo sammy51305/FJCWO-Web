@@ -20,6 +20,14 @@ Phase 2 功能全部完成（含 LINE Bot 群組通知），Phase 3（會議紀�
 
 ## 開發環境
 
+> 執行任何指令前，先 `cd` 到專案根目錄 `FJCWO-Web` 底下再執行。例如：
+>
+> ```bash
+> cd C:\Workspace\github\FJCWO-Web
+> ```
+>
+> 首次在新機器建置環境（安裝套件、建資料庫、載入基礎資料）請參考 [SETUP.md](_notes/SETUP.md)，照步驟一～九走即可完成。
+
 ```bash
 venv\Scripts\python.exe manage.py runserver           # 啟動開發伺服器
 venv\Scripts\python.exe manage.py migrate             # 套用資料庫遷移（新拉程式碼、或看到 relation does not exist 錯誤時執行）
