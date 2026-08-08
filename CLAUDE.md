@@ -30,11 +30,20 @@ Phase 2 功能全部完成（含 LINE Bot 群組通知），Phase 3（會議紀�
 
 ```bash
 venv\Scripts\python.exe manage.py runserver           # 啟動開發伺服器
-venv\Scripts\python.exe manage.py migrate             # 套用資料庫遷移（新拉程式碼、或看到 relation does not exist 錯誤時執行）
-venv\Scripts\python.exe manage.py makemigrations      # 改了 Model 後產生新的 migration 檔
+venv\Scripts\python.exe manage.py makemigrations      # 改了 Model 後：產生遷移檔（見下表）
+venv\Scripts\python.exe manage.py migrate             # 套用遷移到資料庫（見下表）
 venv\Scripts\python.exe manage.py test                # 執行全部測試（預期全部通過）
-venv\Scripts\python.exe manage.py test apps.scores --verbosity=2  # 單一 app
+venv\Scripts\python.exe manage.py test apps.scores --verbosity=2  # 只測單一 app
 ```
+
+**`makemigrations` 與 `migrate` 的差別**
+
+| 指令 | 做什麼 | 動到資料庫？ | 什麼時候跑 |
+|------|--------|:---:|-----------|
+| `makemigrations` | 比對 Model 與現有遷移檔，把「差異」寫成新的遷移檔 | ❌ 只產生檔案 | 你改了 Model 之後 |
+| `migrate` | 讀遷移檔，實際去改資料庫的表結構 | ✅ | ① 改完 Model 接著跑；② 新拉程式碼、或遇到 `relation does not exist` 時，單獨跑這行 |
+
+順序固定 `makemigrations` → `migrate`（先產檔、再套用）。純粹新拉別人的程式碼時，遷移檔已在 repo 裡，只要跑 `migrate`。
 
 ## 開發流程（每次必須依序執行）
 
