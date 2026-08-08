@@ -2,7 +2,7 @@
 
 > 本文件說明 Phase 1 & 2 的設計決策、資料庫結構與各系統的運作邏輯。
 > 目標讀者：接手開發或複習程式碼的人（包含自己）。
-> 最後更新：2026-08-09（新增待討論項目 §附錄五 #10：部署 Web 供幹部測試）
+> 最後更新：2026-08-09（附錄五 #10 補部署暫定方向 Render+Neon；新增 #11：匯出資料到 Google Sheet）
 
 ---
 
@@ -2060,6 +2060,23 @@ Migration 順序：① accounts（Role 加 GUEST 僅 choices + 新增 from_band 
 - **目標**：先求「幹部連得到、能操作試用」即可，不必一步到位做正式上線（正式部署另見 [SETUP.md](SETUP.md) 情境 D 與 Architecture 八、伺服器規劃）。
 - **待決定**：放哪（自架 vs 雲端 PaaS）、連線方式/網域、用測試資料還是真資料、`.env` 機密值怎麼帶上去（見 SETUP.md 情境 C/D）、`DJANGO_DEBUG` 與 `DJANGO_ALLOWED_HOSTS` 設定。
 - **範圍拿捏**：測試性質的部署可簡化（單機、不接真 LINE/Email），與未來正式環境分開規劃；但 `DEBUG=False` 等安全設定仍建議比照，避免測試站外洩。
+
+**暫定方向（2026-08-09 討論，未定案）**：
+
+- **常駐 PaaS，不自架**：測試站走雲端 PaaS；自架 VPS（Architecture 八）留給未來正式上線，兩者分開。
+- **平台**：**Render**（app 免費，閒置會休眠、首次請求約 1 分鐘喚醒——測試可接受）＋ **Neon 或 Supabase**（永久免費 Postgres；不用 Render 自家 30 天會過期的免費 DB）。
+- **資料**：用**假資料**（fixtures ＋ 少量假團員/幹部帳號），避免真團員個資（電話/email）上雲測試站。
+- **媒體（分譜/QR）**：Render 免費磁碟為臨時性，重部署會清空 → 若要持久，接 **Cloudflare R2 私有 bucket**（S3 相容、`django-storages`，維持 §4.19 分譜下載權限控管）；或測試階段先接受重傳、延後儲存決策。
+- **部署缺件**：`requirements.txt` 補 `gunicorn`＋`whitenoise`；`.env` 設新 `SECRET_KEY`、`DEBUG=False`、`ALLOWED_HOSTS` 填部署網域；跑 `collectstatic`／`migrate`／載 fixtures。
+- **已排除**：Google Sheets 當資料庫（app 咬 SQL/關聯/Django auth，等於重寫，不可行，見 #11 為其正確定位）；Google Drive 當媒體（API 配額＋權限模型衝突，改用 R2）。
+
+### 11. 匯出資料到 Google Sheet — 待討論
+
+2026-08-09 記錄。構想：讓非技術幹部能以試算表形式檢視／再加工系統資料（如團員名冊、會費繳納、出席統計）。
+
+- **定位**：Google Sheet 是「匯出／唯讀鏡像」，**不是資料庫**——系統仍以 Postgres 為底（Sheets 當 DB 不可行，見 #10 已排除項）。
+- **待決定**：匯出哪些資料、單向匯出還是雙向同步（雙向複雜且有衝突問題，傾向先做單向）、觸發方式（幹部手動按鈕匯出 vs 定期排程）、Google Sheets API ＋ 服務帳號的權限設定。
+- **動機／取捨**：幹部熟悉試算表、方便離線檢視或再加工；但要衡量 API 串接與維護成本，非急迫需求。
 
 ---
 
