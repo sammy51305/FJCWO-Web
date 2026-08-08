@@ -5,6 +5,18 @@
 
 ---
 
+## 目錄
+
+1. [開始前](#開始前)
+2. [標準流程](#標準流程)
+3. [Commit Message 規範](#commit-message-規範)
+4. [Branch 策略](#branch-策略)
+5. [測試策略](#測試策略)
+6. [Commit 前 Checklist](#commit-前-checklist)
+7. [各文件的職責](#各文件的職責)
+
+---
+
 ## 開始前
 
 動手寫程式之前，先確認這次變動會影響哪些 checklist 項目，避免開發完才發現遺漏：
