@@ -2,7 +2,7 @@
 
 > 本文件說明 Phase 1 & 2 的設計決策、資料庫結構與各系統的運作邏輯。
 > 目標讀者：接手開發或複習程式碼的人（包含自己）。
-> 最後更新：2026-08-06（會費系統重構 §9 P1–P4 全數完成：加轉帳掃碼＋末五碼對帳，收尾）
+> 最後更新：2026-08-08（轉帳收款設定 P4 強化：帳號結構化欄位＋代號 autocomplete＋複製按鈕，見 §9）
 
 ---
 
@@ -796,7 +796,7 @@ pending（待審核）
 | `FinanceRecord` | 所有收入/支出明細，可關聯到某場演出 |
 | `FeePeriod` | 會費期別主檔（年份+上/下期、全團固定金額、繳費時段），幹部/管理員 CRUD |
 | `MembershipFee` | 每位團員對某期（FK→FeePeriod）的繳納狀態，金額自期別快照 |
-| `PaymentConfig` | 轉帳收款設定（單例，QRCode＋帳號文字），供團員掃碼轉帳 |
+| `PaymentConfig` | 轉帳收款設定（單例，QRCode＋銀行代號/名稱/戶名/帳號），供團員掃碼或複製轉帳 |
 
 **為什麼會費要拆成期別主檔 + 繳納狀態？（附錄五 §9 P1）**
 原本 `MembershipFee.period` 是自由文字、金額每列各自填，缺單一來源。改成 `FeePeriod` 主檔後：
@@ -2042,6 +2042,12 @@ Migration 順序：① accounts（Role 加 GUEST 僅 choices + 新增 from_band 
   轉帳顯示 `payment_config` 的 QRCode＋帳號、填末五碼（view 驗證須 5 位數字）。
 - `payment_config_edit`（幹部限定）上傳 QRCode＋帳號文字，掛在「財務」選單「轉帳收款設定」。
 - `fee_review_list` 待確認列顯示繳費方式與末五碼，供財務對帳後確認（確認流程與現金相同）。
+
+**P4 後續強化（2026-08-08）——帳號結構化＋複製按鈕**：
+- `PaymentConfig` 的單一 `account_info` 自由文字，改為四個結構化欄位 `bank_code`／`bank_name`／`account_name`／`account_number`（migration `0009`）。動機：自由文字無法給「代號」「帳號」各自的複製按鈕。
+- **帳號 normalize**：`account_number` 在 `PaymentConfig.save()` 去除 dash 與空白，存成純數字，確保團員複製出來即可直接輸入銀行 App。
+- **幹部端** `payment_config_form.html`：代號欄加前綴 autocomplete（內建 30 家常見銀行代號的 vanilla JS，無框架），輸入數字即列出開頭符合的銀行、點選自動帶入 `bank_name`；清單外的代號（如 7 碼分行代號）仍可自由手打（欄位為 free text，autocomplete 僅輔助）。
+- **團員端** `fee_report_form.html`：轉帳區改為結構化顯示「銀行 名稱（代號）／戶名／帳號」，代號與帳號各一個複製按鈕（clipboard API ＋ `execCommand` fallback）。
 
 > ✅ 方向全部定案（2026-08-04）：FeePeriod 固定金額、現金+轉帳兩種繳費、團員撤回/幹部作廢/管理員硬刪、
 > 現金收付制按收款日認列、確認自動入帳、會費移進財務。**P1–P4 全數完成（2026-08-06），會費系統重構收尾。**

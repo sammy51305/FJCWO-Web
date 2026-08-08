@@ -805,10 +805,25 @@ class PaymentConfigTest(TestCase):
         self.client.force_login(self.officer)
         self.assertEqual(self.client.get(self.url).status_code, 200)
 
-    def test_save_account_info(self):
-        """儲存轉帳帳號文字到單例設定"""
+    def test_save_fields(self):
+        """儲存結構化收款欄位（代號/名稱/戶名/帳號）到單例設定"""
         self.client.force_login(self.officer)
-        self.client.post(self.url, {'account_info': '台灣銀行 戶名：百韻 帳號：123'})
+        self.client.post(self.url, {
+            'bank_code': '004', 'bank_name': '臺灣銀行',
+            'account_name': '輔仁百韻管樂團', 'account_number': '123456789012',
+        })
         config = PaymentConfig.objects.first()
         self.assertIsNotNone(config)
-        self.assertEqual(config.account_info, '台灣銀行 戶名：百韻 帳號：123')
+        self.assertEqual(config.bank_code, '004')
+        self.assertEqual(config.bank_name, '臺灣銀行')
+        self.assertEqual(config.account_name, '輔仁百韻管樂團')
+        self.assertEqual(config.account_number, '123456789012')
+
+    def test_account_number_strips_dash(self):
+        """帳號存檔時自動去除 dash 與空白，存成純數字"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'bank_code': '822', 'account_number': '123-456-789 012',
+        })
+        config = PaymentConfig.objects.first()
+        self.assertEqual(config.account_number, '123456789012')

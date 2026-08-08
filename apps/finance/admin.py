@@ -27,4 +27,4 @@ class MembershipFeeAdmin(admin.ModelAdmin):
 
 @admin.register(PaymentConfig)
 class PaymentConfigAdmin(admin.ModelAdmin):
-    list_display = ['__str__', 'updated_at']
+    list_display = ['__str__', 'bank_code', 'bank_name', 'account_name', 'account_number', 'updated_at']

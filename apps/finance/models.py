@@ -131,16 +131,30 @@ class MembershipFee(models.Model):
 class PaymentConfig(models.Model):
     """
     轉帳收款設定（附錄五 §9 P4，單一列 pk=1，比照 CharterContent）。
-    幹部上傳樂團帳戶 QRCode 與帳號文字，供團員掃碼轉帳；用 FileField 存圖檔（免 Pillow 依賴）。
+    幹部設定樂團收款帳戶（QRCode 圖檔＋銀行代號/名稱/戶名/帳號），供團員在申報頁選「轉帳」時掃碼或複製匯款。
+    用 FileField 存 QRCode 圖檔（免 Pillow 依賴）。帳號存檔時自動去除 dash 與空白，
+    確保複製出來即為可直接輸入銀行 App 的純數字（見 save()）。
     """
     qrcode = models.FileField('收款 QR Code 圖檔', upload_to='payment/', blank=True)
-    account_info = models.TextField('轉帳帳號資訊', blank=True,
-                                    help_text='銀行/分行、戶名、帳號等文字，顯示在申報頁供團員轉帳')
+    bank_code = models.CharField('銀行代號', max_length=10, blank=True, default='',
+                                 help_text='轉帳用的金融機構代號，如 004；顯示在申報頁供團員複製')
+    bank_name = models.CharField('銀行名稱', max_length=50, blank=True, default='',
+                                 help_text='對應銀行名稱，如 臺灣銀行；幹部選代號時自動帶入')
+    account_name = models.CharField('戶名', max_length=100, blank=True, default='',
+                                    help_text='收款帳戶戶名，供團員匯款前確認收款單位')
+    account_number = models.CharField('帳號', max_length=30, blank=True, default='',
+                                      help_text='收款帳號；存檔時自動去除 dash 與空白')
     updated_at = models.DateTimeField('更新時間', auto_now=True)
 
     class Meta:
         verbose_name = '轉帳收款設定'
         verbose_name_plural = '轉帳收款設定'
+
+    def save(self, *args, **kwargs):
+        # 帳號一律 normalize 成純數字（去 dash 與空白），複製出來即可直接匯款
+        if self.account_number:
+            self.account_number = self.account_number.replace('-', '').replace(' ', '').strip()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return '轉帳收款設定'

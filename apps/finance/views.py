@@ -698,7 +698,11 @@ def payment_config_edit(request):
 
     config, _ = PaymentConfig.objects.get_or_create(pk=1)
     if request.method == 'POST':
-        config.account_info = request.POST.get('account_info', '').strip()
+        config.bank_code = request.POST.get('bank_code', '').strip()
+        config.bank_name = request.POST.get('bank_name', '').strip()
+        config.account_name = request.POST.get('account_name', '').strip()
+        # 帳號的 dash/空白由 model.save() 統一 normalize，這裡只去頭尾空白
+        config.account_number = request.POST.get('account_number', '').strip()
         f = request.FILES.get('qrcode')
         if f:
             config.qrcode = f

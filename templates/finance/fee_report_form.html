@@ -52,8 +52,24 @@
               {% if payment_config and payment_config.qrcode %}
               <img src="{{ payment_config.qrcode.url }}" alt="收款 QR Code" class="img-fluid mb-2" style="max-width:220px;">
               {% endif %}
-              {% if payment_config and payment_config.account_info %}
-              <div class="small" style="white-space:pre-wrap;">{{ payment_config.account_info }}</div>
+              {% if payment_config and payment_config.account_number %}
+              <div class="small">
+                {% if payment_config.bank_name or payment_config.bank_code %}
+                <div class="d-flex align-items-center justify-content-between border-bottom py-1">
+                  <span><span class="text-muted">銀行</span>　{{ payment_config.bank_name }}{% if payment_config.bank_code %}（{{ payment_config.bank_code }}）{% endif %}</span>
+                  {% if payment_config.bank_code %}
+                  <button type="button" class="btn btn-sm btn-outline-secondary copy-btn" data-copy="{{ payment_config.bank_code }}">複製代號</button>
+                  {% endif %}
+                </div>
+                {% endif %}
+                {% if payment_config.account_name %}
+                <div class="border-bottom py-1"><span class="text-muted">戶名</span>　{{ payment_config.account_name }}</div>
+                {% endif %}
+                <div class="d-flex align-items-center justify-content-between py-1">
+                  <span><span class="text-muted">帳號</span>　{{ payment_config.account_number }}</span>
+                  <button type="button" class="btn btn-sm btn-outline-secondary copy-btn" data-copy="{{ payment_config.account_number }}">複製帳號</button>
+                </div>
+              </div>
               {% else %}
               <div class="text-muted small">尚未設定轉帳帳戶資訊，請洽幹部確認匯款方式。</div>
               {% endif %}
@@ -89,6 +105,38 @@
     cash.addEventListener('change', toggle);
     transfer.addEventListener('change', toggle);
     toggle();
+  })();
+
+  // 轉帳資訊：代號 / 帳號一鍵複製
+  (function () {
+    function fallbackCopy(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+    document.querySelectorAll('.copy-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const text = btn.dataset.copy || '';
+        const flash = function () {
+          const orig = btn.textContent;
+          btn.textContent = '已複製';
+          btn.classList.add('btn-success');
+          btn.classList.remove('btn-outline-secondary');
+          setTimeout(function () {
+            btn.textContent = orig;
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-outline-secondary');
+          }, 1500);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(flash).catch(function () { fallbackCopy(text); flash(); });
+        } else {
+          fallbackCopy(text); flash();
+        }
+      });
+    });
   })();
 </script>
 {% endblock %}
