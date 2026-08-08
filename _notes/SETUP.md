@@ -4,6 +4,23 @@
 
 ---
 
+## 目錄
+
+1. [系統需求](#系統需求)
+2. [步驟一：Clone 專案](#步驟一clone-專案)
+3. [步驟二：建立虛擬環境](#步驟二建立虛擬環境)
+4. [步驟三：建立 PostgreSQL 資料庫與使用者](#步驟三建立-postgresql-資料庫與使用者)
+5. [步驟四：建立 .env](#步驟四建立-env)
+6. [機密設定 SOP（LINE Bot / Email）](#機密設定-sopline-bot--email)
+7. [步驟五：執行 Migration](#步驟五執行-migration)
+8. [步驟六：載入基礎資料（Fixtures）](#步驟六載入基礎資料fixtures)
+9. [步驟七：建立 Superuser](#步驟七建立-superuser)
+10. [步驟八：啟動開發伺服器](#步驟八啟動開發伺服器)
+11. [步驟九：執行測試](#步驟九執行測試)
+12. [常見問題](#常見問題)
+
+---
+
 ## 系統需求
 
 | 軟體 | 版本 | 用途 |
@@ -87,12 +104,44 @@ DB_PORT=5432
 
 ---
 
-## 選用：設定 LINE Bot 通知
+## 機密設定 SOP（LINE Bot / Email）
 
-`.env` 的 `LINE_CHANNEL_ACCESS_TOKEN` 與 `LINE_GROUP_ID` 兩個變數本機開發**可以留空**：
-[apps/notifications/utils.py](../apps/notifications/utils.py) 在缺少任一值時會直接跳過推播並記 log，不會噴錯（見 [DESIGN.md](DESIGN.md) §4.18 silent fail 設計）。
+這一節把所有機敏值的申請、填寫、驗證、換電腦攜帶、正式環境差異集中寫成可照抄的步驟。
 
-若需要實際測試推播效果，才需要申請以下兩個值：
+### 機密值一覽
+
+`.env` 裡跟機密有關的變數，以及**沒填時的 fallback 行為**：
+
+| 變數 | 用途 | 沒填時的行為 | 對應程式 |
+|------|------|------------|---------|
+| `LINE_CHANNEL_ACCESS_TOKEN` | LINE Bot 推播 | 跳過推播、記一筆 log，不噴錯 | [utils.py](../apps/notifications/utils.py) |
+| `LINE_GROUP_ID` | 推播的目標群組 | 同上（缺任一就跳過）| [utils.py](../apps/notifications/utils.py) |
+| `EMAIL_HOST_USER` | SMTP 帳號 | 自動改用 console backend，信印在終端機 | [settings.py](../config/settings.py) |
+| `EMAIL_HOST_PASSWORD` | SMTP 密碼 | 同上（缺任一就走 console）| [settings.py](../config/settings.py) |
+
+> 兩組 fallback 的判斷都是「兩個值都要有」才啟用真功能，缺一即退回安全預設。
+> LINE 的 silent fail 設計見 [DESIGN.md](DESIGN.md) §4.18；Email backend 切換邏輯見 [config/settings.py](../config/settings.py) `EMAIL_BACKEND` 那段。
+
+**先判斷你屬於哪個情境，再往下看對應段落：**
+
+- **情境 A — 平常本機開發**：什麼都不用設定，直接跳到步驟五。
+- **情境 B — 想在本機親眼驗證真的推播 / 真的收到信**：看下方 B。
+- **情境 C — 換一台電腦繼續開發**：看下方 C。
+- **情境 D — 建立正式（production）環境**：看下方 D。
+
+---
+
+### 情境 A：本機開發（預設，免設定）
+
+不需要任何真憑證。邏輯正確性已被自動化測試覆蓋（`apps/notifications/tests.py` 用假 token 測 LINE 推播；Django 測試會把 email 攔到記憶體），`python manage.py test` 在任何電腦上都能驗證，不必申請真帳號。直接進行步驟五即可。
+
+---
+
+### 情境 B：本機端到端測試（真的推播 / 真的寄信）
+
+只有當你想親眼確認「LINE 真的跳到手機」「Email 真的寄到信箱」時才需要做。
+
+#### B-1　申請 LINE Bot 憑證
 
 1. **取得 `LINE_CHANNEL_ACCESS_TOKEN`**
    - 前往 [LINE Developers Console](https://developers.line.biz/) 登入
@@ -102,57 +151,100 @@ DB_PORT=5432
 
 2. **取得 `LINE_GROUP_ID`**
    - 用該 channel 的 QR Code 把 Bot 加為好友，並邀請進目標 LINE 群組
-   - LINE 沒有介面可直接查詢群組 ID，需暫時架一個 webhook 端點（如 [ngrok](https://ngrok.com/) 轉發），在該 channel 設定 webhook URL 並開啟
-   - 在群組裡發一則訊息，觸發 webhook，從收到的 payload 裡讀出 `events[0].source.groupId`
+   - LINE 沒有介面可直接查群組 ID，需暫時架一個 webhook 端點（如 [ngrok](https://ngrok.com/) 轉發），在該 channel 設定 webhook URL 並開啟
+   - 在群組裡發一則訊息觸發 webhook，從 payload 讀出 `events[0].source.groupId`
    - 取得後可關閉 webhook，設定值本身長期有效
 
-3. 把兩個值填入 `.env`：
+3. **填入 `.env`**：
    ```
    LINE_CHANNEL_ACCESS_TOKEN=<你的 token>
    LINE_GROUP_ID=<你的群組 ID>
    ```
 
-> **注意**：這兩個值屬於機密資訊，只存在本機 `.env`（不進 git），不要寫進任何 `_notes/` 文件或 commit 訊息。
+4. **驗證**（重啟 runserver 後執行，會實際推一則測試訊息）：
+   ```bash
+   venv\Scripts\python.exe manage.py shell -c "from apps.notifications.utils import push_line_message; push_line_message('FJCWO 測試訊息')"
+   ```
+   手機收到訊息＝成功；若跳過或失敗，log 會印 `LINE notification skipped/failed`，代表值沒填對。
+
+#### B-2　申請 Email SMTP 憑證（以 Gmail 為例）
+
+1. **產生 Gmail 應用程式密碼**（不是你的登入密碼）
+   - Gmail 帳號需先開啟「兩步驟驗證」，否則沒有應用程式密碼選項
+   - 前往 Google 帳號 →「安全性」→「應用程式密碼」，產生一組 16 碼密碼
+   - 這 16 碼就是 `EMAIL_HOST_PASSWORD`
+
+2. **填入 `.env`**：
+   ```
+   EMAIL_HOST=smtp.gmail.com
+   EMAIL_PORT=587
+   EMAIL_HOST_USER=<你的 Gmail 位址>
+   EMAIL_HOST_PASSWORD=<16 碼應用程式密碼，去掉空格>
+   EMAIL_USE_TLS=True
+   DEFAULT_FROM_EMAIL=noreply@fjcwo.local
+   ```
+   > `EMAIL_USE_TLS` 的判斷是字串比對 `== 'True'`（大小寫敏感），必須寫 `True`，寫 `true` 或 `1` 都會被當成關閉 TLS。
+
+3. **驗證**（重啟 runserver 後執行）：
+   ```bash
+   venv\Scripts\python.exe manage.py shell -c "from django.conf import settings; print(settings.EMAIL_BACKEND)"
+   ```
+   顯示 `...smtp.EmailBackend` 代表已切到真寄信（顯示 `console.EmailBackend` 代表 USER/PASSWORD 至少一個沒填成功）。接著實際寄一封：
+   ```bash
+   venv\Scripts\python.exe manage.py sendtestemail 你的收件信箱@example.com
+   ```
+
+> **注意**：B-1、B-2 的所有值都屬機密，只存在本機 `.env`（不進 git），不要寫進任何 `_notes/` 文件或 commit 訊息。
 
 ---
 
-## 選用：設定寄信（Email）
+### 情境 C：換一台電腦繼續開發
 
-幹部核准校友報到申請、或手動新增團員時，系統會寄送帳號與臨時密碼給本人。
-`.env` 的 `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` **本機開發可以留空**：
-[config/settings.py](../config/settings.py) 偵測到沒填時會自動改用 console backend，
-信件內容直接印在終端機，不需要申請真的 SMTP 帳號。
+`.env` 不進 git，換電腦時 `LINE_CHANNEL_ACCESS_TOKEN`、`LINE_GROUP_ID`、`EMAIL_HOST_USER`、`EMAIL_HOST_PASSWORD` 都會不見。**多數情況不用煩惱**：平常開發（情境 A）不需要真憑證，`python manage.py test` 照樣能跑。
 
-若要在本機實際測試寄信效果，才需要申請 SMTP 帳密（例如 Gmail 應用程式密碼），填入：
+只有你想「在新電腦上也能隨時做端到端驗證」或「未來交接給下一屆幹部」時，才需要攜帶這些值。做法：
 
-```
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_HOST_USER=<你的 email>
-EMAIL_HOST_PASSWORD=<應用程式密碼，不是登入密碼>
-EMAIL_USE_TLS=True
-DEFAULT_FROM_EMAIL=noreply@fjcwo.local
-```
+1. 在密碼管理工具（推薦 [Bitwarden](https://bitwarden.com/)，免費版即可）建立一則安全筆記，命名如「FJCWO .env 機密值」。
+2. 把上述 4 個變數連同值貼進去（建議連整段 `.env` 一起存，換電腦最省事）。
+3. 新電腦完成步驟四建立 `.env` 後，從安全筆記複製貼上，覆蓋對應變數即可。
 
-> 同樣屬於機密資訊，只存在本機 `.env`，不要寫進任何 `_notes/` 文件或 commit 訊息。
+> 比起只存在單一個人電腦裡，密碼管理工具更容易交接，也不會因換人換電腦而遺失。
 
 ---
 
-## 選用：機密值怎麼在多台電腦間攜帶
+### 情境 D：建立正式（production）環境
 
-`.env` 不進 git，所以換一台電腦開發，`LINE_CHANNEL_ACCESS_TOKEN`、`LINE_GROUP_ID`、
-`EMAIL_HOST_USER`、`EMAIL_HOST_PASSWORD` 這些值都要重新設定。多數情況下**不需要真的去煩惱這件事**：
+正式環境與本機開發的差別，**主要是 `.env` 的填法**（伺服器本身怎麼架、用哪個平台，本專案目前尚無部署文件，之後真的上線再補）。
 
-- 平常開發不需要真憑證。兩者的邏輯正確性已經有自動化測試覆蓋（`apps/notifications/tests.py`
-  用假 token 測試 LINE 推播；Django 測試框架會自動把 email 攔截到記憶體，不會真的寄送），
-  `python manage.py test` 在任何一台電腦上都能驗證邏輯，不需要真憑證。
-- 真的需要真憑證的情境，只有你想親眼驗證「LINE 真的推播到手機」「Email 真的收到信」這種
-  端到端測試，而這種驗證做過一次確認沒問題後，不需要每次換電腦都重做。
+#### D-1　`.env` 與本機的差異
 
-如果你就是想要能隨時在任何電腦上做端到端驗證，或考慮到未來系統交接給下一屆幹部，
-建議把這幾個值存進密碼管理工具（例如 [Bitwarden](https://bitwarden.com/)，免費版即可），
-存一份「FJCWO .env 機密值」的安全筆記，換電腦時複製貼上到新的 `.env` 即可。
-比起機密值只存在單一個人的電腦裡，密碼管理工具更容易交接、也更不會因為換人換電腦就遺失。
+| 變數 | 本機開發 | 正式環境 |
+|------|---------|---------|
+| `DJANGO_SECRET_KEY` | 沿用範例值即可 | **必須換成新的隨機值**，且只放正式機的 `.env` |
+| `DJANGO_DEBUG` | `True` | **`False`**（否則錯誤頁會外洩程式碼與設定）|
+| `DJANGO_ALLOWED_HOSTS` | `localhost 127.0.0.1` | 填正式網域，如 `fjcwo.example.com`（多個以空格分隔）|
+| `EMAIL_HOST_USER` / `PASSWORD` | 可留空走 console | **必須填真憑證**，否則系統寄不出帳號密碼信 |
+| `LINE_CHANNEL_ACCESS_TOKEN` / `GROUP_ID` | 可留空 | 要通知就填真值 |
+| 資料庫 `DB_*` | 本機 PostgreSQL | 正式機的資料庫連線資訊 |
+
+產生新的 `DJANGO_SECRET_KEY`：
+```bash
+venv\Scripts\python.exe -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+```
+
+#### D-2　上線前檢查（每次部署都對一遍）
+
+- [ ] `DJANGO_DEBUG=False`
+- [ ] `DJANGO_SECRET_KEY` 已換成新值，且沒有出現在 git 或任何文件裡
+- [ ] `DJANGO_ALLOWED_HOSTS` 已填正式網域
+- [ ] Email 真憑證已填、`sendtestemail` 實測寄得出去
+- [ ] 已跑 `python manage.py migrate`（正式資料庫）
+- [ ] 已載入步驟六的三個 fixtures（否則分譜上傳無樂器可選）
+- [ ] `python manage.py collectstatic`（正式環境需自行提供靜態檔）
+- [ ] 資料庫已排定備份機制
+- [ ] `python manage.py check --deploy` 無重大警告
+
+> 正式環境的所有機密值同樣只放正式機 `.env`，不進 git、不寫進 `_notes/`、不放 commit 訊息。
 
 ---
 
