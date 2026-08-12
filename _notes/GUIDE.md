@@ -25,6 +25,7 @@ CLAUDE.md（專案根目錄 — 工作指引：概述 / 環境 / 慣例）
 | 我想知道… | 去看這份 |
 |----------|---------|
 | 系統有哪些功能、操作流程怎麼走 | [OVERVIEW.md](OVERVIEW.md) |
+| 要 demo 給幹部看，照什麼順序點 | [DEMO.md](DEMO.md) |
 | 某個 Model 有哪些欄位 | [Architecture.md](Architecture.md) 三、資料庫設計 |
 | 某個頁面需要什麼權限才能進 | [Architecture.md](Architecture.md) 四、頁面與權限結構 |
 | 目前做到哪個 Phase | [Architecture.md](Architecture.md) 七、開發階段規劃 |
@@ -53,4 +54,5 @@ CLAUDE.md（專案根目錄 — 工作指引：概述 / 環境 / 慣例）
 | [TESTING.md](TESTING.md) | 測試總數、各 class 說明、執行方式、未覆蓋功能 | 測試的具體程式碼 |
 | [SETUP.md](SETUP.md) | 從零建環境的步驟（含 fixtures 載入順序）| 架構設計 |
 | [OVERVIEW.md](OVERVIEW.md) | 功能總覽與操作流程（非技術人員版）| 技術實作細節 |
+| [DEMO.md](DEMO.md) | Demo 動線、開場前檢查、demo 資料內容與陷阱 | 系統行為說明（在 OVERVIEW）|
 | [WORKFLOW.md](WORKFLOW.md) | 開發標準流程、commit 前 checklist、commit message 規範、標記慣例（P/S/Phase）定義 | 各文件內部的細節內容、個別待辦排在第幾（在 DESIGN 附錄五）|
