@@ -172,8 +172,22 @@ demo 完幹部正好在場，直接問：
 
 ## Demo 資料的建立與清理
 
-demo 資料由一支 seed 腳本建立，**全部用 `get_or_create`，可重複執行不會產生重複資料**。
-腳本不在 repo 內（屬臨時工具），內容包含：
+```bash
+venv\Scripts\python.exe manage.py seed_demo              # 建立（可重複執行）
+venv\Scripts\python.exe manage.py seed_demo --no-files   # 不產生 QR 圖檔與樂譜 PDF
+venv\Scripts\python.exe manage.py clear_demo --dry-run   # 先看會刪什麼
+venv\Scripts\python.exe manage.py clear_demo             # 實際清除（會再問一次）
+```
+
+兩支指令在 `apps/public/management/commands/`，測試見 `apps/public/tests.py`
+的 `DemoCommandTest`。
+
+- **`seed_demo`**：全部用 `get_or_create`，**可重複執行不會產生重複資料**，只新增不修改既有資料。
+- **`clear_demo`**：只刪 `seed_demo` 建立的東西（依 `demo_` 帳號前綴與各類資料的固定名稱比對），
+  **不會碰主檔（樂器／聲部／場地）或既有帳號**。刪除順序依 FK 的 PROTECT 限制排定。
+  轉帳收款設定（`PaymentConfig`）是單例設定，不自動刪除，只在結尾提醒。
+
+建立的資料包含：
 
 | 類別 | 內容 |
 |------|------|
@@ -185,15 +199,18 @@ demo 資料由一支 seed 腳本建立，**全部用 `get_or_create`，可重複
 | 財務 | 收支 10 筆、會費 2 期、轉帳收款設定（含 QR 圖檔）|
 | 公告 | 5 則（含草稿與幹部限定）|
 
-**建立資料的注意事項**（踩過的坑）：
+**維護這兩支指令時要注意的坑**：
 
 - `Score.instrument` 與 `Registration.instrument` 是 **`InstrumentType`**（具體樂器），
   而 `User.instrument` 是 **`InstrumentFamily`**（族群）。兩者不能互指。
 - 排練時間用 `timezone.make_aware()` 建立；直接印 model 欄位看到的是 UTC，
   網頁會轉成 `Asia/Taipei` 顯示，兩者差 8 小時屬正常。
-
-**清理**：帳號 `User.objects.filter(username__startswith='demo_')`，
-其餘依演出名稱、樂譜標題、財產名稱辨識。
-建議 demo 後保留，日後開發測試也用得上。
+- **`clear_demo` 必須先把要刪的 pk 固化**（`freeze()`），不能沿用 lazy queryset。
+  刪除是分批進行的，例如「會費自動入帳的收入」是靠 `MembershipFee` 反查的，
+  會費一旦先被刪掉就再也查不到那些收入，漏刪之後在刪帳號時會被
+  `FinanceRecord.created_by` 的 PROTECT 擋下。此坑已由 `DemoCommandTest` 覆蓋。
+- **`FinanceRecord.created_by` 與 `Announcement.created_by` 都是 PROTECT `User`**，
+  所以清除時除了 seed 建立的資料，還要涵蓋 demo 期間用 demo 帳號新增的收支與公告。
 
 > Demo 資料不會影響 `manage.py test`——測試會另建 test database，跑完即銷毀。
+> demo 後建議保留這批資料，日後開發測試也用得上。

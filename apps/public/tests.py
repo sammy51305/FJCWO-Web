@@ -351,3 +351,108 @@ class VenueManageTest(TestCase):
         r = self.client.post(reverse('public:venue_delete', args=[self.venue.pk]), follow=True)
         self.assertTrue(Venue.objects.filter(pk=self.venue.pk).exists())
         self.assertContains(r, '已被演出活動或排練引用')
+
+
+class DemoCommandTest(TestCase):
+    """
+    demo 資料的建立與清除指令（seed_demo / clear_demo）。
+    重點在驗證 clear_demo 的刪除順序能通過各處的 PROTECT 限制，
+    以及 seed_demo 可重複執行不會產生重複資料。
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        # fixtures 放在專案根目錄（非 app 內），故用 loaddata 帶路徑載入
+        from django.core.management import call_command
+        call_command('loaddata', 'fixtures/instruments.json',
+                     'fixtures/sections.json', 'fixtures/venues.json', verbosity=0)
+
+    def _demo_user_qs(self):
+        from apps.accounts.models import User
+        return User.objects.filter(username__startswith='demo_')
+
+    def test_seed_creates_demo_data(self):
+        """seed_demo 建立帳號、演出、樂譜、財產、會費等展示資料"""
+        from django.core.management import call_command
+        from apps.events.models import PerformanceEvent
+        from apps.finance.models import MembershipFee
+        from apps.scores.models import Score
+
+        call_command('seed_demo', '--no-files', verbosity=0)
+
+        self.assertEqual(self._demo_user_qs().count(), 13)   # 1 幹部 + 12 團員
+        self.assertTrue(PerformanceEvent.objects.filter(
+            name='2026 秋季公演「聲之所向」').exists())
+        self.assertEqual(Score.objects.filter(score_type='full').count(), 6)
+        self.assertTrue(MembershipFee.objects.filter(status='reported').exists())
+
+    def test_seed_is_idempotent(self):
+        """seed_demo 重複執行不會產生重複資料"""
+        from django.core.management import call_command
+        from apps.scores.models import Score
+
+        call_command('seed_demo', '--no-files', verbosity=0)
+        first_users = self._demo_user_qs().count()
+        first_scores = Score.objects.count()
+
+        call_command('seed_demo', '--no-files', verbosity=0)
+        self.assertEqual(self._demo_user_qs().count(), first_users)
+        self.assertEqual(Score.objects.count(), first_scores)
+
+    def test_clear_removes_everything_seeded(self):
+        """
+        clear_demo 能完整清除 seed_demo 建立的資料。
+        刪除順序必須先處理 PROTECT 的引用方（Announcement.created_by、
+        MembershipFee.period、Setlist.score），否則會拋 ProtectedError。
+        """
+        from django.core.management import call_command
+        from apps.announcements.models import Announcement
+        from apps.assets.models import BandProperty
+        from apps.events.models import PerformanceEvent, Rehearsal
+        from apps.finance.models import FeePeriod, MembershipFee
+        from apps.scores.models import Score
+
+        call_command('seed_demo', '--no-files', verbosity=0)
+        call_command('clear_demo', '--noinput', verbosity=0)
+
+        self.assertEqual(self._demo_user_qs().count(), 0)
+        self.assertEqual(PerformanceEvent.objects.filter(
+            name='2026 秋季公演「聲之所向」').count(), 0)
+        self.assertEqual(Rehearsal.objects.count(), 0)
+        self.assertEqual(Score.objects.count(), 0)
+        self.assertEqual(BandProperty.objects.count(), 0)
+        self.assertEqual(MembershipFee.objects.count(), 0)
+        self.assertEqual(Announcement.objects.count(), 0)
+        self.assertEqual(FeePeriod.objects.filter(year=2026, term='second').count(), 0)
+
+    def test_clear_keeps_master_data_and_other_users(self):
+        """clear_demo 只刪 demo 資料，不動主檔與非 demo 帳號"""
+        from django.core.management import call_command
+        from apps.accounts.models import InstrumentFamily, SectionType, User
+        from apps.public.models import Venue
+
+        keeper = User.objects.create_user(
+            username='real_officer', password='x', name='真實幹部',
+            email='real@test.local', role=User.Role.OFFICER,
+        )
+        fam_before = InstrumentFamily.objects.count()
+        sec_before = SectionType.objects.count()
+        venue_before = Venue.objects.count()
+
+        call_command('seed_demo', '--no-files', verbosity=0)
+        call_command('clear_demo', '--noinput', verbosity=0)
+
+        self.assertTrue(User.objects.filter(pk=keeper.pk).exists())
+        self.assertEqual(InstrumentFamily.objects.count(), fam_before)
+        self.assertEqual(SectionType.objects.count(), sec_before)
+        self.assertEqual(Venue.objects.count(), venue_before)
+
+    def test_clear_dry_run_changes_nothing(self):
+        """--dry-run 只列出將刪除的資料，不動資料庫"""
+        from django.core.management import call_command
+
+        call_command('seed_demo', '--no-files', verbosity=0)
+        before = self._demo_user_qs().count()
+
+        call_command('clear_demo', '--dry-run', verbosity=0)
+        self.assertEqual(self._demo_user_qs().count(), before)
