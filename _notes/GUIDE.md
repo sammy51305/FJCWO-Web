@@ -32,6 +32,8 @@ CLAUDE.md（專案根目錄 — 工作指引：概述 / 環境 / 慣例）
 | 這段程式「為什麼這樣寫」，是設計選擇還是 bug | [DESIGN.md](DESIGN.md) 附錄三 |
 | 有哪些已知的資料完整性問題還沒修 | [DESIGN.md](DESIGN.md) 附錄四 |
 | 有哪些構想中、還沒設計/實作的功能 | [DESIGN.md](DESIGN.md) 附錄五 |
+| 那些待辦哪個該先做 | [DESIGN.md](DESIGN.md) 附錄五開頭的優先順序表 |
+| P0/P1/P2、S1/S2、Phase 差在哪 | [WORKFLOW.md](WORKFLOW.md) 標記慣例 |
 | 目前有幾個測試、測了什麼 | [TESTING.md](TESTING.md) |
 | 要新增測試，慣例是什麼 | [TESTING.md](TESTING.md) 新增測試的慣例 |
 | 第一次建立開發環境 | [SETUP.md](SETUP.md) |
@@ -51,4 +53,4 @@ CLAUDE.md（專案根目錄 — 工作指引：概述 / 環境 / 慣例）
 | [TESTING.md](TESTING.md) | 測試總數、各 class 說明、執行方式、未覆蓋功能 | 測試的具體程式碼 |
 | [SETUP.md](SETUP.md) | 從零建環境的步驟（含 fixtures 載入順序）| 架構設計 |
 | [OVERVIEW.md](OVERVIEW.md) | 功能總覽與操作流程（非技術人員版）| 技術實作細節 |
-| [WORKFLOW.md](WORKFLOW.md) | 開發標準流程、commit 前 checklist、commit message 規範 | 各文件內部的細節內容 |
+| [WORKFLOW.md](WORKFLOW.md) | 開發標準流程、commit 前 checklist、commit message 規範、標記慣例（P/S/Phase）定義 | 各文件內部的細節內容、個別待辦排在第幾（在 DESIGN 附錄五）|
