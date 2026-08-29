@@ -78,6 +78,42 @@ class AnnouncementListTest(TestCase):
         r = self.client.get(self.url)
         self.assertNotContains(r, '草稿公告')
 
+    def test_officer_sections_ordered_top_to_bottom(self):
+        """幹部列表由上而下依序為 幹部限定 → 團員限定 → 公開"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        body = r.content.decode()
+        self.assertLess(body.index('幹部限定'), body.index('團員限定'))
+        self.assertLess(body.index('團員限定'), body.index('公開'))
+
+    def test_member_has_no_officer_section(self):
+        """一般團員只有團員限定與公開兩區，沒有幹部限定區"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertNotContains(r, '幹部限定')
+        body = r.content.decode()
+        self.assertLess(body.index('團員限定'), body.index('公開'))
+
+    def test_unauthenticated_has_only_public_section(self):
+        """未登入只有公開區，另外兩區的標題都不出現"""
+        r = self.client.get(self.url)
+        self.assertContains(r, '公開')
+        self.assertNotContains(r, '幹部限定')
+        self.assertNotContains(r, '團員限定')
+
+    def test_empty_section_still_shown(self):
+        """某一區沒有公告時仍顯示區塊標題與空白提示，版面不會少一塊"""
+        self.pub_member.delete()
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertContains(r, '團員限定')
+        self.assertContains(r, '這一區目前沒有公告。')
+
+    def test_nav_shows_announcement_link_when_logged_out(self):
+        """未登入時導覽列仍有公告入口（公開公告不能只靠手打網址才找得到）"""
+        r = self.client.get(reverse('public:index'))
+        self.assertContains(r, self.url)
+
 
 class AnnouncementDetailTest(TestCase):
     """公告詳情頁的存取控制"""

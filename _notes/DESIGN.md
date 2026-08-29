@@ -1102,21 +1102,45 @@ def is_published(self):
     return self.published_at is not None
 ```
 
-#### 可見性過濾邏輯（`_visible_announcements`）
+#### 可見性過濾邏輯（`_visible_visibilities` / `_visible_announcements`）
 
-列表頁與詳情頁共用同一個 helper 函式，確保兩處規則一致、不重複：
+可見性只寫一次，放在 `_visible_visibilities()`；它回傳的順序同時就是列表頁三區
+「由上而下」的排列順序，所以「誰看得到」與「怎麼排版」不會各寫一套：
 
 ```python
-def _visible_announcements(user):
-    qs = Announcement.objects.filter(published_at__isnull=False)
+def _visible_visibilities(user):
+    """可見的 visibility，依 幹部限定 → 團員限定 → 公開 由上而下排列。"""
     if not user.is_authenticated:
-        return qs.filter(visibility=Announcement.Visibility.PUBLIC)
+        return (Visibility.PUBLIC,)
     if user.is_officer:
-        return qs
-    return qs.exclude(visibility=Announcement.Visibility.OFFICER_ONLY)
+        return (Visibility.OFFICER_ONLY, Visibility.MEMBER_ONLY, Visibility.PUBLIC)
+    return (Visibility.MEMBER_ONLY, Visibility.PUBLIC)
+
+
+def _visible_announcements(user):
+    qs = Announcement.objects.filter(published_at__isnull=False).select_related('created_by')
+    return qs.filter(visibility__in=_visible_visibilities(user))
 ```
 
-詳情頁直接對這個 QuerySet 做 `get_object_or_404`，無需再重複寫可見性判斷。
+列表頁與詳情頁共用 `_visible_announcements()`，詳情頁直接對這個 QuerySet 做
+`get_object_or_404`，無需再重複寫可見性判斷。
+
+#### 列表頁三區版面（#13-3，2026-08-29）
+
+列表頁由上而下分 **幹部限定 → 團員限定 → 公開** 三區，每區一個標題徽章。
+看得到幾區完全跟著 `_visible_visibilities()` 走——幹部三區、團員下兩區、未登入只有公開區。
+
+QuerySet 只查一次、在 Python 端分組（公告量小，`select_related('created_by')` 已避免 N+1），
+不是每區各發一次查詢。**某一區沒有公告時仍然顯示標題與「這一區目前沒有公告。」**，
+讓版面結構固定，不會因為某層剛好空著就少一塊、讓人誤以為沒有這一層。
+
+#### 導覽列入口必須在登入判斷之外（2026-08-29 修正的 bug）
+
+公開公告本來就允許未登入者瀏覽，`_visible_announcements()` 對未登入者也一直回傳正確結果，
+但 `templates/base.html` 曾把公告連結包在 `{% if user.is_authenticated %}` 裡，
+未登入者的導覽列上根本沒有入口，只能手打網址才進得去（demo 當天被幹部發現）。
+公告連結現在放在登入判斷之外，與「關於百韻」「組織章程」同一層；
+`AnnouncementListTest` 有一條測試守住這件事，避免日後整理導覽列時又被搬回 if 裡。
 
 #### URL 結構
 
@@ -1689,7 +1713,7 @@ if not attendance.on_leave:
 | **P0** | #13-1 團員資料必填欄位大改 | **卡住 #11 表單**，表單發出去前必須定案 |
 | **P0** | #11 校友名單批次匯入（Google 表單 → 系統） | 欄位待 #13-1 定案後才能發表單 |
 | **P0** | #10 部署 Web 供幹部測試 | 待與幹部討論放哪、用什麼資料 |
-| **P1** | #13-3～8 其餘 demo 回饋（公告三欄、樂譜、演出意願、請假時限）| 方向全部定案，可直接實作 |
+| **P1** | #13-4～8 其餘 demo 回饋（樂譜、演出意願、請假時限）| 方向全部定案，可直接實作（#13-3 公告三欄已完成）|
 | **P1** | #12 首頁待審核提醒不完整（幹部漏審風險） | 方向已明確，可直接實作 |
 | **P2** | #13-2 / #13-9 / #13-10（改名、請假提示、保險費分類）| 小改，可順手做 |
 | **P2** | #14 分部長（聲部負責人） | 由 #13-9 衍生，實作方式待決定 |
@@ -2202,7 +2226,7 @@ demo 給幹部看之後收到的 10 項改動需求，**2026-08-12 當晚已逐�
 |:--:|------|:---:|------|
 | 1 | 團員資料必填欄位大改（見下） | **P0** | 已定案，卡住 #11 表單 |
 | 2 | 「校友報到申請」改名為「入團申請」 | P2 | 已定案，純顯示文字 |
-| 3 | 公告分**上中下三欄**（幹部／團員／公開）＋修 nav bug | P1 | 已定案，見下 |
+| 3 | 公告分**上中下三欄**（幹部／團員／公開）＋修 nav bug | P1 | ✅ 已完成（2026-08-29），見 §4.10 |
 | 4 | 樂譜庫存清單只列總譜，分譜只在詳情看 | P1 | 已定案（語意已澄清）|
 | 5 | 演出加「確認演出意願」＋意願統計，未表態列**待確認** | P1 | 已定案，見下 |
 | 6 | **廢掉**演出請假，演出視為最後一場排練 | P1 | 已定案，見下 |
@@ -2294,6 +2318,9 @@ demo 給幹部看之後收到的 10 項改動需求，**2026-08-12 當晚已逐�
 未登入者的導覽列上根本沒有這個入口，只能靠手打網址才找得到。
 
 > 修法是把公告連結移出該 if 區塊（單行改動）。可獨立先修，不必等整個三欄改版。
+
+> ✅ **已於 2026-08-29 實作完成**（見 §4.10）：三區順序由 `_visible_visibilities()` 單一來源決定，
+> 與可見性判斷共用；空的區塊仍顯示標題與提示；導覽列公告連結已移出 `{% if user.is_authenticated %}`。
 
 #### 第 4 項：樂譜庫存清單只列總譜（語意已澄清）
 

@@ -8,20 +8,43 @@ from apps.notifications.utils import push_line_message
 from .models import Announcement
 
 
+def _visible_visibilities(user):
+    """回傳使用者可見的 visibility，依列表頁「由上而下」的顯示順序排列。
+
+    順序固定為 幹部限定 → 團員限定 → 公開；使用者看不到的那幾層直接不在清單裡，
+    所以列表頁的分區與可見性判斷共用同一份規則，不會各寫一套而走鐘。
+    """
+    if not user.is_authenticated:
+        return (Announcement.Visibility.PUBLIC,)
+    if user.is_officer:
+        return (
+            Announcement.Visibility.OFFICER_ONLY,
+            Announcement.Visibility.MEMBER_ONLY,
+            Announcement.Visibility.PUBLIC,
+        )
+    return (Announcement.Visibility.MEMBER_ONLY, Announcement.Visibility.PUBLIC)
+
+
 def _visible_announcements(user):
     """回傳目前使用者可見的已發布公告 QuerySet。"""
     qs = Announcement.objects.filter(published_at__isnull=False).select_related('created_by')
-    if not user.is_authenticated:
-        return qs.filter(visibility=Announcement.Visibility.PUBLIC)
-    if user.is_officer:
-        return qs
-    return qs.exclude(visibility=Announcement.Visibility.OFFICER_ONLY)
+    return qs.filter(visibility__in=_visible_visibilities(user))
 
 
 def announcement_list(request):
-    announcements = _visible_announcements(request.user)
+    """公告列表：由上而下分幹部限定／團員限定／公開三區（見 DESIGN 附錄五 #13-3）。"""
+    announcements = list(_visible_announcements(request.user))
+    labels = dict(Announcement.Visibility.choices)
+    sections = [
+        {
+            'visibility': visibility,
+            'label': labels[visibility],
+            'items': [ann for ann in announcements if ann.visibility == visibility],
+        }
+        for visibility in _visible_visibilities(request.user)
+    ]
     return render(request, 'announcements/announcement_list.html', {
-        'announcements': announcements,
+        'sections': sections,
     })
 
 
