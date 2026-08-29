@@ -12,29 +12,36 @@
   {% endif %}
 </div>
 
-{% if announcements %}
-  <div class="list-group">
-    {% for ann in announcements %}
-    <a href="{% url 'announcements:announcement_detail' ann.pk %}"
-       class="list-group-item list-group-item-action py-3">
-      <div class="d-flex justify-content-between align-items-start">
-        <div>
+{% for section in sections %}
+<section class="mb-4">
+  <h5 class="mb-3">
+    {% if section.visibility == 'officer_only' %}
+      <span class="badge bg-warning text-dark">{{ section.label }}</span>
+    {% elif section.visibility == 'member_only' %}
+      <span class="badge bg-info text-dark">{{ section.label }}</span>
+    {% else %}
+      <span class="badge bg-secondary">{{ section.label }}</span>
+    {% endif %}
+  </h5>
+
+  {% if section.items %}
+    <div class="list-group">
+      {% for ann in section.items %}
+      <a href="{% url 'announcements:announcement_detail' ann.pk %}"
+         class="list-group-item list-group-item-action py-3">
+        <div class="d-flex justify-content-between align-items-start">
           <span class="fw-semibold">{{ ann.title }}</span>
-          {% if ann.visibility == 'officer_only' %}
-            <span class="badge bg-warning text-dark ms-2">幹部限定</span>
-          {% elif ann.visibility == 'member_only' %}
-            <span class="badge bg-info text-dark ms-2">團員限定</span>
-          {% endif %}
+          <small class="text-muted text-nowrap ms-3">{{ ann.published_at|date:"Y/m/d" }}</small>
         </div>
-        <small class="text-muted text-nowrap ms-3">{{ ann.published_at|date:"Y/m/d" }}</small>
-      </div>
-      {% if ann.event_date %}
-        <small class="text-muted"><i class="bi bi-calendar-event"></i> 活動日期：{{ ann.event_date|date:"Y/m/d" }}</small>
-      {% endif %}
-    </a>
-    {% endfor %}
-  </div>
-{% else %}
-  <p class="text-muted">目前沒有公告。</p>
-{% endif %}
+        {% if ann.event_date %}
+          <small class="text-muted"><i class="bi bi-calendar-event"></i> 活動日期：{{ ann.event_date|date:"Y/m/d" }}</small>
+        {% endif %}
+      </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="text-muted small mb-0">這一區目前沒有公告。</p>
+  {% endif %}
+</section>
+{% endfor %}
 {% endblock %}

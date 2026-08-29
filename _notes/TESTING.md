@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-08-13（共 456 個測試）
+> 最後更新：2026-08-29（共 461 個測試）
 
 ---
 
@@ -90,9 +90,9 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **456 個測試**，分布在 8 個 app。
+共 **461 個測試**，分布在 8 個 app。
 
-> 最近一次全站測試：2026-08-13 執行 `python manage.py test`，**456/456 全數通過、無 regression**（System check 亦無問題）。
+> 最近一次全站測試：2026-08-29 執行 `python manage.py test`，**461/461 全數通過、無 regression**（System check 亦無問題）。
 
 ### `apps/accounts/tests.py`（112 個）
 
@@ -162,11 +162,11 @@ python manage.py test --noinput
 | `FinanceRecordCRUDTest` | 收支明細：存取控制（未登入/團員/幹部）、新增（登記者自動帶入）、amount 0/負數/缺說明被擋、編輯、刪除限管理員（幹部擋下、管理員可刪）、列表收入/支出/結餘摘要 |
 | `FeeEditTest` | 會費登記（幹部代登記）：一般團員無權限、登記已繳（status=paid、設 paid_at 與收款幹部）、未繳（status=unpaid、兩者為空）、金額一律自期別快照（不受表單影響）、同 member+period 再登記更新不重複、缺團員/期別被擋 |
 
-### `apps/announcements/tests.py`（23 個）
+### `apps/announcements/tests.py`（28 個）
 
 | Class | 測試內容 |
 |-------|---------|
-| `AnnouncementListTest` | 未登入只見公開、團員見公開+團員限定、幹部見全部已發布、所有人看不到草稿 |
+| `AnnouncementListTest` | 未登入只見公開、團員見公開+團員限定、幹部見全部已發布、所有人看不到草稿、三區由上而下排序（幹部限定→團員限定→公開）、團員無幹部限定區、未登入只有公開區、空的區塊仍顯示標題與提示、未登入導覽列有公告入口 |
 | `AnnouncementDetailTest` | 未登入可看公開詳情、團員看幹部限定回 404、幹部可看幹部限定、草稿對所有人回 404 |
 | `AnnouncementManageTest` | 存取控制（未登入/團員/幹部）、管理頁顯示草稿 |
 | `AnnouncementCreateTest` | 幹部新增成功（預設草稿）、空標題/空內容被擋 |
