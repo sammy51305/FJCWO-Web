@@ -2,7 +2,7 @@
 
 > 本文件說明 Phase 1 & 2 的設計決策、資料庫結構與各系統的運作邏輯。
 > 目標讀者：接手開發或複習程式碼的人（包含自己）。
-> 最後更新：2026-08-12（附錄五導入 P0/P1/P2 優先權；新增 #11 校友名單批次匯入、#12 首頁待審核提醒不完整、#13 Demo 後幹部回饋 10 項；#10 補上線前須處理事項）
+> 最後更新：2026-08-29（#13-3 公告三欄與導覽列入口已完成；附錄五 #10 補候選路線 A 雲端 PaaS／B 家機自架＋NAS；新增 #15 匯出資料到 Google Sheet）
 
 ---
 
@@ -1718,6 +1718,7 @@ if not attendance.on_leave:
 | **P2** | #13-2 / #13-9 / #13-10（改名、請假提示、保險費分類）| 小改，可順手做 |
 | **P2** | #14 分部長（聲部負責人） | 由 #13-9 衍生，實作方式待決定 |
 | **P2** | #4 每年 12/25 前團員名單申報提醒 | 待確認申報需要哪些欄位（連動 #11） |
+| — | #15 匯出資料到 Google Sheet | 非急迫；待決定匯出範圍、單向／雙向、觸發方式 |
 | — | #1 延伸：演出海報名單 | 待討論用哪個 model |
 | ✅ | #8 補請假 | **已定案**（2026-08-12，見 #13-7）|
 
@@ -2106,6 +2107,31 @@ Migration 順序：① accounts（Role 加 GUEST 僅 choices + 新增 from_band 
 - **待決定**：放哪（自架 vs 雲端 PaaS）、連線方式/網域、用測試資料還是真資料、`.env` 機密值怎麼帶上去（見 SETUP.md 情境 C/D）、`DJANGO_DEBUG` 與 `DJANGO_ALLOWED_HOSTS` 設定。
 - **範圍拿捏**：測試性質的部署可簡化（單機、不接真 LINE/Email），與未來正式環境分開規劃；但 `DEBUG=False` 等安全設定仍建議比照，避免測試站外洩。
 
+**討論走向（2026-08-09，未定案）**：兩條候選路線，因手邊有閒置舊電腦，目前傾向先 A 之後再 B。
+
+**候選路線 A — 雲端 PaaS（零維運，但會休眠）**
+
+- **Render**（app 免費、閒置休眠、首次請求約 1 分鐘喚醒——測試可接受）＋ **Neon 或 Supabase**（永久免費 Postgres；不用 Render 自家 30 天會過期的免費 DB）。
+- **媒體（分譜/QR）**：Render 免費磁碟為臨時性、重部署會清空 → 要持久接 **Cloudflare R2 私有 bucket**（S3 相容、`django-storages`，維持 §4.19 分譜下載權限）；或先接受重傳、延後決策。
+- **三大雲（AWS/GCP/Azure）已評估後排除**：對此情境過度工程、免費多為限時或需信用卡、有意外帳單風險（如 AWS 免費 12 個月後轉收費）。真正永久免費又常駐的雲端只有 Oracle Cloud Always Free，但那是自管 VM（≈ 路線 B 工作量）。
+
+**候選路線 B — 家機自架（常駐免費，可與 NAS 合併）← 目前傾向**
+
+- **背景**：手邊兩台閒置電腦，一台太舊擬淘汰、一台裝 Windows；擬用留下的那台。
+- **常駐免費**：自架不休眠、永久 $0（僅電費），且是 Architecture 八「汰換電腦當伺服器」的種子，測試站可長成正式站。
+- **NAS ＋ Web 同機但隔離**：對上 Architecture 八「Docker 將 NAS 與 Web Server 分開」。做法用 **Proxmox**（裸機 hypervisor：NAS VM ＋ Ubuntu Web VM，最貼使用者的 VM 經驗）或 **TrueNAS SCALE**（NAS OS ＋ Django 跑 Docker 容器）；避免把對外 Web 與 NAS 資料混在同一 OS（資安/穩定）。維持 Windows 亦可（SMB 分享 ＋ Waitress/WSL2）但隔離最弱。
+- **對外曝露免固定 IP**：用 **Cloudflare Tunnel** 或 **Tailscale**——機器主動建連、不需固定 IP/開 port/曝家裡 IP，HTTPS 由通道端處理。Tailscale 私有（幹部裝 App、最安全、不上公網）或 Tailscale Funnel／Cloudflare Tunnel（開網址即連）。
+- **Windows 注意**：`gunicorn` 為 Unix-only、Windows 不能原生跑 → 用 **Waitress**（Windows 原生 WSGI）或 **WSL2/VM/Docker** 跑標準 Ubuntu＋gunicorn 堆疊（後者較貼合正式環境）。
+- **與當年 VM+Tomcat 的差異**（供對照）：Tomcat→gunicorn/WSGI；SSL 改免費自動（Let's Encrypt/Caddy/Cloudflare）；固定 IP 不再必要（Tunnel 取代開 port）。
+
+**共通事項（不論 A/B）**：
+
+- **資料**：用**假資料**（fixtures ＋ 少量假團員/幹部帳號），避免真團員個資上測試站。
+- **部署缺件**：`requirements.txt` 補 WSGI 伺服器（Linux 用 `gunicorn`、Windows 用 `waitress`）＋ `whitenoise`；`.env` 設新 `SECRET_KEY`、`DEBUG=False`、`ALLOWED_HOSTS`；跑 `collectstatic`／`migrate`／載 fixtures。
+- **已排除**：Google Sheets 當資料庫（app 咬 SQL/關聯/Django auth，等於重寫，不可行，見 #15）；Google Drive 當媒體（API 配額＋權限衝突，改用 R2 或本機/NAS 磁碟）。
+
+**待確認（B 路線）**：留下那台能否重灌成 Proxmox/TrueNAS（或維持 Windows）、硬體規格（CPU/RAM/硬碟）以判斷是否撐得住 NAS＋Web 同機。
+
 **上線前必須處理的兩件事（2026-08-12 補）**：
 
 1. **清掉 demo 帳號、換掉 demo 密碼**。本機 demo 資料的 `demo_*` 帳號密碼統一是 `demo1234`，
@@ -2364,6 +2390,14 @@ demo 資料的建立與清理腳本、以及資料內容清單，見 [DEMO.md](D
   加一個角色會牽動全站權限檢查；分部長比較像「附加職務」而非「權限層級」。
 - 分部長要不要有額外權限（例如看得到自己聲部的請假紀錄）？還是純聯絡人角色？
 - 一個聲部可不可以有多位分部長？跨聲部兼任怎麼處理？
+
+### 15. 匯出資料到 Google Sheet — 待討論
+
+2026-08-09 記錄。構想：讓非技術幹部能以試算表形式檢視／再加工系統資料（如團員名冊、會費繳納、出席統計）。
+
+- **定位**：Google Sheet 是「匯出／唯讀鏡像」，**不是資料庫**——系統仍以 Postgres 為底（Sheets 當 DB 不可行，見 #10 已排除項）。
+- **待決定**：匯出哪些資料、單向匯出還是雙向同步（雙向複雜且有衝突問題，傾向先做單向）、觸發方式（幹部手動按鈕匯出 vs 定期排程）、Google Sheets API ＋ 服務帳號的權限設定。
+- **動機／取捨**：幹部熟悉試算表、方便離線檢視或再加工；但要衡量 API 串接與維護成本，非急迫需求。
 
 ---
 
