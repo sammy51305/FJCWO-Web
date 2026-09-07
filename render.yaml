@@ -1,0 +1,36 @@
+# Render Blueprint —— 一鍵建立測試站（DESIGN 附錄五 #10 路線 A）
+#
+# 用法：Render → New → Blueprint → 選這個 repo，它會讀這份檔案建服務。
+# 資料庫不寫在這裡：Render 自家免費 Postgres 30 天會過期，改用 Neon 的永久免費方案，
+# 建好後把連線字串填進下面的 DATABASE_URL（見 _notes/SETUP.md 情境 E）。
+services:
+  - type: web
+    name: fjcwo-web
+    runtime: python
+    plan: free
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn config.wsgi:application"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.1
+      # 由 Render 自動產生一組隨機值，不要沿用本機那把
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "False"
+      # 部署後把 Render 給的網域填進這兩個（ALLOWED_HOSTS 不含 https://，
+      # CSRF_TRUSTED_ORIGINS 要含）。沒填對的話：前者 400、後者表單送出 403。
+      - key: DJANGO_ALLOWED_HOSTS
+        sync: false
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        sync: false
+      - key: DJANGO_SECURE_SSL_REDIRECT
+        value: "True"
+      - key: DJANGO_SECURE_COOKIES
+        value: "True"
+      # Neon 的連線字串，在 Render 後台手動填（sync: false = 不寫進 repo）
+      - key: DATABASE_URL
+        sync: false
+      # demo 資料的密碼。務必自己設一組，不要用 repo 裡的預設值
+      - key: DEMO_PASSWORD
+        sync: false

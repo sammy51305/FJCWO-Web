@@ -15,6 +15,7 @@ manage.py seed_demo
 
 import datetime as dt
 import io
+import os
 from decimal import Decimal
 
 from django.core.files.base import ContentFile
@@ -37,7 +38,10 @@ from apps.scores.models import Score
 # ── demo 資料的識別依據（clear_demo 依這些常數反向清除，兩者務必同步）──────
 
 DEMO_USERNAME_PREFIX = 'demo_'
-DEMO_PASSWORD = 'demo1234'
+# demo 帳號密碼。預設值只給本機用，且已寫在 DEMO.md 裡（等於公開），
+# 所以任何連得到外面的環境（測試站／正式站）一律要用 DEMO_PASSWORD 環境變數蓋掉，
+# 否則等於 repo 裡躺著一組真實可用的憑證。見 DESIGN 附錄五 #10「上線前必須處理的兩件事」。
+DEMO_PASSWORD = os.environ.get('DEMO_PASSWORD', 'demo1234')
 DEMO_EVENT_NAME = '2026 秋季公演「聲之所向」'
 DEMO_FEE_PERIOD = (2026, 'second')
 
