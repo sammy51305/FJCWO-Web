@@ -42,6 +42,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'apps.accounts.middleware.ForcePasswordChangeMiddleware',
+    'apps.public.middleware.NoIndexMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -133,6 +134,10 @@ if os.environ.get('DJANGO_SECURE_SSL_REDIRECT', 'False') == 'True':
 if os.environ.get('DJANGO_SECURE_COOKIES', 'False') == 'True':
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+
+# 測試站設 True：robots.txt 改為整站禁止，並在每個回應加上 X-Robots-Tag: noindex。
+# 正式站維持 False，讓公開頁（關於百韻、組織章程、公開公告）搜尋得到。
+ROBOTS_NOINDEX = os.environ.get('DJANGO_ROBOTS_NOINDEX', 'False') == 'True'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
