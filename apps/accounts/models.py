@@ -1,5 +1,28 @@
+import re
+
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
 from django.db import models
+
+# 身分證字號格式：1 個英文字母 + 9 位數字。
+# 刻意只驗格式、不驗檢查碼——居留證號等變體規則不同，驗太嚴會擋掉真實存在的號碼；
+# 這裡的目的是擋打錯，不是做身分驗證。
+_NATIONAL_ID_RE = re.compile(r'^[A-Za-z][0-9]{9}$')
+
+
+def validate_national_id(value):
+    if value and not _NATIONAL_ID_RE.match(value):
+        raise ValidationError('身分證字號格式錯誤（應為 1 個英文字母加 9 位數字）。')
+
+
+def mask_national_id(value):
+    """身分證字號遮蔽成只剩末四碼，如 A123456789 → ******6789。
+
+    列表與報表一律用這個，不顯示完整值（見 DESIGN 附錄五 #13-1 決定一）。
+    """
+    if not value:
+        return ''
+    return '*' * max(len(value) - 4, 0) + value[-4:]
 
 
 class InstrumentFamily(models.Model):
@@ -69,8 +92,18 @@ class User(AbstractUser):
         null=True, blank=True, verbose_name='聲部'
     )
     grad_year = models.PositiveSmallIntegerField('畢業年份', null=True, blank=True)
-    phone = models.CharField('電話', max_length=20, blank=True)
+    phone = models.CharField('手機', max_length=20, blank=True)
     from_band = models.CharField('來自樂團', max_length=100, blank=True, help_text='僅槍手（role=guest）適用')
+    # ── 以下三個是敏感個資，列表與報表不顯示完整值（見 DESIGN 附錄五 #13-1 決定一）──
+    birth_date = models.DateField('出生年月日', null=True, blank=True)
+    address = models.CharField('住址', max_length=200, blank=True)
+    national_id = models.CharField(
+        '身分證字號', max_length=10, blank=True,
+        validators=[validate_national_id],
+        help_text='用途為每年的政府名單申報（見 DESIGN 附錄五 #4）',
+    )
+    # 使用者自己填的 LINE 帳號，與下面的 line_user_id（LINE Bot 取得的內部 id）是兩回事，不可混用
+    line_id = models.CharField('LINE ID', max_length=100, blank=True)
     line_user_id = models.CharField('LINE User ID', max_length=100, blank=True)
     must_change_password = models.BooleanField(
         '需重設密碼', default=False,
@@ -107,6 +140,12 @@ class User(AbstractUser):
     def is_guest(self):
         return self.role == self.Role.GUEST
 
+    @property
+    def masked_national_id(self):
+        """給列表／報表用的遮蔽值。做成 property 而非在各 template 自己遮，
+        是為了讓「不顯示完整值」只有一份實作，日後新增頁面不會漏（DESIGN #13-1 決定一）。"""
+        return mask_national_id(self.national_id)
+
 
 class Registration(models.Model):
     class Status(models.TextChoices):
@@ -115,12 +154,26 @@ class Registration(models.Model):
         REJECTED = 'rejected', '已拒絕'
 
     name = models.CharField('姓名', max_length=50)
+    # 樂器、聲部、畢業年份自 2026-08-29 起改為選填（#13-1）；
+    # 依樂器分組的頁面因此要能處理 null（通訊錄 §4.2 的「未分類」、演出分譜 §4.19 的守衛）。
     instrument = models.ForeignKey(
-        InstrumentType, on_delete=models.PROTECT, verbose_name='樂器'
+        InstrumentType, on_delete=models.PROTECT,
+        null=True, blank=True, verbose_name='樂器'
     )
-    grad_year = models.PositiveSmallIntegerField('畢業年份')
-    phone = models.CharField('電話', max_length=20, blank=True)
+    section = models.ForeignKey(
+        SectionType, on_delete=models.SET_NULL,
+        null=True, blank=True, verbose_name='聲部'
+    )
+    grad_year = models.PositiveSmallIntegerField('畢業年份', null=True, blank=True)
+    phone = models.CharField('手機', max_length=20, blank=True)
     email = models.EmailField('Email')
+    # ── 敏感個資，比照 User，核准建帳號時整批帶過去 ──
+    birth_date = models.DateField('出生年月日', null=True, blank=True)
+    address = models.CharField('住址', max_length=200, blank=True)
+    national_id = models.CharField(
+        '身分證字號', max_length=10, blank=True, validators=[validate_national_id]
+    )
+    line_id = models.CharField('LINE ID', max_length=100, blank=True)
     status = models.CharField('狀態', max_length=10, choices=Status, default=Status.PENDING)
     reviewed_by = models.ForeignKey(
         User, on_delete=models.SET_NULL,
@@ -135,4 +188,8 @@ class Registration(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f'{self.name}（{self.grad_year}屆）'
+        return f'{self.name}（{self.grad_year}屆）' if self.grad_year else self.name
+
+    @property
+    def masked_national_id(self):
+        return mask_national_id(self.national_id)

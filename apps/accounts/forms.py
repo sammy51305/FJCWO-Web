@@ -20,13 +20,26 @@ class BootstrapAuthenticationForm(AuthenticationForm):
 
 
 class ProfileForm(forms.ModelForm):
+    """團員編輯自己的資料。
+
+    敏感個資（出生年月日／住址／身分證字號）**本人一律看得到自己的**，
+    所以放在這裡讓本人自行補填；限制的是「別人看不看得到」，見 DESIGN #13-1 決定一。
+    """
+
     class Meta:
         model = User
-        fields = ['name', 'email', 'phone', 'instrument', 'section', 'grad_year']
+        fields = [
+            'name', 'email', 'phone', 'birth_date', 'address',
+            'line_id', 'national_id', 'instrument', 'section', 'grad_year',
+        ]
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
             'phone': forms.TextInput(attrs={'class': 'form-control'}),
+            'birth_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'address': forms.TextInput(attrs={'class': 'form-control'}),
+            'line_id': forms.TextInput(attrs={'class': 'form-control'}),
+            'national_id': forms.TextInput(attrs={'class': 'form-control'}),
             'instrument': forms.Select(attrs={'class': 'form-select'}),
             'section': forms.Select(attrs={'class': 'form-select'}),
             'grad_year': forms.NumberInput(attrs={'class': 'form-control'}),

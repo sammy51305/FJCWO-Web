@@ -5,6 +5,23 @@ from django.utils import timezone
 
 from .models import InstrumentFamily, InstrumentType, User
 
+# 2026-08-29（#13-1）起，個人資料表單的必填欄位變成七個。測試不重複列這七個欄位，
+# 統一由這裡產生，日後必填規則再變只要改這一處。
+def profile_post(**overrides):
+    """回傳一份通過驗證的個人資料 POST payload，需要改哪格就傳哪格。"""
+    data = {
+        'name': '測試人員',
+        'email': 'profile@test.local',
+        'birth_date': '2000-01-15',
+        'address': '新北市新莊區中正路 510 號',
+        'phone': '0912345678',
+        'line_id': 'test_line_id',
+        'national_id': 'A123456789',
+    }
+    data.update(overrides)
+    return data
+
+
 
 class LoginLogoutTest(TestCase):
     """登入 / 登出"""
@@ -126,12 +143,9 @@ class ProfileTest(TestCase):
     def test_valid_profile_update(self):
         """POST 正確資料後儲存並導向個人資料頁"""
         self.client.force_login(self.user)
-        r = self.client.post(self.url, {
-            'name': '新姓名',
-            'email': 'new@test.local',
-            'phone': '0912345678',
-            'grad_year': 2022,
-        })
+        r = self.client.post(self.url, profile_post(
+            name='新姓名', email='new@test.local', grad_year=2022,
+        ))
         self.assertRedirects(r, self.url, fetch_redirect_response=False)
         self.user.refresh_from_db()
         self.assertEqual(self.user.name, '新姓名')
@@ -319,13 +333,10 @@ class MemberEditTest(TestCase):
     def test_officer_post_updates_member(self):
         """幹部送出修改後的資料應成功更新"""
         self.client.force_login(self.officer)
-        r = self.client.post(self.url, {
-            'name': '改名後的人',
-            'email': self.member.email,
-            'role': User.Role.MEMBER,
-            'instrument': self.other_family.pk,
-            'grad_year': 113,
-        })
+        r = self.client.post(self.url, profile_post(
+            name='改名後的人', email=self.member.email,
+            role=User.Role.MEMBER, instrument=self.other_family.pk, grad_year=2024,
+        ))
         self.assertRedirects(r, reverse('accounts:member_directory'))
         self.member.refresh_from_db()
         self.assertEqual(self.member.name, '改名後的人')
@@ -334,30 +345,27 @@ class MemberEditTest(TestCase):
     def test_officer_can_promote_to_officer_role(self):
         """一般幹部可以把團員改成幹部角色"""
         self.client.force_login(self.officer)
-        self.client.post(self.url, {
-            'name': self.member.name, 'email': self.member.email,
-            'role': User.Role.OFFICER,
-        })
+        self.client.post(self.url, profile_post(
+            name=self.member.name, email=self.member.email, role=User.Role.OFFICER,
+        ))
         self.member.refresh_from_db()
         self.assertEqual(self.member.role, User.Role.OFFICER)
 
     def test_regular_officer_cannot_grant_admin_role(self):
         """一般幹部（非管理員）不能把角色設為管理員"""
         self.client.force_login(self.officer)
-        self.client.post(self.url, {
-            'name': self.member.name, 'email': self.member.email,
-            'role': User.Role.ADMIN,
-        })
+        self.client.post(self.url, profile_post(
+            name=self.member.name, email=self.member.email, role=User.Role.ADMIN,
+        ))
         self.member.refresh_from_db()
         self.assertEqual(self.member.role, User.Role.MEMBER)
 
     def test_superuser_can_grant_admin_role(self):
         """超級管理員可以把角色設為管理員"""
         self.client.force_login(self.superuser)
-        self.client.post(self.url, {
-            'name': self.member.name, 'email': self.member.email,
-            'role': User.Role.ADMIN,
-        })
+        self.client.post(self.url, profile_post(
+            name=self.member.name, email=self.member.email, role=User.Role.ADMIN,
+        ))
         self.member.refresh_from_db()
         self.assertEqual(self.member.role, User.Role.ADMIN)
 
@@ -640,13 +648,10 @@ class RegistrationTest(TestCase):
     def test_valid_apply_creates_registration(self):
         """正確送出申請應建立 Registration 記錄"""
         from .models import Registration
-        r = self.client.post(self.apply_url, {
-            'name': '測試申請人',
-            'instrument': self.instrument.pk,
-            'grad_year': 110,
-            'email': 'apply@test.local',
-            'phone': '0912345678',
-        })
+        r = self.client.post(self.apply_url, profile_post(
+            name='測試申請人', email='apply@test.local',
+            instrument=self.instrument.pk, grad_year=2021,
+        ))
         self.assertRedirects(r, self.status_url, fetch_redirect_response=False)
         self.assertEqual(Registration.objects.count(), 1)
         reg = Registration.objects.get()
@@ -659,10 +664,9 @@ class RegistrationTest(TestCase):
             name='第一次', instrument=self.instrument,
             grad_year=110, email='dup@test.local',
         )
-        self.client.post(self.apply_url, {
-            'name': '第二次', 'instrument': self.instrument.pk,
-            'grad_year': 110, 'email': 'dup@test.local',
-        })
+        self.client.post(self.apply_url, profile_post(
+            name='第二次', email='dup@test.local', instrument=self.instrument.pk,
+        ))
         self.assertEqual(Registration.objects.count(), 1)
 
     # ── T11 狀態查詢（公開）──────────────────────────────────
@@ -874,13 +878,10 @@ class RegistrationManageTest(TestCase):
         """幹部送出有效資料應成功建立申請紀錄，狀態預設待審核"""
         from .models import Registration
         self.client.force_login(self.officer)
-        r = self.client.post(self.create_url, {
-            'name': '電話報到的人',
-            'instrument': self.instrument.pk,
-            'grad_year': 112,
-            'email': 'phonecall@test.local',
-            'phone': '0900000000',
-        })
+        r = self.client.post(self.create_url, profile_post(
+            name='電話報到的人', email='phonecall@test.local',
+            instrument=self.instrument.pk, grad_year=2023,
+        ))
         self.assertRedirects(r, self.review_url)
         reg = Registration.objects.get(email='phonecall@test.local')
         self.assertEqual(reg.name, '電話報到的人')
@@ -890,12 +891,9 @@ class RegistrationManageTest(TestCase):
         """姓名空白時應擋下，不建立紀錄"""
         from .models import Registration
         self.client.force_login(self.officer)
-        self.client.post(self.create_url, {
-            'name': '',
-            'instrument': self.instrument.pk,
-            'grad_year': 112,
-            'email': 'blank_name@test.local',
-        })
+        self.client.post(self.create_url, profile_post(
+            name='', email='blank_name@test.local', instrument=self.instrument.pk,
+        ))
         self.assertFalse(Registration.objects.filter(email='blank_name@test.local').exists())
 
     # ── 編輯申請紀錄 ────────────────────────────────────
@@ -908,12 +906,10 @@ class RegistrationManageTest(TestCase):
         )
         edit_url = reverse('accounts:registration_edit', args=[reg.pk])
         self.client.force_login(self.officer)
-        r = self.client.post(edit_url, {
-            'name': '修正後的姓名',
-            'instrument': self.other_instrument.pk,
-            'grad_year': 111,
-            'email': 'typo@test.local',
-        })
+        r = self.client.post(edit_url, profile_post(
+            name='修正後的姓名', email='typo@test.local',
+            instrument=self.other_instrument.pk, grad_year=2022,
+        ))
         self.assertRedirects(r, self.review_url)
         reg.refresh_from_db()
         self.assertEqual(reg.name, '修正後的姓名')
@@ -1005,11 +1001,9 @@ class MemberCreateTest(TestCase):
     def test_officer_post_creates_member(self):
         """幹部送出有效資料應成功建立帳號（角色固定 member），並導向通訊錄"""
         self.client.force_login(self.officer)
-        r = self.client.post(self.url, {
-            'name': '手動新增的人',
-            'email': 'manual@test.local',
-            'instrument': self.family.pk,
-        })
+        r = self.client.post(self.url, profile_post(
+            name='手動新增的人', email='manual@test.local', instrument=self.family.pk,
+        ))
         self.assertRedirects(r, reverse('accounts:member_directory'))
         user = User.objects.get(email='manual@test.local')
         self.assertEqual(user.name, '手動新增的人')
@@ -1020,29 +1014,27 @@ class MemberCreateTest(TestCase):
     def test_created_username_derived_from_email(self):
         """帳號應依 Email 前綴自動產生，不需要幹部手動輸入"""
         self.client.force_login(self.officer)
-        self.client.post(self.url, {
-            'name': '帳號產生測試',
-            'email': 'autoname@test.local',
-        })
+        self.client.post(self.url, profile_post(
+            name='帳號產生測試', email='autoname@test.local',
+        ))
         user = User.objects.get(email='autoname@test.local')
         self.assertEqual(user.username, 'autoname')
 
     def test_duplicate_email_does_not_create_record(self):
         """Email 已被使用時應擋下，不建立記錄"""
         self.client.force_login(self.officer)
-        self.client.post(self.url, {
-            'name': '重複 Email 測試',
-            'email': self.officer.email,  # 與既有幹部帳號的 email 重複
-        })
+        self.client.post(self.url, profile_post(
+            name='重複 Email 測試',
+            email=self.officer.email,  # 與既有幹部帳號的 email 重複
+        ))
         self.assertEqual(User.objects.filter(email=self.officer.email).count(), 1)
 
     def test_post_sends_temp_password_email(self):
         """建立帳號後應寄送一封含帳號密碼的信到指定 Email"""
         self.client.force_login(self.officer)
-        self.client.post(self.url, {
-            'name': '收信測試',
-            'email': 'member_mail_test@test.local',
-        })
+        self.client.post(self.url, profile_post(
+            name='收信測試', email='member_mail_test@test.local',
+        ))
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn('member_mail_test@test.local', mail.outbox[0].to)
 
@@ -1382,3 +1374,164 @@ class GuestManageTest(TestCase):
         self.client.force_login(self.officer)
         r = self.client.get(reverse('accounts:guest_list'))
         self.assertContains(r, '列表槍手')
+
+
+class SensitiveProfileFieldsTest(TestCase):
+    """#13-1 必填欄位大改：七個必填、三個選填、敏感個資遮蔽、核准時整批帶進帳號"""
+
+    def setUp(self):
+        from .models import InstrumentFamily, InstrumentType, Registration, SectionType
+        self.Registration = Registration
+        self.family = InstrumentFamily.objects.create(
+            name='木管族', category=InstrumentFamily.Category.WOODWIND
+        )
+        self.instrument = InstrumentType.objects.create(name='長笛', family=self.family)
+        self.section = SectionType.objects.create(name='第一部')
+        self.officer = User.objects.create_user(
+            username='sens_officer', email='sens_officer@test.local', password='x',
+            name='審核幹部', role=User.Role.OFFICER,
+        )
+        self.apply_url = reverse('accounts:registration_apply')
+
+    # ── 必填 ────────────────────────────────────────────
+
+    def test_each_required_field_blocks_submission_when_blank(self):
+        """七個必填欄位少任何一個都擋下，不建立紀錄"""
+        for field in ('name', 'email', 'birth_date', 'address', 'phone', 'line_id', 'national_id'):
+            with self.subTest(missing=field):
+                self.client.post(self.apply_url, profile_post(
+                    **{field: '', 'email': f'{field}@test.local'} if field != 'email' else {'email': ''}
+                ))
+                self.assertFalse(
+                    self.Registration.objects.filter(name='測試人員').exists(),
+                    f'{field} 空白時仍建立了紀錄',
+                )
+
+    def test_instrument_section_grad_year_are_optional(self):
+        """樂器／聲部／畢業年份留空仍可送出（#13-1 改為選填）"""
+        r = self.client.post(self.apply_url, profile_post(email='optional@test.local'))
+        self.assertEqual(r.status_code, 302)
+        reg = self.Registration.objects.get(email='optional@test.local')
+        self.assertIsNone(reg.instrument)
+        self.assertIsNone(reg.section)
+        self.assertIsNone(reg.grad_year)
+
+    def test_section_is_saved_when_provided(self):
+        """Registration 新增的聲部欄位有收到就要存下來"""
+        self.client.post(self.apply_url, profile_post(
+            email='sec@test.local', section=self.section.pk,
+        ))
+        self.assertEqual(
+            self.Registration.objects.get(email='sec@test.local').section, self.section
+        )
+
+    # ── 身分證字號 ──────────────────────────────────────
+
+    def test_invalid_national_id_blocked(self):
+        """身分證字號格式錯誤應擋下"""
+        for bad in ('123456789', 'A12345678', 'AB12345678', 'A12345678X'):
+            with self.subTest(national_id=bad):
+                self.client.post(self.apply_url, profile_post(
+                    email='bad@test.local', national_id=bad,
+                ))
+                self.assertFalse(self.Registration.objects.filter(email='bad@test.local').exists())
+
+    def test_national_id_stored_uppercase(self):
+        """小寫字首一律轉大寫，避免同號碼因大小寫被當成兩筆"""
+        self.client.post(self.apply_url, profile_post(
+            email='lower@test.local', national_id='a123456789',
+        ))
+        self.assertEqual(
+            self.Registration.objects.get(email='lower@test.local').national_id, 'A123456789'
+        )
+
+    def test_masked_national_id_shows_last_four_only(self):
+        """遮蔽值只留末四碼（列表／報表用）"""
+        user = User.objects.create_user(
+            username='masked', email='masked@test.local', password='x',
+            name='遮蔽測試', national_id='A123456789',
+        )
+        self.assertEqual(user.masked_national_id, '******6789')
+
+    def test_masked_national_id_empty_when_not_filled(self):
+        """沒填身分證字號時遮蔽值為空字串，不會變成一排星號"""
+        user = User.objects.create_user(
+            username='nomask', email='nomask@test.local', password='x', name='未填',
+        )
+        self.assertEqual(user.masked_national_id, '')
+
+    # ── 敏感欄位不外流 ──────────────────────────────────
+
+    def test_directory_does_not_expose_sensitive_fields(self):
+        """通訊錄不顯示身分證字號、住址、生日的完整值（決定一）"""
+        User.objects.create_user(
+            username='dir_member', email='dir_member@test.local', password='x',
+            name='通訊錄測試', national_id='A123456789',
+            address='新北市新莊區中正路 510 號', birth_date='2000-01-15',
+        )
+        self.client.force_login(self.officer)
+        r = self.client.get(reverse('accounts:member_directory'))
+        self.assertContains(r, '通訊錄測試')
+        self.assertNotContains(r, 'A123456789')
+        self.assertNotContains(r, '新北市新莊區中正路 510 號')
+
+    def test_directory_report_does_not_expose_sensitive_fields(self):
+        """名冊報表同樣不顯示敏感個資"""
+        User.objects.create_user(
+            username='rep_member', email='rep_member@test.local', password='x',
+            name='報表測試', national_id='A123456789',
+            address='新北市新莊區中正路 510 號',
+        )
+        self.client.force_login(self.officer)
+        r = self.client.get(reverse('accounts:member_directory_report'))
+        self.assertContains(r, '報表測試')
+        self.assertNotContains(r, 'A123456789')
+        self.assertNotContains(r, '新北市新莊區中正路 510 號')
+
+    # ── 核准建帳號時整批帶過去 ──────────────────────────
+
+    def test_approval_copies_sensitive_fields_to_user(self):
+        """核准申請建立帳號時，四個新欄位要一起帶進 User，不能漏"""
+        import datetime as dt
+        reg = self.Registration.objects.create(
+            name='核准測試', email='approve_copy@test.local',
+            instrument=self.instrument, section=self.section, grad_year=2020,
+            phone='0911222333', birth_date=dt.date(1999, 5, 20),
+            address='台北市中正區某路 1 號', national_id='B234567890', line_id='line_abc',
+        )
+        self.client.force_login(self.officer)
+        self.client.post(reverse('accounts:registration_review'), {
+            'reg_id': reg.pk, 'action': 'approve',
+        })
+        user = User.objects.get(email='approve_copy@test.local')
+        self.assertEqual(user.birth_date, dt.date(1999, 5, 20))
+        self.assertEqual(user.address, '台北市中正區某路 1 號')
+        self.assertEqual(user.national_id, 'B234567890')
+        self.assertEqual(user.line_id, 'line_abc')
+        self.assertEqual(user.section, self.section)
+        # 申請單記具體樂器、帳號存樂器族群
+        self.assertEqual(user.instrument, self.family)
+
+    def test_approval_works_when_instrument_is_blank(self):
+        """樂器改選填後，沒填樂器的申請也要能核准（不能在 reg.instrument.family 炸掉）"""
+        reg = self.Registration.objects.create(
+            name='沒填樂器', email='no_inst@test.local', phone='0911000000',
+        )
+        self.client.force_login(self.officer)
+        self.client.post(reverse('accounts:registration_review'), {
+            'reg_id': reg.pk, 'action': 'approve',
+        })
+        user = User.objects.get(email='no_inst@test.local')
+        self.assertIsNone(user.instrument)
+
+    # ── 既有帳號不被擋（決定三）──────────────────────────
+
+    def test_existing_member_without_new_fields_can_use_system(self):
+        """既有帳號這些欄位是空的，仍可正常登入使用（不做 middleware 強制補填）"""
+        member = User.objects.create_user(
+            username='legacy', email='legacy@test.local', password='testpass123',
+            name='既有團員', role=User.Role.MEMBER,
+        )
+        self.client.force_login(member)
+        self.assertEqual(self.client.get(reverse('public:index')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('accounts:profile')).status_code, 200)
