@@ -30,7 +30,7 @@ class ProfileForm(forms.ModelForm):
         model = User
         fields = [
             'name', 'email', 'phone', 'birth_date', 'address',
-            'line_id', 'national_id', 'instrument', 'section', 'grad_year',
+            'line_id', 'national_id', 'alumni_info', 'instrument', 'section', 'grad_year',
         ]
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
@@ -40,6 +40,7 @@ class ProfileForm(forms.ModelForm):
             'address': forms.TextInput(attrs={'class': 'form-control'}),
             'line_id': forms.TextInput(attrs={'class': 'form-control'}),
             'national_id': forms.TextInput(attrs={'class': 'form-control'}),
+            'alumni_info': forms.TextInput(attrs={'class': 'form-control'}),
             'instrument': forms.Select(attrs={'class': 'form-select'}),
             'section': forms.Select(attrs={'class': 'form-select'}),
             'grad_year': forms.NumberInput(attrs={'class': 'form-control'}),

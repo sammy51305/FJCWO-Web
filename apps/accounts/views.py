@@ -76,11 +76,11 @@ _REQUIRED_PROFILE_FIELDS = (
     ('address', '住址'),
     ('phone', '手機'),
     ('line_id', 'LINE ID'),
-    ('national_id', '身分證字號'),
+    ('national_id', '身分證字號／居留證號'),
 )
 
 
-def _parse_profile_fields(post):
+def _parse_profile_fields(post, *, require_national_id=True):
     """解析並驗證個人資料欄位，回傳 (data, errors)。
 
     data 只含純量欄位；樂器／聲部的 FK 查詢由各 view 自己做——申請單指向具體樂器
@@ -94,10 +94,17 @@ def _parse_profile_fields(post):
         'line_id': post.get('line_id', '').strip(),
         # 身分證字號一律轉大寫再存，避免同一個號碼因大小寫不同被當成兩筆
         'national_id': post.get('national_id', '').strip().upper(),
+        # 入學年／科系原文照存，不自動拆成 grad_year（見 models.Registration.alumni_info）
+        'alumni_info': post.get('alumni_info', '').strip(),
         'birth_date': None,
         'grad_year': None,
     }
-    errors = [f'請填寫{label}。' for field, label in _REQUIRED_PROFILE_FIELDS if not data[field]]
+    # 幹部端把證號排除在必填之外：團裡有既無身分證、也無居留證的境外團員，
+    # 公開申請頁擋的是隨手亂填、幹部端擋的是本來就不存在的東西，兩者需求不同。
+    required = _REQUIRED_PROFILE_FIELDS
+    if not require_national_id:
+        required = tuple(f for f in required if f[0] != 'national_id')
+    errors = [f'請填寫{label}。' for field, label in required if not data[field]]
 
     if data['national_id']:
         try:
@@ -125,7 +132,7 @@ def _parse_profile_fields(post):
 
 def _create_member_with_temp_password(
     *, name, email, instrument=None, section=None, grad_year=None, phone='',
-    birth_date=None, address='', national_id='', line_id='',
+    birth_date=None, address='', national_id='', line_id='', alumni_info='',
 ):
     """
     建立團員帳號（校友報到核准 / 幹部手動新增團員共用）：
@@ -149,6 +156,7 @@ def _create_member_with_temp_password(
         address=address,
         national_id=national_id,
         line_id=line_id,
+        alumni_info=alumni_info,
         must_change_password=True,
     )
     email_sent = send_temp_password_email(user, username, password)
@@ -313,7 +321,7 @@ def member_edit(request, pk):
     can_grant_admin = request.user.is_superuser or request.user.is_admin_role
 
     if request.method == 'POST':
-        data, errors = _parse_profile_fields(request.POST)
+        data, errors = _parse_profile_fields(request.POST, require_national_id=False)
         role = request.POST.get('role', member.role)
 
         if data['email'] and User.objects.exclude(pk=member.pk).filter(email=data['email']).exists():
@@ -353,6 +361,7 @@ def member_edit(request, pk):
         'address': member.address,
         'line_id': member.line_id,
         'national_id': member.national_id,
+        'alumni_info': member.alumni_info,
         'birth_date': member.birth_date.isoformat() if member.birth_date else '',
     }
 
@@ -360,6 +369,7 @@ def member_edit(request, pk):
         'action': 'edit',
         'member': member,
         'form_data': form_data,
+        'national_id_optional': True,   # 幹部端：既無身分證也無居留證的境外團員可留空
         'instruments': InstrumentFamily.objects.order_by('category', 'name'),
         'sections': SectionType.objects.all(),
         'role_choices': role_choices,
@@ -443,7 +453,7 @@ def member_create(request):
         return redirect('accounts:member_directory')
 
     if request.method == 'POST':
-        data, errors = _parse_profile_fields(request.POST)
+        data, errors = _parse_profile_fields(request.POST, require_national_id=False)
         if data['email'] and User.objects.filter(email=data['email']).exists():
             errors.append('此 Email 已被使用。')
 
@@ -471,6 +481,7 @@ def member_create(request):
     return render(request, 'accounts/member_form.html', {
         'action': 'create',
         'form_data': request.POST if request.method == 'POST' else {},
+        'national_id_optional': True,   # 幹部端：既無身分證也無居留證的境外團員可留空
         'instruments': InstrumentFamily.objects.order_by('category', 'name'),
         'sections': SectionType.objects.all(),
     })
@@ -681,6 +692,7 @@ def _registration_form_context(request, *, action=None, registration=None):
             'address': registration.address,
             'line_id': registration.line_id,
             'national_id': registration.national_id,
+            'alumni_info': registration.alumni_info,
             'birth_date': registration.birth_date.isoformat() if registration.birth_date else '',
             'grad_year': registration.grad_year or '',
             'instrument': str(registration.instrument_id or ''),
@@ -693,7 +705,10 @@ def _registration_form_context(request, *, action=None, registration=None):
         'action': action,
         'registration': registration,
         'form_data': form_data,
-        'instruments': InstrumentType.objects.select_related('family').all(),
+        # 公開申請頁維持必填，幹部端（補登／編輯）允許留空
+        'national_id_optional': action is not None,
+        # 樂器下拉列「族群」而非細項——表單填的是粗分類（見 models.Registration.instrument）
+        'instruments': InstrumentFamily.objects.order_by('category', 'name'),
         'sections': SectionType.objects.all(),
     }
 
@@ -758,13 +773,13 @@ def registration_review(request):
             else:
                 user, username, password, email_sent = _create_member_with_temp_password(
                     name=reg.name, email=reg.email,
-                    # 申請單記的是具體樂器 (InstrumentType)，帳號存的是樂器族群，故取 .family；
-                    # 樂器改選填後可能是 None，要先擋掉再取屬性
-                    instrument=reg.instrument.family if reg.instrument else None,
+                    # 申請單與帳號都存樂器族群 (InstrumentFamily)，同一層直接帶過去
+                    instrument=reg.instrument,
                     section=reg.section,
                     grad_year=reg.grad_year, phone=reg.phone,
                     birth_date=reg.birth_date, address=reg.address,
                     national_id=reg.national_id, line_id=reg.line_id,
+                    alumni_info=reg.alumni_info,
                 )
                 reg.status = Registration.Status.APPROVED
                 reg.reviewed_by = request.user
@@ -824,7 +839,7 @@ def registration_create(request):
         return redirect('accounts:registration_review')
 
     if request.method == 'POST':
-        data, errors = _parse_profile_fields(request.POST)
+        data, errors = _parse_profile_fields(request.POST, require_national_id=False)
         if errors:
             for e in errors:
                 messages.error(request, e)
@@ -850,7 +865,7 @@ def registration_edit(request, pk):
         return redirect('accounts:registration_review')
 
     if request.method == 'POST':
-        data, errors = _parse_profile_fields(request.POST)
+        data, errors = _parse_profile_fields(request.POST, require_national_id=False)
         if errors:
             for e in errors:
                 messages.error(request, e)

@@ -42,11 +42,27 @@
     <input type="text" name="line_id" class="form-control" value="{{ form_data.line_id|default:'' }}" required>
   </div>
   <div class="col-sm-6 mb-3">
-    <label class="form-label fw-semibold">身分證字號 <span class="text-danger">*</span></label>
+    <label class="form-label fw-semibold">
+      身分證字號／居留證號
+      {% if national_id_optional %}<span class="text-muted small">（選填）</span>
+      {% else %}<span class="text-danger">*</span>{% endif %}
+    </label>
     <input type="text" name="national_id" class="form-control" maxlength="10"
-           placeholder="例：A123456789" value="{{ form_data.national_id|default:'' }}" required>
-    <div class="form-text">用於每年向政府申報團員名單，不會顯示在通訊錄或報表上。</div>
+           placeholder="例：A123456789 或 AB12345678"
+           value="{{ form_data.national_id|default:'' }}"
+           {% if not national_id_optional %}required{% endif %}>
+    <div class="form-text">
+      用於每年向政府申報團員名單，不會顯示在通訊錄或報表上。
+      {% if national_id_optional %}兩者皆無者可留空。{% endif %}
+    </div>
   </div>
+</div>
+
+<div class="mb-3">
+  <label class="form-label fw-semibold">入學年／科系 <span class="text-muted small">（選填）</span></label>
+  <input type="text" name="alumni_info" class="form-control" maxlength="100"
+         placeholder="例：99級／織品系；非輔大校友請填「非輔大校友」"
+         value="{{ form_data.alumni_info|default:'' }}">
 </div>
 
 <hr class="my-4">

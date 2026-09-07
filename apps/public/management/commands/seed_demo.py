@@ -318,7 +318,8 @@ class Command(BaseCommand):
         for name, inst, grad, phone, email in spec:
             _, created = Registration.objects.get_or_create(
                 email=email,
-                defaults=dict(name=name, instrument=self.itype[inst], grad_year=grad,
+                # Registration.instrument 指向樂器族群（InstrumentFamily），取細項的 family
+                defaults=dict(name=name, instrument=self.itype[inst].family, grad_year=grad,
                               phone=phone, status=Registration.Status.PENDING),
             )
             n += created

@@ -4,15 +4,24 @@ from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
 
-# 身分證字號格式：1 個英文字母 + 9 位數字。
-# 刻意只驗格式、不驗檢查碼——居留證號等變體規則不同，驗太嚴會擋掉真實存在的號碼；
-# 這裡的目的是擋打錯，不是做身分驗證。
-_NATIONAL_ID_RE = re.compile(r'^[A-Za-z][0-9]{9}$')
+# 接受兩種證號（2026-09-07 放寬）：
+#   中華民國身分證：1 個英文字母 + 9 位數字，如 A123456789
+#   居留證統一證號：2 個英文字母 + 8 位數字，如 AB12345678
+# 團裡有港澳團員，在台長住者持居留證統一證號，只收身分證會把他們擋在申請頁外。
+# 刻意只驗格式、不驗檢查碼——目的是擋打錯，不是做身分驗證。
+# 兩者皆無的人由幹部在後台留空：公開申請頁維持必填、幹部端允許留空——
+# 公開頁擋的是隨手亂填，幹部端擋的是本來就不存在的東西。
+_NATIONAL_ID_RES = (
+    re.compile(r'^[A-Za-z][0-9]{9}$'),      # 身分證
+    re.compile(r'^[A-Za-z]{2}[0-9]{8}$'),   # 居留證
+)
 
 
 def validate_national_id(value):
-    if value and not _NATIONAL_ID_RE.match(value):
-        raise ValidationError('身分證字號格式錯誤（應為 1 個英文字母加 9 位數字）。')
+    if value and not any(pattern.match(value) for pattern in _NATIONAL_ID_RES):
+        raise ValidationError(
+            '證號格式錯誤（身分證為 1 個英文字母加 9 位數字，居留證為 2 個英文字母加 8 位數字）。'
+        )
 
 
 def mask_national_id(value):
@@ -98,11 +107,16 @@ class User(AbstractUser):
     birth_date = models.DateField('出生年月日', null=True, blank=True)
     address = models.CharField('住址', max_length=200, blank=True)
     national_id = models.CharField(
-        '身分證字號', max_length=10, blank=True,
+        '身分證字號／居留證號', max_length=10, blank=True,
         validators=[validate_national_id],
         help_text='用途為每年的政府名單申報（見 DESIGN 附錄五 #4）',
     )
     # 使用者自己填的 LINE 帳號，與下面的 line_user_id（LINE Bot 取得的內部 id）是兩回事，不可混用
+    # 入團申請表單的「輔大入學年 / 就讀科系」原文照存（如「99級/織品系」）。
+    # 刻意不自動拆成 grad_year——那一格塞了兩種資訊、實際填法有六七種變體
+    # （有人只填數字、有人填「非校友」、有人填兩個學位），自動解析必然產生錯資料，
+    # 而錯資料比沒資料難處理。grad_year（西元畢業年份）維持原語意、匯入時留空。
+    alumni_info = models.CharField('入學年／科系', max_length=100, blank=True)
     line_id = models.CharField('LINE ID', max_length=100, blank=True)
     line_user_id = models.CharField('LINE User ID', max_length=100, blank=True)
     must_change_password = models.BooleanField(
@@ -156,8 +170,13 @@ class Registration(models.Model):
     name = models.CharField('姓名', max_length=50)
     # 樂器、聲部、畢業年份自 2026-08-29 起改為選填（#13-1）；
     # 依樂器分組的頁面因此要能處理 null（通訊錄 §4.2 的「未分類」、演出分譜 §4.19 的守衛）。
+    # 2026-09-07 由 InstrumentType（細）改指 InstrumentFamily（族群，粗）：入團申請表單填的是
+    # 「豎笛」「薩克斯風」這種粗分類，對不到 Bb 豎笛／中音薩克斯風等細項，族群這層剛好一對一。
+    # 另兩個好處：與 User.instrument 同一層（核准建帳號時不必再 .family 轉換）、
+    # 分譜（Score.instrument）仍用 InstrumentType 保有細分——Bb 豎笛與低音豎笛是不同分譜，
+    # 那層不能合併。
     instrument = models.ForeignKey(
-        InstrumentType, on_delete=models.PROTECT,
+        InstrumentFamily, on_delete=models.PROTECT,
         null=True, blank=True, verbose_name='樂器'
     )
     section = models.ForeignKey(
@@ -171,8 +190,13 @@ class Registration(models.Model):
     birth_date = models.DateField('出生年月日', null=True, blank=True)
     address = models.CharField('住址', max_length=200, blank=True)
     national_id = models.CharField(
-        '身分證字號', max_length=10, blank=True, validators=[validate_national_id]
+        '身分證字號／居留證號', max_length=10, blank=True, validators=[validate_national_id]
     )
+    # 入團申請表單的「輔大入學年 / 就讀科系」原文照存（如「99級/織品系」）。
+    # 刻意不自動拆成 grad_year——那一格塞了兩種資訊、實際填法有六七種變體
+    # （有人只填數字、有人填「非校友」、有人填兩個學位），自動解析必然產生錯資料，
+    # 而錯資料比沒資料難處理。grad_year（西元畢業年份）維持原語意、匯入時留空。
+    alumni_info = models.CharField('入學年／科系', max_length=100, blank=True)
     line_id = models.CharField('LINE ID', max_length=100, blank=True)
     status = models.CharField('狀態', max_length=10, choices=Status, default=Status.PENDING)
     reviewed_by = models.ForeignKey(

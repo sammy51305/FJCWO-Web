@@ -650,7 +650,7 @@ class RegistrationTest(TestCase):
         from .models import Registration
         r = self.client.post(self.apply_url, profile_post(
             name='測試申請人', email='apply@test.local',
-            instrument=self.instrument.pk, grad_year=2021,
+            instrument=self.family.pk, grad_year=2021,
         ))
         self.assertRedirects(r, self.status_url, fetch_redirect_response=False)
         self.assertEqual(Registration.objects.count(), 1)
@@ -661,11 +661,11 @@ class RegistrationTest(TestCase):
         """同一 Email 已有待審核申請時，再次送出應被擋下"""
         from .models import Registration
         Registration.objects.create(
-            name='第一次', instrument=self.instrument,
+            name='第一次', instrument=self.family,
             grad_year=110, email='dup@test.local',
         )
         self.client.post(self.apply_url, profile_post(
-            name='第二次', email='dup@test.local', instrument=self.instrument.pk,
+            name='第二次', email='dup@test.local', instrument=self.family.pk,
         ))
         self.assertEqual(Registration.objects.count(), 1)
 
@@ -680,7 +680,7 @@ class RegistrationTest(TestCase):
         """以 Email 查詢可看到對應申請紀錄"""
         from .models import Registration
         Registration.objects.create(
-            name='查詢測試', instrument=self.instrument,
+            name='查詢測試', instrument=self.family,
             grad_year=110, email='status@test.local',
         )
         r = self.client.post(self.status_url, {'email': 'status@test.local'})
@@ -707,7 +707,7 @@ class RegistrationTest(TestCase):
         """幹部核准後狀態變 approved"""
         from .models import Registration
         reg = Registration.objects.create(
-            name='待核准', instrument=self.instrument,
+            name='待核准', instrument=self.family,
             grad_year=110, email='approve@test.local',
         )
         self.client.force_login(self.officer)
@@ -723,7 +723,7 @@ class RegistrationTest(TestCase):
         """
         from .models import Registration
         reg = Registration.objects.create(
-            name='新會員', instrument=self.instrument,
+            name='新會員', instrument=self.family,
             grad_year=115, email='newuser@test.local', phone='0911222333',
         )
         self.client.force_login(self.officer)
@@ -742,7 +742,7 @@ class RegistrationTest(TestCase):
         """核准申請後應寄送一封含帳號密碼的信到申請者 Email"""
         from .models import Registration
         reg = Registration.objects.create(
-            name='收信測試', instrument=self.instrument,
+            name='收信測試', instrument=self.family,
             grad_year=115, email='mail_test@test.local',
         )
         self.client.force_login(self.officer)
@@ -759,7 +759,7 @@ class RegistrationTest(TestCase):
             email='dupemail@test.local', role=User.Role.MEMBER,
         )
         reg = Registration.objects.create(
-            name='撞 Email 的人', instrument=self.instrument,
+            name='撞 Email 的人', instrument=self.family,
             grad_year=110, email='dupemail@test.local',
         )
         self.client.force_login(self.officer)
@@ -773,7 +773,7 @@ class RegistrationTest(TestCase):
         """幹部拒絕後狀態變 rejected"""
         from .models import Registration
         reg = Registration.objects.create(
-            name='待拒絕', instrument=self.instrument,
+            name='待拒絕', instrument=self.family,
             grad_year=110, email='reject@test.local',
         )
         self.client.force_login(self.officer)
@@ -790,7 +790,10 @@ class RegistrationManageTest(TestCase):
             name='長號族', category=InstrumentFamily.Category.BRASS
         )
         self.instrument = InstrumentType.objects.create(name='長號', family=self.family)
-        self.other_instrument = InstrumentType.objects.create(name='低音號', family=self.family)
+        # Registration.instrument 指向族群，故編輯測試要有第二個「族群」可切換
+        self.other_family = InstrumentFamily.objects.create(
+            name='低音號族', category=InstrumentFamily.Category.BRASS
+        )
         self.officer = User.objects.create_user(
             username='mng_officer', password='x', name='管理幹部',
             email='mng_officer@test.local', role=User.Role.OFFICER,
@@ -808,10 +811,10 @@ class RegistrationManageTest(TestCase):
         """依姓名關鍵字搜尋"""
         from .models import Registration
         Registration.objects.create(
-            name='搜尋目標', instrument=self.instrument, grad_year=110, email='findme@test.local',
+            name='搜尋目標', instrument=self.family, grad_year=110, email='findme@test.local',
         )
         Registration.objects.create(
-            name='不相關的人', instrument=self.instrument, grad_year=110, email='other@test.local',
+            name='不相關的人', instrument=self.family, grad_year=110, email='other@test.local',
         )
         self.client.force_login(self.officer)
         r = self.client.get(self.review_url, {'q': '搜尋目標'})
@@ -822,11 +825,11 @@ class RegistrationManageTest(TestCase):
         """依審核狀態篩選"""
         from .models import Registration
         Registration.objects.create(
-            name='待審的人', instrument=self.instrument, grad_year=110,
+            name='待審的人', instrument=self.family, grad_year=110,
             email='pending_person@test.local', status=Registration.Status.PENDING,
         )
         Registration.objects.create(
-            name='已拒絕的人', instrument=self.instrument, grad_year=110,
+            name='已拒絕的人', instrument=self.family, grad_year=110,
             email='rejected_person@test.local', status=Registration.Status.REJECTED,
         )
         self.client.force_login(self.officer)
@@ -840,7 +843,7 @@ class RegistrationManageTest(TestCase):
         """已拒絕的申請可重新開放為待審核"""
         from .models import Registration
         reg = Registration.objects.create(
-            name='想再給機會', instrument=self.instrument, grad_year=110,
+            name='想再給機會', instrument=self.family, grad_year=110,
             email='reopen@test.local', status=Registration.Status.REJECTED,
             reviewed_by=self.officer, reviewed_at=timezone.now(),
         )
@@ -854,7 +857,7 @@ class RegistrationManageTest(TestCase):
         """已核准的申請不能被重新開放（帳號已建立，狀態不該再變動）"""
         from .models import Registration
         reg = Registration.objects.create(
-            name='已核准的人', instrument=self.instrument, grad_year=110,
+            name='已核准的人', instrument=self.family, grad_year=110,
             email='already_approved@test.local', status=Registration.Status.APPROVED,
         )
         self.client.force_login(self.officer)
@@ -880,7 +883,7 @@ class RegistrationManageTest(TestCase):
         self.client.force_login(self.officer)
         r = self.client.post(self.create_url, profile_post(
             name='電話報到的人', email='phonecall@test.local',
-            instrument=self.instrument.pk, grad_year=2023,
+            instrument=self.family.pk, grad_year=2023,
         ))
         self.assertRedirects(r, self.review_url)
         reg = Registration.objects.get(email='phonecall@test.local')
@@ -892,7 +895,7 @@ class RegistrationManageTest(TestCase):
         from .models import Registration
         self.client.force_login(self.officer)
         self.client.post(self.create_url, profile_post(
-            name='', email='blank_name@test.local', instrument=self.instrument.pk,
+            name='', email='blank_name@test.local', instrument=self.family.pk,
         ))
         self.assertFalse(Registration.objects.filter(email='blank_name@test.local').exists())
 
@@ -902,18 +905,18 @@ class RegistrationManageTest(TestCase):
         """幹部編輯應更新資料，不影響審核狀態"""
         from .models import Registration
         reg = Registration.objects.create(
-            name='打錯字的人', instrument=self.instrument, grad_year=110, email='typo@test.local',
+            name='打錯字的人', instrument=self.family, grad_year=110, email='typo@test.local',
         )
         edit_url = reverse('accounts:registration_edit', args=[reg.pk])
         self.client.force_login(self.officer)
         r = self.client.post(edit_url, profile_post(
             name='修正後的姓名', email='typo@test.local',
-            instrument=self.other_instrument.pk, grad_year=2022,
+            instrument=self.other_family.pk, grad_year=2022,
         ))
         self.assertRedirects(r, self.review_url)
         reg.refresh_from_db()
         self.assertEqual(reg.name, '修正後的姓名')
-        self.assertEqual(reg.instrument, self.other_instrument)
+        self.assertEqual(reg.instrument, self.other_family)
         self.assertEqual(reg.status, Registration.Status.PENDING)
 
     def test_edit_invalid_pk_returns_404(self):
@@ -928,7 +931,7 @@ class RegistrationManageTest(TestCase):
         """待審核的申請紀錄可被刪除"""
         from .models import Registration
         reg = Registration.objects.create(
-            name='要刪除的人', instrument=self.instrument, grad_year=110, email='todelete@test.local',
+            name='要刪除的人', instrument=self.family, grad_year=110, email='todelete@test.local',
         )
         self.client.force_login(self.officer)
         self.client.post(reverse('accounts:registration_delete', args=[reg.pk]))
@@ -938,7 +941,7 @@ class RegistrationManageTest(TestCase):
         """已核准的申請紀錄不可刪除，需保留稽核軌跡"""
         from .models import Registration
         reg = Registration.objects.create(
-            name='已核准不可刪', instrument=self.instrument, grad_year=110,
+            name='已核准不可刪', instrument=self.family, grad_year=110,
             email='approved_keep@test.local', status=Registration.Status.APPROVED,
         )
         self.client.force_login(self.officer)
@@ -949,7 +952,7 @@ class RegistrationManageTest(TestCase):
         """一般團員無法刪除申請紀錄"""
         from .models import Registration
         reg = Registration.objects.create(
-            name='團員不能刪這個', instrument=self.instrument, grad_year=110, email='member_cant@test.local',
+            name='團員不能刪這個', instrument=self.family, grad_year=110, email='member_cant@test.local',
         )
         self.client.force_login(self.member)
         self.client.post(reverse('accounts:registration_delete', args=[reg.pk]))
@@ -1428,13 +1431,42 @@ class SensitiveProfileFieldsTest(TestCase):
     # ── 身分證字號 ──────────────────────────────────────
 
     def test_invalid_national_id_blocked(self):
-        """身分證字號格式錯誤應擋下"""
-        for bad in ('123456789', 'A12345678', 'AB12345678', 'A12345678X'):
+        """證號格式錯誤應擋下（每組用不同 email，免得一組漏接汙染後面幾組）"""
+        for i, bad in enumerate(('123456789', 'A12345678', 'A12345678X', 'ABC1234567')):
             with self.subTest(national_id=bad):
+                email = f'bad{i}@test.local'
                 self.client.post(self.apply_url, profile_post(
-                    email='bad@test.local', national_id=bad,
+                    email=email, national_id=bad,
                 ))
-                self.assertFalse(self.Registration.objects.filter(email='bad@test.local').exists())
+                self.assertFalse(self.Registration.objects.filter(email=email).exists())
+
+    def test_residence_permit_number_accepted(self):
+        """居留證統一證號（2 英文字母 + 8 數字）要收得下——團裡有港澳團員"""
+        self.client.post(self.apply_url, profile_post(
+            email='arc@test.local', national_id='AB12345678',
+        ))
+        self.assertEqual(
+            self.Registration.objects.get(email='arc@test.local').national_id, 'AB12345678'
+        )
+
+    def test_officer_may_leave_national_id_blank(self):
+        """幹部端可留空：既無身分證也無居留證的境外團員（公開申請頁仍必填）"""
+        self.client.force_login(self.officer)
+        self.client.post(reverse('accounts:registration_create'), profile_post(
+            email='no_id@test.local', national_id='',
+        ))
+        self.assertEqual(
+            self.Registration.objects.get(email='no_id@test.local').national_id, ''
+        )
+
+    def test_alumni_info_stored_as_typed(self):
+        """入學年／科系原文照存，不自動拆成畢業年份（格式太雜，自動解析會產生錯資料）"""
+        self.client.post(self.apply_url, profile_post(
+            email='alumni@test.local', alumni_info='99級/織品系',
+        ))
+        reg = self.Registration.objects.get(email='alumni@test.local')
+        self.assertEqual(reg.alumni_info, '99級/織品系')
+        self.assertIsNone(reg.grad_year)
 
     def test_national_id_stored_uppercase(self):
         """小寫字首一律轉大寫，避免同號碼因大小寫被當成兩筆"""
@@ -1495,7 +1527,7 @@ class SensitiveProfileFieldsTest(TestCase):
         import datetime as dt
         reg = self.Registration.objects.create(
             name='核准測試', email='approve_copy@test.local',
-            instrument=self.instrument, section=self.section, grad_year=2020,
+            instrument=self.family, section=self.section, grad_year=2020,
             phone='0911222333', birth_date=dt.date(1999, 5, 20),
             address='台北市中正區某路 1 號', national_id='B234567890', line_id='line_abc',
         )
@@ -1509,8 +1541,9 @@ class SensitiveProfileFieldsTest(TestCase):
         self.assertEqual(user.national_id, 'B234567890')
         self.assertEqual(user.line_id, 'line_abc')
         self.assertEqual(user.section, self.section)
-        # 申請單記具體樂器、帳號存樂器族群
+        # 申請單與帳號都存樂器族群，核准時直接帶過去
         self.assertEqual(user.instrument, self.family)
+        self.assertEqual(user.alumni_info, reg.alumni_info)
 
     def test_approval_works_when_instrument_is_blank(self):
         """樂器改選填後，沒填樂器的申請也要能核准（不能在 reg.instrument.family 炸掉）"""

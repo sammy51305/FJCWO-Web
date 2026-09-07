@@ -114,7 +114,8 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | phone | 手機（幹部限定可查）|
 | birth_date | 出生年月日 🔒 **敏感個資**|
 | address | 住址 🔒 **敏感個資**|
-| national_id | 身分證字號 🔒 **敏感個資**，用途為每年政府名單申報；列表／報表只顯示 `masked_national_id`（末四碼）|
+| national_id | 身分證字號／居留證號 🔒 **敏感個資**，用途為每年政府名單申報；接受身分證（1 字母+9 數字）與居留證（2 字母+8 數字）；列表／報表只顯示 `masked_national_id`（末四碼）|
+| alumni_info | 入學年／科系（入團申請表單原文照存，不自動拆成 grad_year）|
 | line_id | LINE ID（使用者自己填的帳號，**與下面的 line_user_id 是兩回事**）|
 | from_band | 來自樂團（僅槍手 `role=guest` 適用）|
 | line_user_id | LINE 帳號 ID（LINE Bot 取得的內部 id，用於推播；非使用者自填）|
@@ -410,14 +411,15 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | 欄位 | 說明 |
 |------|------|
 | name | 姓名 |
-| instrument | 樂器（關聯 InstrumentType）**選填**|
+| instrument | 樂器族群（關聯 **InstrumentFamily**，與 User.instrument 同一層）**選填**|
 | section | 聲部（關聯 SectionType）**選填**|
-| grad_year | 畢業年份 **選填**|
+| grad_year | 畢業年份（西元）**選填**——入團表單填的是民國入學年，改存 alumni_info，此欄留空 |
 | phone | 手機 |
 | email | Email |
 | birth_date | 出生年月日 🔒 |
 | address | 住址 🔒 |
-| national_id | 身分證字號 🔒 |
+| national_id | 身分證字號／居留證號 🔒 |
+| alumni_info | 入學年／科系（原文照存）|
 | line_id | LINE ID（使用者自填）|
 | status | 待審核 / 已核准 / 已拒絕 |
 | reviewed_by | 審核幹部（關聯 User）|
