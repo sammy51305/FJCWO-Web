@@ -28,7 +28,7 @@ from apps.accounts.models import (
 from apps.announcements.models import Announcement
 from apps.assets.models import AssetBorrow, BandProperty
 from apps.events.models import (
-    LeaveRequest, PerformanceEvent, PerformanceLeaveRequest, Rehearsal,
+    LeaveRequest, PerformanceAttendance, PerformanceEvent, Rehearsal,
     RehearsalAttendance, Setlist,
 )
 from apps.finance.models import FeePeriod, FinanceRecord, MembershipFee, PaymentConfig
@@ -297,15 +297,26 @@ class Command(BaseCommand):
             n += created
         self.log.append(f'排練請假新建 {n} 筆（3 筆待審）')
 
-        u = User.objects.filter(username='demo_flute2').first()
-        if u:
-            _, created = PerformanceLeaveRequest.objects.get_or_create(
+        # 演出出席意願三態（#13-6 取代原本的演出請假）：
+        # 造一位確認參加、一位不參加，其餘團員維持「待確認」——
+        # demo 時看得到統計頁三種狀態，也看得到「沒表態的人要被追」這個重點。
+        intents = [
+            ('demo_flute2', PerformanceAttendance.Intent.DECLINED,
+             '演出當天為家人婚禮，無法出席。'),
+            ('demo_trumpet1', PerformanceAttendance.Intent.CONFIRMED, ''),
+        ]
+        n = 0
+        for username, intent, reason in intents:
+            u = User.objects.filter(username=username).first()
+            if not u:
+                continue
+            _, created = PerformanceAttendance.objects.get_or_create(
                 member=u, event=event,
-                defaults=dict(reason='演出當天為家人婚禮，無法出席整場演出。',
-                              status='pending'),
+                defaults=dict(intent=intent, decline_reason=reason,
+                              intent_at=timezone.now()),
             )
-            self.log.append(f'演出請假待審 {"新建 1 筆" if created else "已存在"}'
-                            f'（註：附錄五 #13-6 已決議廢除此功能）')
+            n += created
+        self.log.append(f'演出出席意願新建 {n} 筆（其餘團員維持「待確認」）')
 
     def _seed_registrations(self):
         spec = [
