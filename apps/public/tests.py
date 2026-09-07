@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -456,3 +456,53 @@ class DemoCommandTest(TestCase):
 
         call_command('clear_demo', '--dry-run', verbosity=0)
         self.assertEqual(self._demo_user_qs().count(), before)
+
+
+class RobotsTxtTest(TestCase):
+    """robots.txt 與 X-Robots-Tag（測試站禁止收錄、正式站只擋內部路徑）"""
+
+    def setUp(self):
+        self.url = reverse('robots_txt')
+
+    def test_served_at_site_root_as_plain_text(self):
+        """robots.txt 掛在網站根目錄、回純文字（爬蟲只認這個位置）"""
+        r = self.client.get('/robots.txt')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r['Content-Type'], 'text/plain')
+
+    def test_unauthenticated_can_read(self):
+        """未登入可讀——爬蟲不會登入"""
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'User-agent: *')
+
+    @override_settings(ROBOTS_NOINDEX=True)
+    def test_noindex_mode_disallows_everything(self):
+        """測試站模式：整站禁止收錄"""
+        r = self.client.get(self.url)
+        self.assertContains(r, 'Disallow: /')
+        self.assertNotContains(r, 'Disallow: /admin/')
+
+    @override_settings(ROBOTS_NOINDEX=False)
+    def test_normal_mode_only_blocks_internal_paths(self):
+        """正式站模式：只擋內部路徑，公開頁仍可被收錄"""
+        r = self.client.get(self.url)
+        body = r.content.decode()
+        self.assertIn('Disallow: /accounts/', body)
+        self.assertIn('Disallow: /finance/', body)
+        # 沒有「整站禁止」那一行，否則公開頁也會被擋
+        self.assertNotIn('Disallow: /\n', body)
+
+    @override_settings(ROBOTS_NOINDEX=True)
+    def test_noindex_header_added_to_every_response(self):
+        """測試站模式：每個回應都帶 X-Robots-Tag（robots.txt 只擋爬取、不擋收錄）"""
+        for url in ('/', reverse('public:about'), self.url):
+            with self.subTest(url=url):
+                self.assertEqual(
+                    self.client.get(url)['X-Robots-Tag'], 'noindex, nofollow'
+                )
+
+    @override_settings(ROBOTS_NOINDEX=False)
+    def test_no_header_in_normal_mode(self):
+        """正式站模式不加 header，公開頁才收錄得到"""
+        self.assertNotIn('X-Robots-Tag', self.client.get('/'))

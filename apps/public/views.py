@@ -1,13 +1,40 @@
 from datetime import datetime
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from django.db.models.deletion import ProtectedError
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from .models import AboutSection, CharterContent, Venue, VenueTimeSlot
+
+# 正式站要擋的是「登入後才看得到的內部路徑」，不是整站——關於百韻、組織章程、
+# 公開公告這些本來就希望被搜尋得到。測試站則整站禁止（見 robots_txt）。
+_ROBOTS_DISALLOWED_PREFIXES = (
+    '/admin/',
+    '/accounts/',
+    '/events/',
+    '/scores/',
+    '/assets/',
+    '/finance/',
+)
+
+
+def robots_txt(request):
+    """`/robots.txt`。測試站整站禁止收錄，正式站只擋內部路徑。
+
+    以 `ROBOTS_NOINDEX` 環境變數切換，而不是寫死——同一份程式碼會同時部署到
+    測試站與正式站，寫死「全站禁止」會讓正式站的公開頁也搜尋不到。
+    """
+    if settings.ROBOTS_NOINDEX:
+        lines = ['User-agent: *', 'Disallow: /']
+    else:
+        lines = ['User-agent: *']
+        lines += [f'Disallow: {prefix}' for prefix in _ROBOTS_DISALLOWED_PREFIXES]
+    return HttpResponse('\n'.join(lines) + '\n', content_type='text/plain')
 
 _WEEKDAY_FIELDS = ['is_sun', 'is_mon', 'is_tue', 'is_wed', 'is_thu', 'is_fri', 'is_sat']
 

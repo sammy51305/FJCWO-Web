@@ -290,6 +290,7 @@ static 由 WhiteNoise 供應；強制 https 與 secure cookie 由環境變數開
 | `DJANGO_ALLOWED_HOSTS` | Render 給的網域，**不含** `https://`，例如 `fjcwo-web.onrender.com` |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | 同一個網域，**要含** `https://`，例如 `https://fjcwo-web.onrender.com` |
 | `DEMO_PASSWORD` | 自己想一組，**不可以用 `demo1234`**（那組寫在 DEMO.md 裡等於公開）|
+| `DJANGO_ROBOTS_NOINDEX` | `True` —— 測試站不讓搜尋引擎收錄（見下方 E-7）|
 
 > 網域要等第一次部署後才知道。可以先隨便填、部署完再回設定頁改成正確的，改完會自動重新部署。
 > 填錯的症狀很好認：`ALLOWED_HOSTS` 不對 → 整站 400；`CSRF_TRUSTED_ORIGINS` 不對 → 頁面打得開但一送出表單就 403。
@@ -315,6 +316,25 @@ python manage.py createsuperuser    # 自己的管理員帳號
    系統寄的臨時密碼信只會印在 Render 的 log 裡、收件人收不到。
    要測「校友報到 → 收密碼信」整條流程（#11）就得填真的 SMTP。
 
+#### E-7　不讓搜尋引擎收錄測試站
+
+測試站網址是公開的，可能被搜尋引擎爬到。設 `DJANGO_ROBOTS_NOINDEX=True` 會同時做兩件事：
+
+| 機制 | 擋什麼 |
+|------|--------|
+| `/robots.txt` 回 `Disallow: /` | 擋「爬取」——守規矩的爬蟲不會來抓內容 |
+| 每個回應加 `X-Robots-Tag: noindex, nofollow` | 擋「收錄」——即使有人把網址貼在別處被爬到，也不會進搜尋結果 |
+
+兩個都要，因為 **robots.txt 只擋爬取、不擋收錄**：搜尋引擎若從別的網頁發現這個網址，
+仍可能把網址本身列進結果（只是不顯示內容）。
+
+**正式站不要設這個變數**（或設 `False`）。那時 `/robots.txt` 會改成只擋內部路徑
+（`/admin/`、`/accounts/`、`/events/`、`/scores/`、`/assets/`、`/finance/`），
+公開頁（首頁、關於百韻、組織章程、公開公告）仍可被搜尋到——那對樂團是好事。
+
+> 這是刻意做成環境變數而非寫死：同一份程式碼會同時部署到測試站與正式站，
+> 寫死「全站禁止」會讓正式站的公開頁也搜尋不到。
+
 #### E-6　上線檢查
 
 - [ ] `DJANGO_DEBUG=False`（`render.yaml` 已寫死，確認沒被改掉）
@@ -322,6 +342,7 @@ python manage.py createsuperuser    # 自己的管理員帳號
 - [ ] 網站打得開、能登入、表單送得出去（送不出去看 `CSRF_TRUSTED_ORIGINS`）
 - [ ] 沒有匯入任何真實團員個資
 - [ ] 幹部拿到的網址是 `https://`（`DJANGO_SECURE_SSL_REDIRECT=True` 會自動轉）
+- [ ] `DJANGO_ROBOTS_NOINDEX=True`，且 `https://<網域>/robots.txt` 顯示 `Disallow: /`
 
 ---
 

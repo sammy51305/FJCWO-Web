@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-08-29（共 461 個測試）
+> 最後更新：2026-09-07（共 467 個測試）
 
 ---
 
@@ -90,9 +90,9 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **461 個測試**，分布在 8 個 app。
+共 **467 個測試**，分布在 8 個 app。
 
-> 最近一次全站測試：2026-08-29 執行 `python manage.py test`，**461/461 全數通過、無 regression**（System check 亦無問題）。
+> 最近一次全站測試：2026-09-07 執行 `python manage.py test`，**467/467 全數通過、無 regression**（System check 亦無問題）。
 
 ### `apps/accounts/tests.py`（112 個）
 
@@ -180,7 +180,7 @@ python manage.py test --noinput
 |-------|---------|
 | `PushLineMessageTest` | credentials 齊全時發出 API 請求、TOKEN 缺少時略過、GROUP_ID 缺少時略過、API 失敗時 silent fail |
 
-### `apps/public/tests.py`（39 個）
+### `apps/public/tests.py`（45 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -188,6 +188,7 @@ python manage.py test --noinput
 | `PublicPagesTest` | 首頁、關於百韻、章程三頁面的 200 回應與不需登入；章程有內容時顯示、無內容時顯示佔位文字 |
 | `CharterEditTest` | 存取控制（未登入/一般團員/幹部）、POST 儲存章程並 redirect、二次更新不新增資料 |
 | `VenueManageTest` | 存取控制（未登入/一般團員/幹部）、依名稱搜尋、依類別篩選、新增/編輯場地、新增/刪除時段、刪除限管理員、被演出活動引用（PROTECT）時即使管理員也無法刪除 |
+| `RobotsTxtTest` | robots.txt：掛在網站根目錄回純文字、未登入可讀、noindex 模式整站禁止、正常模式只擋內部路徑（公開頁不受影響）、noindex 模式每個回應帶 X-Robots-Tag、正常模式不帶 |
 | `DemoCommandTest` | demo 資料指令（`seed_demo` / `clear_demo`）：建立展示資料、重複執行不產生重複資料、`clear_demo` 完整清除且刪除順序能通過各處 PROTECT、只刪 demo 資料不動主檔與非 demo 帳號、`--dry-run` 不改動資料庫 |
 
 ---

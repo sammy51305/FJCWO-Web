@@ -2,7 +2,7 @@
 
 > 本文件說明 Phase 1 & 2 的設計決策、資料庫結構與各系統的運作邏輯。
 > 目標讀者：接手開發或複習程式碼的人（包含自己）。
-> 最後更新：2026-09-07（#10 選定路線 A、部署缺件補齊、補正式站免費方案分析；#13-1 敏感個資決定一／三定案，決定二與部署位置連動；#4 確認申報需身分證字號；#13-3 公告三欄已完成）
+> 最後更新：2026-09-07（測試站已上線 Render＋Neon，新增 robots.txt／noindex 開關；#10 選定路線 A；#13-1 敏感個資決定一／三定案，決定二與部署位置連動；#4 確認申報需身分證字號；#13-3 公告三欄已完成）
 
 ---
 
@@ -242,6 +242,28 @@ Django 官方建議用 `settings.AUTH_USER_MODEL`，因為 User model 可能被�
 `about` view 查詢 `AboutSection`（只取 `is_visible=True`）後回傳模板。
 `rules` view 查詢 `CharterContent.objects.first()` 取得章程內容，幹部可透過 `rules_edit` 更新。
 `index`（首頁）對已登入者另外查詢個人化資料，詳見 [4.11 首頁 Dashboard](#411-首頁-dashboardpublic)。
+
+---
+
+#### robots.txt 與搜尋引擎收錄（2026-09-07）
+
+`/robots.txt` 掛在**網站根目錄**（`config/urls.py`，不是 `apps/public/urls.py`）——爬蟲只認這個位置。
+
+行為由 `settings.ROBOTS_NOINDEX`（環境變數 `DJANGO_ROBOTS_NOINDEX`）切換：
+
+| 模式 | robots.txt | X-Robots-Tag header |
+|------|-----------|---------------------|
+| 測試站（`True`）| `Disallow: /` 整站禁止 | `noindex, nofollow` |
+| 正式站（`False`，預設）| 只擋 `/admin/`、`/accounts/`、`/events/`、`/scores/`、`/assets/`、`/finance/` | 不加 |
+
+**為什麼要兩個機制**：robots.txt 擋的是「爬取」，不是「收錄」——搜尋引擎若從別處取得網址，
+仍可能把網址列進結果。`X-Robots-Tag` 才是明確的不收錄指令，兩者搭配才擋得乾淨。
+
+**為什麼 header 用 middleware 而非在 template 加 meta**：header 涵蓋所有回應
+（含 Django Admin、檔案下載、JSON），不必逐一改樣板，日後新增頁面也不會漏。
+
+**為什麼做成開關而非寫死**：同一份程式碼會同時部署到測試站與正式站。寫死「全站禁止」
+會讓正式站的公開頁（關於百韻、組織章程、公開公告）也搜尋不到，那對樂團是損失。
 
 ---
 
