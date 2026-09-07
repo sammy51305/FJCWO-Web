@@ -3,3 +3,8 @@ psycopg2-binary>=2.9
 pillow>=10.0
 python-dotenv>=1.0
 qrcode[pil]>=8.0
+
+# ---- 部署用（本機開發不需要，但裝了也無妨）----
+gunicorn>=23.0        # WSGI 伺服器（Linux 專用；Windows 自架請改用 waitress）
+whitenoise>=6.7       # 由 Django 自己供應 static 檔案，PaaS 上沒有 Nginx
+dj-database-url>=2.2  # 解析託管資料庫給的 DATABASE_URL 連線字串

@@ -12,6 +12,7 @@
 4. [步驟三：建立 PostgreSQL 資料庫與使用者](#步驟三建立-postgresql-資料庫與使用者)
 5. [步驟四：建立 .env](#步驟四建立-env)
 6. [機密設定 SOP（LINE Bot / Email）](#機密設定-sopline-bot--email)
+   - [情境 E：Render ＋ Neon 免費測試站](#情境-erender--neon-免費測試站2026-09-07-建置)
 7. [步驟五：執行 Migration](#步驟五執行-migration)
 8. [步驟六：載入基礎資料（Fixtures）](#步驟六載入基礎資料fixtures)
 9. [步驟七：建立 Superuser](#步驟七建立-superuser)
@@ -214,7 +215,10 @@ DB_PORT=5432
 
 ### 情境 D：建立正式（production）環境
 
-正式環境與本機開發的差別，**主要是 `.env` 的填法**（伺服器本身怎麼架、用哪個平台，本專案目前尚無部署文件，之後真的上線再補）。
+正式環境與本機開發的差別，**主要是 `.env` 的填法**。
+
+> 想先用免費方案架一個給幹部試用的測試站 → 看 **情境 E**（Render ＋ Neon），那裡有完整步驟。
+> 本情境談的是正式環境該注意什麼，兩者的檢查清單可以互相對照。
 
 #### D-1　`.env` 與本機的差異
 
@@ -245,6 +249,79 @@ venv\Scripts\python.exe -c "from django.core.management.utils import get_random_
 - [ ] `python manage.py check --deploy` 無重大警告
 
 > 正式環境的所有機密值同樣只放正式機 `.env`，不進 git、不寫進 `_notes/`、不放 commit 訊息。
+
+### 情境 E：Render ＋ Neon 免費測試站（2026-09-07 建置）
+
+給幹部連線試用的測試站，全程免費、不需要信用卡。對應 DESIGN 附錄五 #10 的**路線 A**。
+路線 B（家機自架）要重灌機器，兩者不衝突——測試站先跑 A，之後要搬 B 再說。
+
+**分工**：Render 跑網站（免費方案）、Neon 存資料庫（永久免費）。
+不用 Render 自家的免費 Postgres——它 30 天會過期，資料整包不見。
+
+#### E-1　repo 裡已經準備好的東西
+
+| 檔案 | 作用 |
+|------|------|
+| `render.yaml` | Render Blueprint，一次建好服務與環境變數骨架 |
+| `build.sh` | 每次部署跑的建置指令（安裝套件 → collectstatic → migrate）|
+| `.python-version` | 釘住 Python 3.13.1（Django 6 需要 3.12 以上）|
+| `requirements.txt` | 已含 `gunicorn`／`whitenoise`／`dj-database-url` |
+
+`config/settings.py` 也已就緒：設了 `DATABASE_URL` 就走雲端資料庫、沒設就用本機的 `DB_*`；
+static 由 WhiteNoise 供應；強制 https 與 secure cookie 由環境變數開關（預設關，不影響本機與測試）。
+
+#### E-2　建立 Neon 資料庫（約 3 分鐘）
+
+1. 到 [neon.tech](https://neon.tech) 用 GitHub 帳號註冊。
+2. 建 project，region 選 **Singapore** 或 **Tokyo**（離台灣最近）。
+3. 複製 **Connection string**，長得像
+   `postgresql://user:pass@ep-xxx.ap-southeast-1.aws.neon.tech/neondb?sslmode=require`。
+   **這串是機密**，等一下貼進 Render，不要寫進 git 或任何文件。
+
+#### E-3　建立 Render 服務（約 5 分鐘）
+
+1. 到 [render.com](https://render.com) 用 GitHub 帳號註冊、授權讀取 `FJCWO-Web`。
+2. **New → Blueprint** → 選這個 repo，Render 會讀 `render.yaml` 自動帶出設定。
+3. 建立時它會問幾個 `sync: false` 的變數，照下表填：
+
+| 變數 | 填什麼 |
+|------|--------|
+| `DATABASE_URL` | E-2 複製的 Neon 連線字串 |
+| `DJANGO_ALLOWED_HOSTS` | Render 給的網域，**不含** `https://`，例如 `fjcwo-web.onrender.com` |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | 同一個網域，**要含** `https://`，例如 `https://fjcwo-web.onrender.com` |
+| `DEMO_PASSWORD` | 自己想一組，**不可以用 `demo1234`**（那組寫在 DEMO.md 裡等於公開）|
+
+> 網域要等第一次部署後才知道。可以先隨便填、部署完再回設定頁改成正確的，改完會自動重新部署。
+> 填錯的症狀很好認：`ALLOWED_HOSTS` 不對 → 整站 400；`CSRF_TRUSTED_ORIGINS` 不對 → 頁面打得開但一送出表單就 403。
+
+#### E-4　灌基礎資料與 demo 資料
+
+部署成功後，在 Render 該服務的 **Shell** 分頁執行（`migrate` 已由 `build.sh` 跑過）：
+
+```bash
+python manage.py loaddata fixtures/instruments.json fixtures/sections.json fixtures/venues.json
+python manage.py seed_demo          # demo 密碼自動吃 DEMO_PASSWORD 環境變數
+python manage.py createsuperuser    # 自己的管理員帳號
+```
+
+**測試站一律用假資料**，不要匯入真團員個資（DESIGN #10「共通事項」已定）。
+
+#### E-5　免費方案的三個限制（測試可接受，正式上線前要解）
+
+1. **會休眠**：15 分鐘沒人用就睡著，下一個請求要等約 1 分鐘喚醒。第一次點會覺得很慢，是正常的。
+2. **磁碟是暫時的**：**重新部署會清空上傳的檔案**——樂譜 PDF、分譜、收據會不見（QR 圖可重新產生）。
+   測試階段接受即可；要持久保存得接 Cloudflare R2 之類的物件儲存（見 DESIGN #10 路線 A 的「媒體」）。
+3. **Email 仍是 console backend**：沒填 `EMAIL_HOST_USER`／`PASSWORD` 的話，
+   系統寄的臨時密碼信只會印在 Render 的 log 裡、收件人收不到。
+   要測「校友報到 → 收密碼信」整條流程（#11）就得填真的 SMTP。
+
+#### E-6　上線檢查
+
+- [ ] `DJANGO_DEBUG=False`（`render.yaml` 已寫死，確認沒被改掉）
+- [ ] `DEMO_PASSWORD` 不是 `demo1234`
+- [ ] 網站打得開、能登入、表單送得出去（送不出去看 `CSRF_TRUSTED_ORIGINS`）
+- [ ] 沒有匯入任何真實團員個資
+- [ ] 幹部拿到的網址是 `https://`（`DJANGO_SECURE_SSL_REDIRECT=True` 會自動轉）
 
 ---
 

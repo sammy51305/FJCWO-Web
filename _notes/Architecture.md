@@ -42,7 +42,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | 通知 | LINE Bot | 台灣普及率高，團員不需安裝額外 APP |
 | 語音辨識 | OpenAI Whisper | 免費開源，可在自架伺服器執行 |
 | AI 摘要 | Claude API | 按使用量計費，金額極低 |
-| 部署 | Nginx + Gunicorn | 自架伺服器（汰換電腦 + 中華電信固定 IP）|
+| 部署 | Gunicorn（＋ WhiteNoise 供應 static）| 測試站：Render ＋ Neon（免費）；長期：自架伺服器 ＋ Nginx，見八、伺服器規劃 |
 
 ### 未來 SaaS 方向
 
@@ -703,10 +703,27 @@ FJCWO-Web/
 
 ## 八、伺服器規劃
 
+> **現況（2026-09-07）**：測試站先走雲端 PaaS——**Render（網站）＋ Neon（Postgres）**，
+> 全程免費、當天可上線，建置步驟見 [SETUP.md](SETUP.md) 情境 E、決策脈絡見 DESIGN 附錄五 #10。
+> 下表的自架規劃仍是長期方向（DESIGN #10 路線 B），測試站可長成正式站，兩者不衝突。
+
+### 測試站（目前採用）
+
+| 項目 | 說明 |
+|------|------|
+| 網站 | Render 免費方案（15 分鐘無人使用即休眠，喚醒約 1 分鐘）|
+| 資料庫 | Neon 永久免費 Postgres（不用 Render 自家免費 DB，30 天會過期）|
+| Web Server | Gunicorn（static 由 WhiteNoise 供應，PaaS 上沒有 Nginx）|
+| SSL | 由 Render 提供，Django 端以 `SECURE_PROXY_SSL_HEADER` 辨識 |
+| 資料 | 一律假資料（fixtures ＋ `seed_demo`），不放真團員個資 |
+| 限制 | 磁碟為暫時性，重新部署會清空上傳的樂譜 PDF／收據 |
+
+### 自架正式站（長期規劃）
+
 | 項目 | 說明 |
 |------|------|
 | 硬體 | 汰換電腦 + 擴充 HDD |
-| 網路 | 中華電信固定 IP |
+| 網路 | 中華電信固定 IP（或改用 Cloudflare Tunnel／Tailscale，免固定 IP）|
 | OS | Ubuntu Server 24.04 LTS |
 | Web Server | Nginx + Gunicorn |
 | 隔離 | Docker 將 NAS 與 Web Server 分開 |

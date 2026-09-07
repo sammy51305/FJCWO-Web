@@ -32,6 +32,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # WhiteNoise 讓 Django 自己供應 static 檔案（PaaS 上沒有 Nginx 可用）。
+    # 位置固定在 SecurityMiddleware 之後、其餘全部之前，這是官方要求的順序。
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -60,16 +63,30 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'fjcwo'),
-        'USER': os.environ.get('DB_USER', 'fjcwo_user'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
-        'HOST': os.environ.get('DB_HOST', 'localhost'),
-        'PORT': os.environ.get('DB_PORT', '5432'),
+# 資料庫有兩種設定來源，本機與雲端各走一邊：
+#   - 本機開發：沿用 DB_NAME / DB_USER / ... 五個變數（見 .env.example）
+#   - 雲端部署：託管 Postgres（Neon、Render 等）給的是一條 DATABASE_URL 連線字串，
+#     設了它就整包蓋過上面五個變數。conn_max_age 讓連線重用，免得每個 request 都重連；
+#     ssl_require 是託管資料庫的硬性要求。
+if os.environ.get('DATABASE_URL'):
+    import dj_database_url
+
+    DATABASES = {
+        'default': dj_database_url.parse(
+            os.environ['DATABASE_URL'], conn_max_age=600, ssl_require=True
+        )
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ.get('DB_NAME', 'fjcwo'),
+            'USER': os.environ.get('DB_USER', 'fjcwo_user'),
+            'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+            'HOST': os.environ.get('DB_HOST', 'localhost'),
+            'PORT': os.environ.get('DB_PORT', '5432'),
+        }
+    }
 
 AUTH_USER_MODEL = 'accounts.User'
 
@@ -88,6 +105,34 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+
+# WhiteNoise 的壓縮儲存：collectstatic 時一併產生 .gz/.br。
+# 刻意不用帶 manifest 的版本——manifest 會在檔名加雜湊，少一個檔案就整頁 500，
+# 對測試站來說風險大於快取效益。
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage'},
+}
+
+# 雲端部署時必填：POST 表單的來源網域白名單（含 scheme，如 https://fjcwo.onrender.com）。
+# 沒填會讓所有表單送出被擋成 CSRF 403。
+CSRF_TRUSTED_ORIGINS = [
+    o for o in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split() if o
+]
+
+# ── 正式／測試站的安全設定 ────────────────────────────────────────────
+# 全部以環境變數開關、預設關閉：本機開發與測試不受影響（測試時 Django 會把 DEBUG
+# 設為 False，若改用 `if not DEBUG` 判斷，SSL 轉址會讓整套測試被 301 打掛）。
+# 部署時在平台上把這兩個設為 True。
+if os.environ.get('DJANGO_SECURE_SSL_REDIRECT', 'False') == 'True':
+    SECURE_SSL_REDIRECT = True
+    # PaaS 在反向代理層終結 TLS，Django 自己看到的是 http，
+    # 靠這個 header 才知道使用者其實走的是 https，否則會無限轉址。
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+if os.environ.get('DJANGO_SECURE_COOKIES', 'False') == 'True':
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
