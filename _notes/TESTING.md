@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-09-07（共 467 個測試）
+> 最後更新：2026-09-07（共 482 個測試）
 
 ---
 
@@ -90,11 +90,11 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **467 個測試**，分布在 8 個 app。
+共 **482 個測試**，分布在 8 個 app。
 
-> 最近一次全站測試：2026-09-07 執行 `python manage.py test`，**467/467 全數通過、無 regression**（System check 亦無問題）。
+> 最近一次全站測試：2026-09-07 執行 `python manage.py test`，**482/482 全數通過、無 regression**（System check 亦無問題）。
 
-### `apps/accounts/tests.py`（112 個）
+### `apps/accounts/tests.py`（127 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -103,6 +103,7 @@ python manage.py test --noinput
 | `MemberDirectoryTest` | 通訊錄存取控制、電話/email 可見性（member vs officer）、admin 不顯示、依姓名搜尋、預設隱藏已退團、status=inactive 篩選、一般團員無法使用狀態篩選 |
 | `MemberEditTest` | 存取控制（未登入/他人/幹部）、GET 預先帶入既有資料、POST 更新成功、幹部可升級為幹部角色、一般幹部不可授予管理員角色（僅管理員本身可以）、404 |
 | `MemberStatusTest` | 幹部可退團／恢復、退團不刪除資料、不能將自己標記退團、一般團員無法操作他人狀態 |
+| `SensitiveProfileFieldsTest` | #13-1 必填欄位大改：七個必填各自空白都擋下、樂器／聲部／畢業年份選填可留空、Registration 存得下聲部、身分證字號格式驗證與轉大寫、遮蔽只留末四碼（未填時為空字串）、居留證號可收、幹部端證號可留空、入學年科系原文照存、通訊錄與名冊報表不外洩身分證字號與住址、核准時四個敏感欄位整批帶進帳號、沒填樂器也能核准、既有帳號欄位空著仍可正常使用 |
 | `MemberDeleteTest` | 無關聯紀錄的帳號可真正刪除、有關聯紀錄（如出席）的帳號擋下並保留、不能刪除自己、一般團員無法刪除他人、管理員／superuser 可強制刪除有關聯紀錄的帳號、PROTECT 關聯（如發過公告）即使管理員也無法繞過 |
 | `UserRoleTest` | `is_officer` 各角色行為（member/officer/admin/superuser）、`is_staff` 與 `is_superuser` 自動設定 |
 | `RegistrationTest` | 校友報到申請（公開存取、重複申請防止、送出建立紀錄）、狀態查詢（用 email 查）、幹部審核（核准/拒絕）、核准同步建立 User 帳號（含 must_change_password）、寄送臨時密碼信件、Email 重複時擋下不建立重複帳號 |

@@ -23,17 +23,6 @@
     <form method="post">
       {% csrf_token %}
 
-      <div class="row">
-        <div class="col-sm-6 mb-3">
-          <label class="form-label fw-semibold">姓名 <span class="text-danger">*</span></label>
-          <input type="text" name="name" class="form-control" value="{{ form_data.name }}" required>
-        </div>
-        <div class="col-sm-6 mb-3">
-          <label class="form-label fw-semibold">Email <span class="text-danger">*</span></label>
-          <input type="email" name="email" class="form-control" value="{{ form_data.email }}" required>
-        </div>
-      </div>
-
       {% if action == 'edit' %}
       <div class="mb-3">
         <label class="form-label fw-semibold">角色 <span class="text-danger">*</span></label>
@@ -45,41 +34,7 @@
       </div>
       {% endif %}
 
-      <div class="row">
-        <div class="col-sm-6 mb-3">
-          <label class="form-label fw-semibold">樂器族群 <span class="text-muted small">（選填）</span></label>
-          <select name="instrument" class="form-select">
-            <option value="">未指定</option>
-            {% for inst in instruments %}
-            <option value="{{ inst.pk }}" {% if form_data.instrument == inst.pk|stringformat:"s" %}selected{% endif %}>
-              {{ inst.name }}
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-sm-6 mb-3">
-          <label class="form-label fw-semibold">聲部 <span class="text-muted small">（選填）</span></label>
-          <select name="section" class="form-select">
-            <option value="">未指定</option>
-            {% for sec in sections %}
-            <option value="{{ sec.pk }}" {% if form_data.section == sec.pk|stringformat:"s" %}selected{% endif %}>
-              {{ sec.name }}
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="col-sm-6 mb-3">
-          <label class="form-label fw-semibold">畢業年份 <span class="text-muted small">（選填）</span></label>
-          <input type="number" name="grad_year" class="form-control" value="{{ form_data.grad_year }}">
-        </div>
-        <div class="col-sm-6 mb-4">
-          <label class="form-label fw-semibold">電話 <span class="text-muted small">（選填）</span></label>
-          <input type="text" name="phone" class="form-control" value="{{ form_data.phone }}">
-        </div>
-      </div>
+      {% include "accounts/_profile_fields.html" with instrument_label="樂器族群" %}
 
       <div class="d-flex gap-2">
         <button type="submit" class="btn btn-primary">{% if action == 'edit' %}儲存變更{% else %}新增團員{% endif %}</button>

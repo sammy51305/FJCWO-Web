@@ -12,10 +12,14 @@ from django.db.models.deletion import Collector, ProtectedError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.crypto import get_random_string
+from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .forms import BootstrapAuthenticationForm, ProfileForm
-from .models import InstrumentFamily, InstrumentType, Registration, SectionType, User
+from .models import (
+    InstrumentFamily, InstrumentType, Registration, SectionType, User,
+    validate_national_id,
+)
 from .utils import send_temp_password_email
 
 
@@ -60,7 +64,76 @@ def _user_has_related_records(user):
     return False
 
 
-def _create_member_with_temp_password(*, name, email, instrument=None, section=None, grad_year=None, phone=''):
+# 2026-08-29（#13-1）必填改為：姓名／Email／出生年月日／住址／手機／LINE ID／身分證字號；
+# 樂器、聲部、畢業年份改為選填。
+#
+# 這組規則有四個入口會用到（校友自行申請、幹部補登申請、幹部編輯申請、幹部建團員帳號），
+# 各寫一份必然會隨時間走鐘，故集中在這裡。**必填只在表單層把關，model 一律可空**——
+# 既有團員這些欄位是空的，model 設 null=False 會讓 migrate 直接卡在既有資料上（#13-1 決定三）。
+_REQUIRED_PROFILE_FIELDS = (
+    ('name', '姓名'),
+    ('email', 'Email'),
+    ('address', '住址'),
+    ('phone', '手機'),
+    ('line_id', 'LINE ID'),
+    ('national_id', '身分證字號／居留證號'),
+)
+
+
+def _parse_profile_fields(post, *, require_national_id=True):
+    """解析並驗證個人資料欄位，回傳 (data, errors)。
+
+    data 只含純量欄位；樂器／聲部的 FK 查詢由各 view 自己做——申請單指向具體樂器
+    (InstrumentType)、團員帳號指向樂器族群 (InstrumentFamily)，兩者不同層級。
+    """
+    data = {
+        'name': post.get('name', '').strip(),
+        'email': post.get('email', '').strip(),
+        'address': post.get('address', '').strip(),
+        'phone': post.get('phone', '').strip(),
+        'line_id': post.get('line_id', '').strip(),
+        # 身分證字號一律轉大寫再存，避免同一個號碼因大小寫不同被當成兩筆
+        'national_id': post.get('national_id', '').strip().upper(),
+        # 入學年／科系原文照存，不自動拆成 grad_year（見 models.Registration.alumni_info）
+        'alumni_info': post.get('alumni_info', '').strip(),
+        'birth_date': None,
+        'grad_year': None,
+    }
+    # 幹部端把證號排除在必填之外：團裡有既無身分證、也無居留證的境外團員，
+    # 公開申請頁擋的是隨手亂填、幹部端擋的是本來就不存在的東西，兩者需求不同。
+    required = _REQUIRED_PROFILE_FIELDS
+    if not require_national_id:
+        required = tuple(f for f in required if f[0] != 'national_id')
+    errors = [f'請填寫{label}。' for field, label in required if not data[field]]
+
+    if data['national_id']:
+        try:
+            validate_national_id(data['national_id'])
+        except ValidationError as exc:
+            errors.append(exc.messages[0])
+
+    birth_date = post.get('birth_date', '').strip()
+    if not birth_date:
+        errors.append('請填寫出生年月日。')
+    else:
+        data['birth_date'] = parse_date(birth_date)
+        if data['birth_date'] is None:
+            errors.append('出生年月日格式錯誤（請用 YYYY-MM-DD）。')
+
+    grad_year = post.get('grad_year', '').strip()
+    if grad_year:
+        if grad_year.isdigit():
+            data['grad_year'] = int(grad_year)
+        else:
+            errors.append('畢業年份格式錯誤。')
+
+    return data, errors
+
+
+def _create_member_with_temp_password(
+    *, name, email, instrument=None, section=None, grad_year=None, phone='',
+    birth_date=None, address='', national_id='', line_id='', alumni_info='',
+):
     """
     建立團員帳號（校友報到核准 / 幹部手動新增團員共用）：
     帳號用 email 前綴自動產生，密碼是隨機臨時密碼，並標記 must_change_password，
@@ -79,6 +152,11 @@ def _create_member_with_temp_password(*, name, email, instrument=None, section=N
         section=section,
         grad_year=grad_year,
         phone=phone,
+        birth_date=birth_date,
+        address=address,
+        national_id=national_id,
+        line_id=line_id,
+        alumni_info=alumni_info,
         must_change_password=True,
     )
     email_sent = send_temp_password_email(user, username, password)
@@ -243,44 +321,27 @@ def member_edit(request, pk):
     can_grant_admin = request.user.is_superuser or request.user.is_admin_role
 
     if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-        email = request.POST.get('email', '').strip()
+        data, errors = _parse_profile_fields(request.POST, require_national_id=False)
         role = request.POST.get('role', member.role)
-        instrument_id = request.POST.get('instrument', '')
-        section_id = request.POST.get('section', '')
-        grad_year = request.POST.get('grad_year', '').strip()
-        phone = request.POST.get('phone', '').strip()
 
-        errors = []
-        if not name:
-            errors.append('請填寫姓名。')
-        if not email:
-            errors.append('請填寫 Email。')
-        elif User.objects.exclude(pk=member.pk).filter(email=email).exists():
+        if data['email'] and User.objects.exclude(pk=member.pk).filter(email=data['email']).exists():
             errors.append('此 Email 已被使用。')
         if role not in User.Role.values:
             errors.append('請選擇角色。')
         elif role == User.Role.ADMIN and not can_grant_admin:
             errors.append('只有管理員可以將角色設為管理員。')
 
-        grad_year_value = None
-        if grad_year:
-            try:
-                grad_year_value = int(grad_year)
-            except ValueError:
-                errors.append('畢業年份格式錯誤。')
-
         if errors:
             for e in errors:
                 messages.error(request, e)
         else:
-            member.name = name
-            member.email = email
+            instrument_id = request.POST.get('instrument', '')
+            section_id = request.POST.get('section', '')
+            for field, value in data.items():
+                setattr(member, field, value)
             member.role = role
             member.instrument = InstrumentFamily.objects.filter(pk=instrument_id).first() if instrument_id else None
             member.section = SectionType.objects.filter(pk=section_id).first() if section_id else None
-            member.grad_year = grad_year_value
-            member.phone = phone
             member.save()
             messages.success(request, f'已更新 {member.name} 的資料。')
             return redirect('accounts:member_directory')
@@ -295,14 +356,20 @@ def member_edit(request, pk):
         'role': member.role,
         'instrument': str(member.instrument_id or ''),
         'section': str(member.section_id or ''),
-        'grad_year': member.grad_year,
+        'grad_year': member.grad_year or '',
         'phone': member.phone,
+        'address': member.address,
+        'line_id': member.line_id,
+        'national_id': member.national_id,
+        'alumni_info': member.alumni_info,
+        'birth_date': member.birth_date.isoformat() if member.birth_date else '',
     }
 
     return render(request, 'accounts/member_form.html', {
         'action': 'edit',
         'member': member,
         'form_data': form_data,
+        'national_id_optional': True,   # 幹部端：既無身分證也無居留證的境外團員可留空
         'instruments': InstrumentFamily.objects.order_by('category', 'name'),
         'sections': SectionType.objects.all(),
         'role_choices': role_choices,
@@ -386,44 +453,27 @@ def member_create(request):
         return redirect('accounts:member_directory')
 
     if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-        email = request.POST.get('email', '').strip()
-        instrument_id = request.POST.get('instrument', '')
-        section_id = request.POST.get('section', '')
-        grad_year = request.POST.get('grad_year', '').strip()
-        phone = request.POST.get('phone', '').strip()
-
-        errors = []
-        if not name:
-            errors.append('請填寫姓名。')
-        if not email:
-            errors.append('請填寫 Email。')
-        elif User.objects.filter(email=email).exists():
+        data, errors = _parse_profile_fields(request.POST, require_national_id=False)
+        if data['email'] and User.objects.filter(email=data['email']).exists():
             errors.append('此 Email 已被使用。')
-
-        grad_year_value = None
-        if grad_year:
-            try:
-                grad_year_value = int(grad_year)
-            except ValueError:
-                errors.append('畢業年份格式錯誤。')
 
         if errors:
             for e in errors:
                 messages.error(request, e)
         else:
-            instrument = InstrumentFamily.objects.filter(pk=instrument_id).first() if instrument_id else None
-            section = SectionType.objects.filter(pk=section_id).first() if section_id else None
+            instrument_id = request.POST.get('instrument', '')
+            section_id = request.POST.get('section', '')
             user, username, password, email_sent = _create_member_with_temp_password(
-                name=name, email=email, instrument=instrument,
-                section=section, grad_year=grad_year_value, phone=phone,
+                instrument=InstrumentFamily.objects.filter(pk=instrument_id).first() if instrument_id else None,
+                section=SectionType.objects.filter(pk=section_id).first() if section_id else None,
+                **data,
             )
             if email_sent:
-                messages.success(request, f'已新增團員 {name}，帳號密碼已寄送至 {email}。')
+                messages.success(request, f'已新增團員 {data["name"]}，帳號密碼已寄送至 {data["email"]}。')
             else:
                 messages.warning(
                     request,
-                    f'已新增團員 {name}，但寄信失敗，請自行告知本人：'
+                    f'已新增團員 {data["name"]}，但寄信失敗，請自行告知本人：'
                     f'帳號：{username}，臨時密碼：{password}。'
                 )
             return redirect('accounts:member_directory')
@@ -431,6 +481,7 @@ def member_create(request):
     return render(request, 'accounts/member_form.html', {
         'action': 'create',
         'form_data': request.POST if request.method == 'POST' else {},
+        'national_id_optional': True,   # 幹部端：既無身分證也無居留證的境外團員可留空
         'instruments': InstrumentFamily.objects.order_by('category', 'name'),
         'sections': SectionType.objects.all(),
     })
@@ -626,27 +677,49 @@ def guest_delete(request, pk):
     return redirect('accounts:guest_list')
 
 
+def _registration_form_context(request, *, action=None, registration=None):
+    """報到申請三個入口（公開申請／幹部補登／幹部編輯）共用的 template context。
+
+    表單重繪時以 POST 內容回填，避免使用者填了七個欄位卻因一個錯誤全部清空。
+    """
+    if request.method == 'POST':
+        form_data = request.POST
+    elif registration is not None:
+        form_data = {
+            'name': registration.name,
+            'email': registration.email,
+            'phone': registration.phone,
+            'address': registration.address,
+            'line_id': registration.line_id,
+            'national_id': registration.national_id,
+            'alumni_info': registration.alumni_info,
+            'birth_date': registration.birth_date.isoformat() if registration.birth_date else '',
+            'grad_year': registration.grad_year or '',
+            'instrument': str(registration.instrument_id or ''),
+            'section': str(registration.section_id or ''),
+        }
+    else:
+        form_data = {}
+
+    return {
+        'action': action,
+        'registration': registration,
+        'form_data': form_data,
+        # 公開申請頁維持必填，幹部端（補登／編輯）允許留空
+        'national_id_optional': action is not None,
+        # 樂器下拉列「族群」而非細項——表單填的是粗分類（見 models.Registration.instrument）
+        'instruments': InstrumentFamily.objects.order_by('category', 'name'),
+        'sections': SectionType.objects.all(),
+    }
+
+
 def registration_apply(request):
     """校友報到申請（公開，不需登入）"""
-    instruments = InstrumentType.objects.select_related('family').all()
-
     if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-        instrument_id = request.POST.get('instrument', '')
-        grad_year = request.POST.get('grad_year', '').strip()
-        phone = request.POST.get('phone', '').strip()
-        email = request.POST.get('email', '').strip()
-
-        errors = []
-        if not name:
-            errors.append('請填寫姓名。')
-        if not instrument_id:
-            errors.append('請選擇樂器。')
-        if not grad_year or not grad_year.isdigit():
-            errors.append('請填寫有效的畢業年份。')
-        if not email:
-            errors.append('請填寫 Email。')
-        elif Registration.objects.filter(email=email, status=Registration.Status.PENDING).exists():
+        data, errors = _parse_profile_fields(request.POST)
+        if data['email'] and Registration.objects.filter(
+            email=data['email'], status=Registration.Status.PENDING
+        ).exists():
             errors.append('此 Email 已有待審核的申請，請耐心等候。')
 
         if errors:
@@ -654,16 +727,14 @@ def registration_apply(request):
                 messages.error(request, e)
         else:
             Registration.objects.create(
-                name=name,
-                instrument_id=instrument_id,
-                grad_year=int(grad_year),
-                phone=phone,
-                email=email,
+                instrument_id=request.POST.get('instrument') or None,
+                section_id=request.POST.get('section') or None,
+                **data,
             )
             messages.success(request, '申請已送出，幹部審核後會與您聯絡。')
             return redirect('accounts:registration_status')
 
-    return render(request, 'accounts/registration_apply.html', {'instruments': instruments})
+    return render(request, 'accounts/registration_apply.html', _registration_form_context(request))
 
 
 def registration_status(request):
@@ -701,8 +772,14 @@ def registration_review(request):
                 messages.error(request, f'Email {reg.email} 已有帳號使用，請確認是否重複申請。')
             else:
                 user, username, password, email_sent = _create_member_with_temp_password(
-                    name=reg.name, email=reg.email, instrument=reg.instrument.family,
+                    name=reg.name, email=reg.email,
+                    # 申請單與帳號都存樂器族群 (InstrumentFamily)，同一層直接帶過去
+                    instrument=reg.instrument,
+                    section=reg.section,
                     grad_year=reg.grad_year, phone=reg.phone,
+                    birth_date=reg.birth_date, address=reg.address,
+                    national_id=reg.national_id, line_id=reg.line_id,
+                    alumni_info=reg.alumni_info,
                 )
                 reg.status = Registration.Status.APPROVED
                 reg.reviewed_by = request.user
@@ -761,40 +838,22 @@ def registration_create(request):
         messages.error(request, '權限不足。')
         return redirect('accounts:registration_review')
 
-    instruments = InstrumentType.objects.select_related('family').all()
-
     if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-        instrument_id = request.POST.get('instrument', '')
-        grad_year = request.POST.get('grad_year', '').strip()
-        phone = request.POST.get('phone', '').strip()
-        email = request.POST.get('email', '').strip()
-
-        errors = []
-        if not name:
-            errors.append('請填寫姓名。')
-        if not instrument_id:
-            errors.append('請選擇樂器。')
-        if not grad_year or not grad_year.isdigit():
-            errors.append('請填寫有效的畢業年份。')
-        if not email:
-            errors.append('請填寫 Email。')
-
+        data, errors = _parse_profile_fields(request.POST, require_national_id=False)
         if errors:
             for e in errors:
                 messages.error(request, e)
         else:
             Registration.objects.create(
-                name=name, instrument_id=instrument_id,
-                grad_year=int(grad_year), phone=phone, email=email,
+                instrument_id=request.POST.get('instrument') or None,
+                section_id=request.POST.get('section') or None,
+                **data,
             )
-            messages.success(request, f'已新增申請紀錄 {name}，狀態為待審核。')
+            messages.success(request, f'已新增申請紀錄 {data["name"]}，狀態為待審核。')
             return redirect('accounts:registration_review')
 
-    return render(request, 'accounts/registration_form.html', {
-        'action': 'create',
-        'instruments': instruments,
-    })
+    return render(request, 'accounts/registration_form.html',
+                  _registration_form_context(request, action='create'))
 
 
 @login_required
@@ -805,43 +864,22 @@ def registration_edit(request, pk):
         messages.error(request, '權限不足。')
         return redirect('accounts:registration_review')
 
-    instruments = InstrumentType.objects.select_related('family').all()
-
     if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-        instrument_id = request.POST.get('instrument', '')
-        grad_year = request.POST.get('grad_year', '').strip()
-        phone = request.POST.get('phone', '').strip()
-        email = request.POST.get('email', '').strip()
-
-        errors = []
-        if not name:
-            errors.append('請填寫姓名。')
-        if not instrument_id:
-            errors.append('請選擇樂器。')
-        if not grad_year or not grad_year.isdigit():
-            errors.append('請填寫有效的畢業年份。')
-        if not email:
-            errors.append('請填寫 Email。')
-
+        data, errors = _parse_profile_fields(request.POST, require_national_id=False)
         if errors:
             for e in errors:
                 messages.error(request, e)
         else:
-            reg.name = name
-            reg.instrument_id = instrument_id
-            reg.grad_year = int(grad_year)
-            reg.phone = phone
-            reg.email = email
+            for field, value in data.items():
+                setattr(reg, field, value)
+            reg.instrument_id = request.POST.get('instrument') or None
+            reg.section_id = request.POST.get('section') or None
             reg.save()
             messages.success(request, f'已更新 {reg.name} 的申請資料。')
             return redirect('accounts:registration_review')
 
-    return render(request, 'accounts/registration_form.html', {
-        'action': 'edit',
-        'registration': reg,
-        'instruments': instruments,
-    })
+    return render(request, 'accounts/registration_form.html',
+                  _registration_form_context(request, action='edit', registration=reg))
 
 
 @login_required

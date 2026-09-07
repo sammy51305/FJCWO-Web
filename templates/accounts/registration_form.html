@@ -17,43 +17,7 @@
     <form method="post">
       {% csrf_token %}
 
-      <div class="mb-3">
-        <label class="form-label fw-semibold">姓名 <span class="text-danger">*</span></label>
-        <input type="text" name="name" class="form-control"
-               value="{% if action == 'edit' %}{{ registration.name }}{% else %}{{ request.POST.name }}{% endif %}" required>
-      </div>
-
-      <div class="mb-3">
-        <label class="form-label fw-semibold">樂器 <span class="text-danger">*</span></label>
-        <select name="instrument" class="form-select" required>
-          <option value="">請選擇</option>
-          {% for inst in instruments %}
-          <option value="{{ inst.pk }}"
-            {% if action == 'edit' and registration.instrument_id == inst.pk %}selected
-            {% elif request.POST.instrument == inst.pk|stringformat:"s" %}selected{% endif %}>
-            {{ inst.get_category_display }} — {{ inst.name }}
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <div class="mb-3">
-        <label class="form-label fw-semibold">畢業年份 <span class="text-danger">*</span></label>
-        <input type="number" name="grad_year" class="form-control" min="1990" max="2099"
-               value="{% if action == 'edit' %}{{ registration.grad_year }}{% else %}{{ request.POST.grad_year }}{% endif %}" required>
-      </div>
-
-      <div class="mb-3">
-        <label class="form-label fw-semibold">Email <span class="text-danger">*</span></label>
-        <input type="email" name="email" class="form-control"
-               value="{% if action == 'edit' %}{{ registration.email }}{% else %}{{ request.POST.email }}{% endif %}" required>
-      </div>
-
-      <div class="mb-4">
-        <label class="form-label fw-semibold">電話 <span class="text-muted small">（選填）</span></label>
-        <input type="tel" name="phone" class="form-control"
-               value="{% if action == 'edit' %}{{ registration.phone }}{% else %}{{ request.POST.phone }}{% endif %}">
-      </div>
+      {% include "accounts/_profile_fields.html" %}
 
       {% if action == 'edit' %}
       <div class="alert alert-secondary small">

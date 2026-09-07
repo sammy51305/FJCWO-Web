@@ -108,14 +108,23 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | name | 真實姓名 |
 | email | Email（可空；槍手 `role=guest` 常無 email，存 NULL）|
 | role | 角色：`member`（團員）/ `officer`（幹部）/ `admin`（管理員）/ `guest`（槍手，純名冊、不可登入）|
-| instrument | 樂器族群（關聯 InstrumentFamily，團員層級識別用）|
-| section | 聲部（關聯 SectionType）|
-| grad_year | 畢業年份 |
-| phone | 電話（幹部限定可查）|
+| instrument | 樂器族群（關聯 InstrumentFamily，團員層級識別用）**選填**|
+| section | 聲部（關聯 SectionType）**選填**|
+| grad_year | 畢業年份 **選填**|
+| phone | 手機（幹部限定可查）|
+| birth_date | 出生年月日 🔒 **敏感個資**|
+| address | 住址 🔒 **敏感個資**|
+| national_id | 身分證字號／居留證號 🔒 **敏感個資**，用途為每年政府名單申報；接受身分證（1 字母+9 數字）與居留證（2 字母+8 數字）；列表／報表只顯示 `masked_national_id`（末四碼）|
+| alumni_info | 入學年／科系（入團申請表單原文照存，不自動拆成 grad_year）|
+| line_id | LINE ID（使用者自己填的帳號，**與下面的 line_user_id 是兩回事**）|
 | from_band | 來自樂團（僅槍手 `role=guest` 適用）|
-| line_user_id | LINE 帳號 ID（用於 Bot 推播）|
+| line_user_id | LINE 帳號 ID（LINE Bot 取得的內部 id，用於推播；非使用者自填）|
 | must_change_password | 是否需強制設定新密碼（幹部代建帳號的臨時密碼登入後會被要求）|
 | is_active | Django 內建欄位，借用來標記「是否在團」：`False` 代表已退團（軟刪除，保留所有歷史紀錄）|
+
+> 🔒 三個敏感欄位在 **model 層一律可空**（既有帳號沒有這些資料，設 `null=False` 會讓 migrate
+> 卡在既有資料上），**必填由表單層把關**；可見範圍為「幹部可見、預設遮蔽」。
+> 完整決策見 DESIGN 附錄五 #13-1「敏感個資的三個決定」。
 
 ### 組織章程（CharterContent）
 
@@ -402,13 +411,22 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | 欄位 | 說明 |
 |------|------|
 | name | 姓名 |
-| instrument | 樂器（關聯 InstrumentType）|
-| grad_year | 畢業年份 |
-| phone | 電話 |
+| instrument | 樂器族群（關聯 **InstrumentFamily**，與 User.instrument 同一層）**選填**|
+| section | 聲部（關聯 SectionType）**選填**|
+| grad_year | 畢業年份（西元）**選填**——入團表單填的是民國入學年，改存 alumni_info，此欄留空 |
+| phone | 手機 |
 | email | Email |
+| birth_date | 出生年月日 🔒 |
+| address | 住址 🔒 |
+| national_id | 身分證字號／居留證號 🔒 |
+| alumni_info | 入學年／科系（原文照存）|
+| line_id | LINE ID（使用者自填）|
 | status | 待審核 / 已核准 / 已拒絕 |
 | reviewed_by | 審核幹部（關聯 User）|
 | reviewed_at | 審核時間 |
+
+> 欄位與 `User` 對齊，核准時整批帶進新帳號（`_create_member_with_temp_password()`）。
+> 必填規則同上：model 可空、表單層把關。
 
 ### 請假申請（LeaveRequest）
 
