@@ -9,6 +9,9 @@
     {% if pending_count %}
     <span class="badge bg-warning text-dark fs-6">待審核 {{ pending_count }} 筆</span>
     {% endif %}
+    <a href="{% url 'accounts:registration_import' %}" class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-upload"></i> 批次匯入
+    </a>
     <a href="{% url 'accounts:registration_create' %}" class="btn btn-primary btn-sm">
       <i class="bi bi-plus-lg"></i> 新增申請紀錄
     </a>
@@ -38,10 +41,21 @@
 </form>
 
 {% if registrations %}
+{# 批次核准（#11）。表格每一列各有自己的核准／拒絕 form，巢狀 form 是無效 HTML，
+   所以這個 form 放在表格外，勾選框與送出鈕用 HTML5 的 form="" 屬性指回來。 #}
+<form method="post" id="bulk-form">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="bulk_approve">
+</form>
+
 <div class="table-responsive">
   <table class="table table-hover align-middle">
     <thead class="table-light">
       <tr>
+        <th style="width: 2.5rem;">
+          <input type="checkbox" class="form-check-input" id="check-all"
+                 title="全選本頁待審核項目">
+        </th>
         <th>姓名</th>
         <th>樂器</th>
         <th>屆別</th>
@@ -55,6 +69,12 @@
     <tbody>
       {% for reg in registrations %}
       <tr>
+        <td>
+          {% if reg.status == 'pending' %}
+          <input type="checkbox" class="form-check-input bulk-check"
+                 form="bulk-form" name="reg_ids" value="{{ reg.pk }}">
+          {% endif %}
+        </td>
         <td class="fw-semibold">{{ reg.name }}</td>
         <td>{{ reg.instrument.name }}</td>
         <td>{{ reg.grad_year }} 屆</td>
@@ -119,6 +139,16 @@
     </tbody>
   </table>
 </div>
+
+{% if pending_count %}
+<div class="d-flex align-items-center gap-2 mb-3">
+  <button type="submit" form="bulk-form" class="btn btn-success btn-sm"
+          onclick="return confirm('確定要核准勾選的申請嗎？系統會建立帳號並寄出臨時密碼信。');">
+    <i class="bi bi-check2-all"></i> 批次核准勾選的申請
+  </button>
+  <span class="text-muted small">會建立帳號並寄出臨時密碼信，無法復原。</span>
+</div>
+{% endif %}
 {% else %}
 <div class="alert alert-secondary">沒有符合條件的申請紀錄。</div>
 {% endif %}
@@ -142,4 +172,13 @@
   </ul>
 </nav>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // 全選只勾「待審核」那些——已核准／已拒絕的列本來就沒有 checkbox
+  document.getElementById('check-all')?.addEventListener('change', function () {
+    document.querySelectorAll('.bulk-check').forEach(cb => { cb.checked = this.checked; });
+  });
+</script>
 {% endblock %}

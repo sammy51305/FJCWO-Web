@@ -1664,3 +1664,224 @@ class FieldEncryptionTest(TestCase):
         r = self.client.get(reverse('accounts:member_directory'))
         self.assertNotContains(r, 'A123456789')
         self.assertNotContains(r, '新北市新莊區中正路 510 號')
+
+
+CSV_HEADER = (
+    '時間戳記,姓名,身分證字號 Ex.A123456789,出生年月日,聯絡電話（手機）,'
+    '電子信箱(Email),通訊地址,LINE ID 用於後續加入正式團員群組,'
+    '輔大入學年 / 就讀科系,報名第一聲部,報名第二聲部(選填)'
+)
+
+
+def csv_upload(*rows, header=CSV_HEADER):
+    """組一份 Google 表單樣式的 CSV 上傳檔（UTF-8 with BOM，與實際匯出一致）。"""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    content = (header + '\n' + '\n'.join(rows) + '\n').encode('utf-8-sig')
+    return SimpleUploadedFile('responses.csv', content, content_type='text/csv')
+
+
+class RegistrationImportTest(TestCase):
+    """#11 校友名單批次匯入：CSV 解析、錯誤列報告、冪等、批次核准"""
+
+    def setUp(self):
+        from .models import InstrumentFamily, Registration
+        self.Registration = Registration
+        self.family = InstrumentFamily.objects.create(
+            name='豎笛', category=InstrumentFamily.Category.WOODWIND
+        )
+        InstrumentFamily.objects.create(
+            name='打擊樂', category=InstrumentFamily.Category.PERCUSSION
+        )
+        self.officer = User.objects.create_user(
+            username='imp_officer', email='imp_officer@test.local', password='x',
+            name='匯入幹部', role=User.Role.OFFICER,
+        )
+        self.member = User.objects.create_user(
+            username='imp_member', email='imp_member@test.local', password='x',
+            name='一般團員', role=User.Role.MEMBER,
+        )
+        self.url = reverse('accounts:registration_import')
+        self.review_url = reverse('accounts:registration_review')
+
+    def _upload(self, *rows, **kwargs):
+        self.client.force_login(self.officer)
+        return self.client.post(self.url, {'csv_file': csv_upload(*rows, **kwargs)})
+
+    # ── 存取控制 ────────────────────────────────────────────
+
+    def test_requires_officer(self):
+        """一般團員不能匯入"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url, follow=True)
+        self.assertContains(r, '權限不足')
+
+    def test_unauthenticated_redirects(self):
+        """未登入導向登入頁"""
+        r = self.client.get(self.url)
+        self.assertRedirects(r, f'/accounts/login/?next={self.url}', fetch_redirect_response=False)
+
+    # ── 正常匯入 ────────────────────────────────────────────
+
+    def test_import_creates_pending_registration(self):
+        """匯入建立待審核的申請紀錄，不直接建帳號、不寄信"""
+        from django.core import mail
+        self._upload(
+            '2026-08-21,林某某,A228977070,1990/6/10,0912361857,'
+            'lin@test.local,新北市新莊區,line_lin,99級/織品系,豎笛,無'
+        )
+        reg = self.Registration.objects.get(email='lin@test.local')
+        self.assertEqual(reg.status, self.Registration.Status.PENDING)
+        self.assertEqual(reg.name, '林某某')
+        self.assertEqual(reg.national_id, 'A228977070')
+        self.assertEqual(reg.line_id, 'line_lin')
+        self.assertEqual(reg.alumni_info, '99級/織品系')
+        self.assertEqual(reg.instrument, self.family)
+        self.assertFalse(User.objects.filter(email='lin@test.local').exists())
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_instrument_alias_is_mapped(self):
+        """「打擊樂器」要對到系統的「打擊樂」族群"""
+        self._upload(
+            '2026-08-21,鼓手,A123456789,1990/1/1,0900000000,'
+            'drum@test.local,台北市,line_d,100級,打擊樂器,無'
+        )
+        self.assertEqual(
+            self.Registration.objects.get(email='drum@test.local').instrument.name, '打擊樂'
+        )
+
+    def test_unknown_instrument_left_blank_and_reported(self):
+        """對不上的樂器留空並列在備註，不猜也不擋匯入（樂器是選填）"""
+        r = self._upload(
+            '2026-08-21,某人,A123456789,1990/1/1,0900000000,'
+            'unknown@test.local,台北市,line_u,100級,月琴,無'
+        )
+        self.assertIsNone(self.Registration.objects.get(email='unknown@test.local').instrument)
+        self.assertContains(r, '對不上系統樂器族群')
+
+    def test_date_formats_parsed(self):
+        """表單的日期格式不統一，斜線與橫線都要吃得下"""
+        import datetime as dt
+        self._upload(
+            '2026-08-21,甲,A123456789,1990/6/10,0900000001,a@test.local,北市,l1,99級,豎笛,無',
+            '2026-08-21,乙,B123456789,1991-07-11,0900000002,b@test.local,北市,l2,99級,豎笛,無',
+        )
+        self.assertEqual(self.Registration.objects.get(email='a@test.local').birth_date,
+                         dt.date(1990, 6, 10))
+        self.assertEqual(self.Registration.objects.get(email='b@test.local').birth_date,
+                         dt.date(1991, 7, 11))
+
+    # ── 錯誤列一律報告、不靜默略過 ──────────────────────────
+
+    def test_row_without_email_is_skipped_with_reason(self):
+        """缺 Email 的列略過並說明原因——這是實際回覆裡最常見的缺漏"""
+        r = self._upload(
+            '2026-08-21,沒信箱的人,A123456789,1990/1/1,0900000000,,台北市,line_x,99級,豎笛,無'
+        )
+        self.assertEqual(self.Registration.objects.count(), 0)
+        self.assertContains(r, '缺 Email')
+        self.assertContains(r, '沒信箱的人')
+
+    def test_duplicate_email_within_file_skipped(self):
+        """同一份檔案裡 Email 重複，只收第一筆"""
+        r = self._upload(
+            '2026-08-21,第一次,A123456789,1990/1/1,0900000001,same@test.local,北市,l1,99級,豎笛,無',
+            '2026-08-22,第二次,A123456789,1990/1/1,0900000002,same@test.local,北市,l2,99級,豎笛,無',
+        )
+        self.assertEqual(self.Registration.objects.filter(email='same@test.local').count(), 1)
+        self.assertContains(r, 'Email 重複')
+
+    def test_email_with_existing_account_skipped(self):
+        """已有系統帳號的 Email 不重複建申請"""
+        r = self._upload(
+            '2026-08-21,已有帳號,A123456789,1990/1/1,0900000000,'
+            'imp_member@test.local,北市,l1,99級,豎笛,無'
+        )
+        self.assertEqual(self.Registration.objects.count(), 0)
+        self.assertContains(r, '已有系統帳號')
+
+    def test_reimporting_same_file_is_idempotent(self):
+        """重複匯入同一份檔案不會產生重複資料——幹部修好錯誤列後可整份重傳"""
+        row = ('2026-08-21,冪等測試,A123456789,1990/1/1,0900000000,'
+               'idem@test.local,北市,l1,99級,豎笛,無')
+        self._upload(row)
+        r = self._upload(row)
+        self.assertEqual(self.Registration.objects.filter(email='idem@test.local').count(), 1)
+        self.assertContains(r, '已有申請紀錄')
+
+    def test_missing_required_column_rejects_whole_file(self):
+        """缺必要欄位是整份檔案的問題，不是單列問題"""
+        r = self._upload('2026-08-21,某人', header='時間戳記,姓名')
+        self.assertContains(r, '找不到「電子信箱」欄位')
+        self.assertEqual(self.Registration.objects.count(), 0)
+
+    def test_blank_lines_ignored(self):
+        """空白列略過，不當成錯誤"""
+        r = self._upload(
+            '2026-08-21,有資料,A123456789,1990/1/1,0900000000,ok@test.local,北市,l1,99級,豎笛,無',
+            ',,,,,,,,,,',
+        )
+        self.assertEqual(self.Registration.objects.count(), 1)
+        self.assertNotContains(r, '缺姓名')
+
+    # ── 批次核准 ────────────────────────────────────────────
+
+    def _make_pending(self, email, name='待核准'):
+        return self.Registration.objects.create(
+            name=name, email=email, phone='0900000000',
+            instrument=self.family, national_id='A123456789',
+        )
+
+    def test_bulk_approve_creates_accounts_and_sends_mail(self):
+        """批次核准建立帳號並寄出臨時密碼信"""
+        from django.core import mail
+        a = self._make_pending('bulk_a@test.local', '甲')
+        b = self._make_pending('bulk_b@test.local', '乙')
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {
+            'action': 'bulk_approve', 'reg_ids': [a.pk, b.pk],
+        })
+        self.assertTrue(User.objects.filter(email='bulk_a@test.local').exists())
+        self.assertTrue(User.objects.filter(email='bulk_b@test.local').exists())
+        a.refresh_from_db()
+        self.assertEqual(a.status, self.Registration.Status.APPROVED)
+        self.assertEqual(a.reviewed_by, self.officer)
+        self.assertEqual(len(mail.outbox), 2)
+
+    def test_bulk_approve_copies_sensitive_fields(self):
+        """批次核准與單筆核准走同一套邏輯，敏感欄位一樣要帶進帳號"""
+        reg = self._make_pending('bulk_copy@test.local')
+        reg.address = '新北市新莊區中正路 510 號'
+        reg.line_id = 'copy_line'
+        reg.save()
+        self.client.force_login(self.officer)
+        self.client.post(self.review_url, {'action': 'bulk_approve', 'reg_ids': [reg.pk]})
+        user = User.objects.get(email='bulk_copy@test.local')
+        self.assertEqual(user.national_id, 'A123456789')
+        self.assertEqual(user.address, '新北市新莊區中正路 510 號')
+        self.assertEqual(user.line_id, 'copy_line')
+
+    def test_bulk_approve_one_failure_does_not_block_others(self):
+        """一筆失敗不影響其他筆——300 筆裡有幾筆撞號是常態，整批 rollback 幫不上忙"""
+        ok = self._make_pending('bulk_ok@test.local', '正常')
+        clash = self._make_pending('imp_member@test.local', '撞號')
+        self.client.force_login(self.officer)
+        r = self.client.post(self.review_url, {
+            'action': 'bulk_approve', 'reg_ids': [ok.pk, clash.pk],
+        }, follow=True)
+        self.assertTrue(User.objects.filter(email='bulk_ok@test.local').exists())
+        clash.refresh_from_db()
+        self.assertEqual(clash.status, self.Registration.Status.PENDING)
+        self.assertContains(r, '撞號')
+
+    def test_bulk_approve_without_selection_warns(self):
+        """沒勾任何一筆就送出要給提示，不要靜默無事發生"""
+        self.client.force_login(self.officer)
+        r = self.client.post(self.review_url, {'action': 'bulk_approve'}, follow=True)
+        self.assertContains(r, '請先勾選')
+
+    def test_bulk_approve_requires_officer(self):
+        """一般團員不能批次核准"""
+        reg = self._make_pending('bulk_perm@test.local')
+        self.client.force_login(self.member)
+        self.client.post(self.review_url, {'action': 'bulk_approve', 'reg_ids': [reg.pk]})
+        self.assertFalse(User.objects.filter(email='bulk_perm@test.local').exists())

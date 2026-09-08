@@ -24,6 +24,7 @@ urlpatterns = [
     path('register/', views.registration_apply, name='registration_apply'),
     path('register/status/', views.registration_status, name='registration_status'),
     path('register/review/', views.registration_review, name='registration_review'),
+    path('register/import/', views.registration_import, name='registration_import'),
     path('register/create/', views.registration_create, name='registration_create'),
     path('register/<int:pk>/edit/', views.registration_edit, name='registration_edit'),
     path('register/<int:pk>/delete/', views.registration_delete, name='registration_delete'),
