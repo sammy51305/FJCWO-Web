@@ -1568,3 +1568,99 @@ class SensitiveProfileFieldsTest(TestCase):
         self.client.force_login(member)
         self.assertEqual(self.client.get(reverse('public:index')).status_code, 200)
         self.assertEqual(self.client.get(reverse('accounts:profile')).status_code, 200)
+
+
+class FieldEncryptionTest(TestCase):
+    """#13-1 決定二：敏感個資在資料庫裡是密文"""
+
+    SENSITIVE = ('national_id', 'address', 'birth_date')
+
+    def setUp(self):
+        import datetime as dt
+        self.raw = {
+            'national_id': 'A123456789',
+            'address': '新北市新莊區中正路 510 號',
+            'birth_date': dt.date(1999, 5, 20),
+        }
+        self.user = User.objects.create_user(
+            username='enc_user', email='enc_user@test.local', password='x',
+            name='加密測試', **self.raw,
+        )
+
+    def _raw_column(self, column, table='accounts_user', pk=None):
+        """繞過 ORM 直接讀欄位原始內容——ORM 會自動解密，看不出有沒有真的加密。"""
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'SELECT {column} FROM {table} WHERE id = %s', [pk or self.user.pk]
+            )
+            return cursor.fetchone()[0]
+
+    def test_orm_returns_plaintext(self):
+        """透過 ORM 讀出來是明文，view 與 template 不需要知道有加密這回事"""
+        user = User.objects.get(pk=self.user.pk)
+        for field, expected in self.raw.items():
+            with self.subTest(field=field):
+                self.assertEqual(getattr(user, field), expected)
+
+    def test_database_stores_ciphertext(self):
+        """資料庫裡存的不是明文——這是加密的重點，DB 或備份外流時才擋得住"""
+        for field in self.SENSITIVE:
+            with self.subTest(field=field):
+                stored = self._raw_column(field)
+                self.assertNotIn(str(self.raw[field]), stored)
+                self.assertTrue(stored.startswith('gAAAAA'))   # Fernet 的密文前綴
+
+    def test_blank_values_stay_blank(self):
+        """沒填的欄位維持空字串，不加密——否則「沒填」在 DB 裡會看起來像有資料"""
+        User.objects.create_user(
+            username='enc_blank', email='enc_blank@test.local', password='x', name='沒填',
+        )
+        blank = User.objects.get(username='enc_blank')
+        self.assertEqual(blank.national_id, '')
+        self.assertEqual(blank.address, '')
+        self.assertIsNone(blank.birth_date)
+
+    def test_birth_date_round_trips_as_date_object(self):
+        """生日存密文，但 Python 端仍拿得到 date 物件（不是字串）"""
+        import datetime as dt
+        user = User.objects.get(pk=self.user.pk)
+        self.assertIsInstance(user.birth_date, dt.date)
+        self.assertEqual(user.birth_date.year, 1999)
+
+    def test_registration_fields_encrypted_too(self):
+        """申請單的同三個欄位一樣加密——資料在核准前就已經存在 DB 裡了"""
+        from .models import Registration
+        reg = Registration.objects.create(
+            name='申請人', email='enc_reg@test.local',
+            national_id='B234567890', address='台北市中正區某路 1 號',
+            birth_date='2000-03-15',
+        )
+        stored = self._raw_column('national_id', 'accounts_registration', reg.pk)
+        self.assertNotIn('B234567890', stored)
+        self.assertEqual(Registration.objects.get(pk=reg.pk).national_id, 'B234567890')
+
+    def test_unreadable_value_does_not_crash(self):
+        """換過金鑰或手動改過 DB 的壞資料回傳空字串，不讓整個列表 500"""
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'UPDATE accounts_user SET national_id = %s WHERE id = %s',
+                ['這不是密文', self.user.pk],
+            )
+        self.assertEqual(User.objects.get(pk=self.user.pk).national_id, '')
+
+    def test_masking_still_works_on_encrypted_field(self):
+        """遮蔽是在解密後的值上做的，加密不影響末四碼顯示"""
+        self.assertEqual(User.objects.get(pk=self.user.pk).masked_national_id, '******6789')
+
+    def test_directory_still_hides_sensitive_data(self):
+        """加密後通訊錄依然不外洩明文（可見範圍與加密是兩層，互補不重疊）"""
+        officer = User.objects.create_user(
+            username='enc_officer', email='enc_officer@test.local', password='x',
+            name='幹部', role=User.Role.OFFICER,
+        )
+        self.client.force_login(officer)
+        r = self.client.get(reverse('accounts:member_directory'))
+        self.assertNotContains(r, 'A123456789')
+        self.assertNotContains(r, '新北市新莊區中正路 510 號')

@@ -4,6 +4,8 @@ from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from .fields import EncryptedDateField, EncryptedTextField
+
 # 接受兩種證號（2026-09-07 放寬）：
 #   中華民國身分證：1 個英文字母 + 9 位數字，如 A123456789
 #   居留證統一證號：2 個英文字母 + 8 位數字，如 AB12345678
@@ -104,10 +106,12 @@ class User(AbstractUser):
     phone = models.CharField('手機', max_length=20, blank=True)
     from_band = models.CharField('來自樂團', max_length=100, blank=True, help_text='僅槍手（role=guest）適用')
     # ── 以下三個是敏感個資，列表與報表不顯示完整值（見 DESIGN 附錄五 #13-1 決定一）──
-    birth_date = models.DateField('出生年月日', null=True, blank=True)
-    address = models.CharField('住址', max_length=200, blank=True)
-    national_id = models.CharField(
-        '身分證字號／居留證號', max_length=10, blank=True,
+    # 這三個欄位在 DB 裡是密文（#13-1 決定二）。view / template / form 用起來與一般欄位無異，
+    # 加解密只發生在 DB 邊界，見 apps/accounts/fields.py。
+    birth_date = EncryptedDateField('出生年月日', null=True, blank=True)
+    address = EncryptedTextField('住址', form_max_length=200, blank=True)
+    national_id = EncryptedTextField(
+        '身分證字號／居留證號', form_max_length=10, blank=True,
         validators=[validate_national_id],
         help_text='用途為每年的政府名單申報（見 DESIGN 附錄五 #4）',
     )
@@ -187,10 +191,12 @@ class Registration(models.Model):
     phone = models.CharField('手機', max_length=20, blank=True)
     email = models.EmailField('Email')
     # ── 敏感個資，比照 User，核准建帳號時整批帶過去 ──
-    birth_date = models.DateField('出生年月日', null=True, blank=True)
-    address = models.CharField('住址', max_length=200, blank=True)
-    national_id = models.CharField(
-        '身分證字號／居留證號', max_length=10, blank=True, validators=[validate_national_id]
+    # 同 User：DB 存密文（#13-1 決定二）
+    birth_date = EncryptedDateField('出生年月日', null=True, blank=True)
+    address = EncryptedTextField('住址', form_max_length=200, blank=True)
+    national_id = EncryptedTextField(
+        '身分證字號／居留證號', form_max_length=10, blank=True,
+        validators=[validate_national_id]
     )
     # 入團申請表單的「輔大入學年 / 就讀科系」原文照存（如「99級/織品系」）。
     # 刻意不自動拆成 grad_year——那一格塞了兩種資訊、實際填法有六七種變體
