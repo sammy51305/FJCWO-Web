@@ -34,3 +34,7 @@ services:
       # demo 資料的密碼。務必自己設一組，不要用 repo 裡的預設值
       - key: DEMO_PASSWORD
         sync: false
+      # 敏感個資的欄位加密金鑰（#13-1 決定二）。任意隨機字串即可，由 Render 產生。
+      # ⚠️ 換掉這個值會讓既有密文解不開，等同資料遺失——設定後不要再動。
+      - key: DJANGO_FIELD_ENCRYPTION_KEY
+        generateValue: true

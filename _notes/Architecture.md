@@ -112,9 +112,9 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | section | 聲部（關聯 SectionType）**選填**|
 | grad_year | 畢業年份 **選填**|
 | phone | 手機（幹部限定可查）|
-| birth_date | 出生年月日 🔒 **敏感個資**|
-| address | 住址 🔒 **敏感個資**|
-| national_id | 身分證字號／居留證號 🔒 **敏感個資**，用途為每年政府名單申報；接受身分證（1 字母+9 數字）與居留證（2 字母+8 數字）；列表／報表只顯示 `masked_national_id`（末四碼）|
+| birth_date | 出生年月日 🔒 **敏感個資，DB 存密文**|
+| address | 住址 🔒 **敏感個資，DB 存密文**|
+| national_id | 身分證字號／居留證號 🔒 **敏感個資，DB 存密文**，用途為每年政府名單申報；接受身分證（1 字母+9 數字）與居留證（2 字母+8 數字）；列表／報表只顯示 `masked_national_id`（末四碼）|
 | alumni_info | 入學年／科系（入團申請表單原文照存，不自動拆成 grad_year）|
 | line_id | LINE ID（使用者自己填的帳號，**與下面的 line_user_id 是兩回事**）|
 | from_band | 來自樂團（僅槍手 `role=guest` 適用）|
@@ -125,6 +125,8 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 > 🔒 三個敏感欄位在 **model 層一律可空**（既有帳號沒有這些資料，設 `null=False` 會讓 migrate
 > 卡在既有資料上），**必填由表單層把關**；可見範圍為「幹部可見、預設遮蔽」。
 > 完整決策見 DESIGN 附錄五 #13-1「敏感個資的三個決定」。
+> 三者在資料庫裡都是 **Fernet 密文**（#13-1 決定二），加解密只發生在 DB 邊界；
+> 金鑰來自環境變數 `DJANGO_FIELD_ENCRYPTION_KEY`，換掉會讓既有密文解不開。詳見 DESIGN §4.2。
 
 ### 組織章程（CharterContent）
 
@@ -418,9 +420,9 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | grad_year | 畢業年份（西元）**選填**——入團表單填的是民國入學年，改存 alumni_info，此欄留空 |
 | phone | 手機 |
 | email | Email |
-| birth_date | 出生年月日 🔒 |
-| address | 住址 🔒 |
-| national_id | 身分證字號／居留證號 🔒 |
+| birth_date | 出生年月日 🔒 DB 存密文 |
+| address | 住址 🔒 DB 存密文 |
+| national_id | 身分證字號／居留證號 🔒 DB 存密文 |
 | alumni_info | 入學年／科系（原文照存）|
 | line_id | LINE ID（使用者自填）|
 | status | 待審核 / 已核准 / 已拒絕 |

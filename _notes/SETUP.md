@@ -291,6 +291,7 @@ static 由 WhiteNoise 供應；強制 https 與 secure cookie 由環境變數開
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | 同一個網域，**要含** `https://`，例如 `https://fjcwo-web.onrender.com` |
 | `DEMO_PASSWORD` | 自己想一組，**不可以用 `demo1234`**（那組寫在 DEMO.md 裡等於公開）|
 | `DJANGO_ROBOTS_NOINDEX` | `True` —— 測試站不讓搜尋引擎收錄（見下方 E-7）|
+| `DJANGO_FIELD_ENCRYPTION_KEY` | 任意隨機字串（Blueprint 會自動產生）。敏感個資的加密金鑰，**設定後不要再改**——換掉會讓既有密文解不開 |
 
 > 網域要等第一次部署後才知道。可以先隨便填、部署完再回設定頁改成正確的，改完會自動重新部署。
 > 填錯的症狀很好認：`ALLOWED_HOSTS` 不對 → 整站 400；`CSRF_TRUSTED_ORIGINS` 不對 → 頁面打得開但一送出表單就 403。
@@ -343,6 +344,7 @@ python manage.py createsuperuser    # 自己的管理員帳號
 - [ ] 沒有匯入任何真實團員個資
 - [ ] 幹部拿到的網址是 `https://`（`DJANGO_SECURE_SSL_REDIRECT=True` 會自動轉）
 - [ ] `DJANGO_ROBOTS_NOINDEX=True`，且 `https://<網域>/robots.txt` 顯示 `Disallow: /`
+- [ ] `DJANGO_FIELD_ENCRYPTION_KEY` 已設（沒設的話 `build.sh` 會直接讓部署失敗）
 
 ---
 

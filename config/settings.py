@@ -135,6 +135,16 @@ if os.environ.get('DJANGO_SECURE_COOKIES', 'False') == 'True':
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 
+# 敏感個資（身分證字號／住址／出生年月日）的欄位加密金鑰（#13-1 決定二）。
+# 內容可以是任意字串，程式會用 SHA-256 推導出真正的 Fernet key（見 apps/accounts/fields.py）。
+#
+# 沒設就退回開發用預設值，本機與測試跑得動——**但那把公開在 repo 裡，等於沒加密**。
+# 任何存放真實個資的環境都必須設，`build.sh` 部署時會擋下沒設的情況。
+# 換金鑰會讓既有密文解不開（顯示為空），要換必須先解密再重新加密。
+FIELD_ENCRYPTION_SECRET = os.environ.get(
+    'DJANGO_FIELD_ENCRYPTION_KEY', 'insecure-dev-key-do-not-use-in-production'
+)
+
 # 測試站設 True：robots.txt 改為整站禁止，並在每個回應加上 X-Robots-Tag: noindex。
 # 正式站維持 False，讓公開頁（關於百韻、組織章程、公開公告）搜尋得到。
 ROBOTS_NOINDEX = os.environ.get('DJANGO_ROBOTS_NOINDEX', 'False') == 'True'
