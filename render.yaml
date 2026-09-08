@@ -38,3 +38,19 @@ services:
       # ⚠️ 換掉這個值會讓既有密文解不開，等同資料遺失——設定後不要再動。
       - key: DJANGO_FIELD_ENCRYPTION_KEY
         generateValue: true
+      # ---- 寄信（#11 校友匯入的最後一哩：核准 → 寄臨時密碼信）----
+      # 四個都填才會切到真的 SMTP；少任一個就退回 console backend（信只印在 log、收不到）。
+      - key: EMAIL_HOST
+        value: smtp.gmail.com
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_USE_TLS
+        value: "True"
+      - key: EMAIL_HOST_USER
+        sync: false
+      # Gmail 的「應用程式密碼」16 碼，不是帳號登入密碼
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      # 必須與 EMAIL_HOST_USER 同一個信箱，否則 Gmail 會把寄件人改寫掉
+      - key: DEFAULT_FROM_EMAIL
+        sync: false

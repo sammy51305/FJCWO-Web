@@ -336,6 +336,50 @@ python manage.py createsuperuser    # 自己的管理員帳號
 > 這是刻意做成環境變數而非寫死：同一份程式碼會同時部署到測試站與正式站，
 > 寫死「全站禁止」會讓正式站的公開頁也搜尋不到。
 
+#### E-8　接真的 SMTP（Gmail 應用程式密碼）
+
+測試站預設是 console backend——信只印在 Render 的 log 裡，收件人收不到。
+**#11 校友批次匯入靠「核准 → 寄臨時密碼信」收尾，那條流程沒有真 SMTP 就是斷的**，
+所以這是 #10「上線前必須處理的兩件事」的第 2 點。
+
+**用哪個帳號**：建議樂團公用帳號而非個人帳號——校友看到的寄件人是樂團，日後交接也不用重設。
+
+**產生應用程式密碼**（不是帳號登入密碼）：
+
+1. 該 Google 帳號必須先開啟**兩步驟驗證**，否則沒有這個選項
+2. 到 <https://myaccount.google.com/apppasswords>（或：安全性 → 兩步驟驗證 → 最下方「應用程式密碼」）
+3. 取名如 `FJCWO-Web` → 建立 → 得到 16 碼密碼
+4. **視窗關掉就再也看不到**，馬上複製；填進 Render 時把空格拿掉
+
+**Render 環境變數**：
+
+| 變數 | 值 |
+|------|-----|
+| `EMAIL_HOST` | `smtp.gmail.com`（Blueprint 已填）|
+| `EMAIL_PORT` | `587`（已填）|
+| `EMAIL_USE_TLS` | `True`（已填，**大小寫敏感**）|
+| `EMAIL_HOST_USER` | 該 Gmail 完整位址 |
+| `EMAIL_HOST_PASSWORD` | 上面那 16 碼應用程式密碼 |
+| `DEFAULT_FROM_EMAIL` | 如 `輔仁百韻管樂團 <fujencwo@gmail.com>` |
+
+> **`DEFAULT_FROM_EMAIL` 的信箱必須與 `EMAIL_HOST_USER` 相同**，否則 Gmail 會把寄件人
+> 改寫成驗證過的那個位址（或直接被收件端判為偽冒）。預設值 `noreply@fjcwo.local`
+> 是本機用的假位址，上線一定要換掉。
+
+`settings.py` 的切換是**四個都要有才生效**：`EMAIL_HOST_USER` 與 `EMAIL_HOST_PASSWORD`
+任一為空就退回 console backend。所以「填了一半」的症狀是**安靜地沒寄出去**，不會報錯。
+
+**驗證**（本機連測試站設定，或在 Render Shell）：
+
+```bash
+python manage.py sendtestemail 你的信箱@example.com
+```
+
+收到就成了。沒收到先看垃圾郵件匣，再看 Render 的 Logs 有沒有 SMTP 錯誤。
+
+> ⚠️ **寄送額度**：一般 Gmail 帳號每日約數百封上限。#11 要一次核准三百位校友時
+> 很可能撞到限流，屆時要分批核准（DESIGN #11 風險表已列）。
+
 #### E-6　上線檢查
 
 - [ ] `DJANGO_DEBUG=False`（`render.yaml` 已寫死，確認沒被改掉）
@@ -345,6 +389,7 @@ python manage.py createsuperuser    # 自己的管理員帳號
 - [ ] 幹部拿到的網址是 `https://`（`DJANGO_SECURE_SSL_REDIRECT=True` 會自動轉）
 - [ ] `DJANGO_ROBOTS_NOINDEX=True`，且 `https://<網域>/robots.txt` 顯示 `Disallow: /`
 - [ ] `DJANGO_FIELD_ENCRYPTION_KEY` 已設（沒設的話 `build.sh` 會直接讓部署失敗）
+- [ ] Email 已接真 SMTP，且 `sendtestemail` 實測收得到（見 E-8）
 
 ---
 
