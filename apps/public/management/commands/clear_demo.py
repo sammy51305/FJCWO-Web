@@ -25,7 +25,7 @@ from apps.accounts.models import Registration, User
 from apps.announcements.models import Announcement
 from apps.assets.models import AssetBorrow, BandProperty
 from apps.events.models import (
-    LeaveRequest, PerformanceAttendance, PerformanceEvent, PerformanceLeaveRequest,
+    LeaveRequest, PerformanceAttendance, PerformanceEvent,
     Rehearsal, RehearsalAttendance, RehearsalQRToken, Setlist,
 )
 from apps.finance.models import FeePeriod, FinanceRecord, MembershipFee, PaymentConfig
@@ -94,7 +94,6 @@ class Command(BaseCommand):
             ('排練出席紀錄', RehearsalAttendance.objects.filter(rehearsal__in=rehearsals)),
             ('排練 QR Token', RehearsalQRToken.objects.filter(rehearsal__in=rehearsals)),
             ('排練請假', LeaveRequest.objects.filter(rehearsal__in=rehearsals)),
-            ('演出請假', PerformanceLeaveRequest.objects.filter(event__in=events)),
             ('演出出席確認', PerformanceAttendance.objects.filter(event__in=events)),
             ('會費繳納紀錄', member_fees),
             ('財務收支（含會費自動入帳）', finance),

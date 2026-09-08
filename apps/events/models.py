@@ -121,6 +121,23 @@ class RehearsalAttendance(models.Model):
 
 
 class PerformanceAttendance(models.Model):
+    """演出出席：**事前意願（intent）與事後到場（attended）分開記錄**。
+
+    刻意用「三態 intent ＋ 布林 attended」兩個欄位，理由各自獨立：
+
+    - **不共用一個欄位**：共用會失去「說要來但沒到」這個最需要追蹤的情況。
+    - **不再用兩個布林**（舊的 `confirmed` + `on_leave`）：那組合有四種狀態，其中
+      「confirmed=True 且 on_leave=True」是矛盾的，而且沒有任何程式碼阻止它發生。
+      三態用單一欄位承載，矛盾狀態直接不可表示。
+    - **沒有紀錄 = 待確認**：團員預設不會有 attendance 列，統計時要從團員名單反推，
+      不能只掃這張表——「都沒表態的人」正是幹部要追的對象（#13-5）。
+    """
+
+    class Intent(models.TextChoices):
+        PENDING = 'pending', '待確認'
+        CONFIRMED = 'confirmed', '確認參加'
+        DECLINED = 'declined', '不參加'
+
     event = models.ForeignKey(
         PerformanceEvent, on_delete=models.CASCADE,
         related_name='attendances', verbose_name='演出活動'
@@ -129,11 +146,13 @@ class PerformanceAttendance(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
         related_name='performance_attendances', verbose_name='團員'
     )
-    confirmed = models.BooleanField('是否到場', default=False)
-    on_leave = models.BooleanField(
-        '請假', default=False,
-        help_text='演出請假核准後標記為 True，與 confirmed（到場）正交並存'
+    intent = models.CharField(
+        '出席意願', max_length=10, choices=Intent, default=Intent.PENDING,
+        help_text='團員事前表態；兩者都沒做的人維持「待確認」，由幹部聯繫'
     )
+    intent_at = models.DateTimeField('表態時間', null=True, blank=True)
+    decline_reason = models.TextField('無法參加的原因', blank=True)
+    attended = models.BooleanField('是否到場', default=False, help_text='演出當天事後登記')
     checked_in_at = models.DateTimeField('確認到場時間', null=True, blank=True)
     notes = models.TextField('備註', blank=True)
 
@@ -229,44 +248,3 @@ class LeaveRequest(models.Model):
 
     def __str__(self):
         return f'{self.member.name} - {self.rehearsal}'
-
-
-class PerformanceLeaveRequest(models.Model):
-    """
-    演出請假：團員臨時無法出席正式演出時提出，幹部審核。
-    刻意獨立於 LeaveRequest（綁 Rehearsal）之外、只綁 event，避免「rehearsal / event
-    二選一互斥」那種可被 ORM 繞過的坑；核准後標記於 PerformanceAttendance.on_leave。
-    """
-    class Status(models.TextChoices):
-        PENDING = 'pending', '待審核'
-        APPROVED = 'approved', '核准'
-        REJECTED = 'rejected', '拒絕'
-
-    member = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
-        related_name='performance_leave_requests', verbose_name='申請者'
-    )
-    event = models.ForeignKey(
-        PerformanceEvent, on_delete=models.CASCADE,
-        related_name='leave_requests', verbose_name='演出活動'
-    )
-    reason = models.TextField('請假原因')
-    status = models.CharField('狀態', max_length=10, choices=Status, default=Status.PENDING)
-    created_at = models.DateTimeField('申請時間', auto_now_add=True)
-    reviewed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
-        null=True, blank=True, related_name='reviewed_performance_leaves', verbose_name='審核幹部'
-    )
-    reviewed_at = models.DateTimeField('審核時間', null=True, blank=True)
-    result_seen = models.BooleanField(
-        '團員已讀審核結果', default=True,
-        help_text='核准/拒絕時設為 False，團員在首頁看到通知後設回 True；預設 True 避免既有資料被當成新結果'
-    )
-
-    class Meta:
-        verbose_name = '演出請假申請'
-        verbose_name_plural = '演出請假申請列表'
-        unique_together = [['member', 'event']]
-
-    def __str__(self):
-        return f'{self.member.name} - {self.event.name}'

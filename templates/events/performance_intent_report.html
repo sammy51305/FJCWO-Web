@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}出席意願統計 — {{ event.name }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3 d-print-none">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'events:event_list' %}">演出活動</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'events:event_detail' event.pk %}">{{ event.name }}</a></li>
+    <li class="breadcrumb-item active">出席意願統計</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h2 class="mb-1">出席意願統計</h2>
+    <p class="text-muted mb-0">
+      {{ event.name }}　{{ event.performance_date|date:"Y/m/d（D）H:i" }}
+    </p>
+  </div>
+  <button onclick="window.print()" class="btn btn-outline-secondary btn-sm d-print-none">
+    <i class="bi bi-printer"></i> 列印
+  </button>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-4">
+    <div class="card text-center h-100">
+      <div class="card-body py-3">
+        <div class="fs-3 fw-semibold text-success">{{ totals.confirmed }}</div>
+        <div class="small text-muted">確認參加</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-4">
+    <div class="card text-center h-100">
+      <div class="card-body py-3">
+        <div class="fs-3 fw-semibold text-warning">{{ totals.pending }}</div>
+        <div class="small text-muted">待確認</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-4">
+    <div class="card text-center h-100">
+      <div class="card-body py-3">
+        <div class="fs-3 fw-semibold text-secondary">{{ totals.declined }}</div>
+        <div class="small text-muted">不參加</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if totals.pending %}
+<div class="alert alert-warning d-print-none">
+  <i class="bi bi-exclamation-triangle me-1"></i>
+  有 <strong>{{ totals.pending }}</strong> 位團員尚未表態，請各聲部負責人協助聯繫。
+</div>
+{% endif %}
+
+{% for section_name, rows in groups %}
+<h5 class="text-muted mb-2">{{ section_name }}</h5>
+<div class="table-responsive mb-4">
+  <table class="table table-sm align-middle">
+    <thead class="table-light">
+      <tr>
+        <th style="width: 12rem;">團員</th>
+        <th style="width: 8rem;">意願</th>
+        <th>無法參加的原因</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.member.name }}</td>
+        <td>
+          {% if row.intent == 'confirmed' %}
+            <span class="badge bg-success">確認參加</span>
+          {% elif row.intent == 'declined' %}
+            <span class="badge bg-secondary">不參加</span>
+          {% else %}
+            <span class="badge bg-warning text-dark">待確認</span>
+          {% endif %}
+        </td>
+        <td class="small text-muted">{{ row.decline_reason|default:"—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% empty %}
+<p class="text-muted">目前沒有在團團員。</p>
+{% endfor %}
+
+<p class="text-muted small">共 {{ total_count }} 位在團團員（不含管理員與客座團員）。</p>
+{% endblock %}
