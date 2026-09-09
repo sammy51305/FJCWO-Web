@@ -41,8 +41,8 @@
 </form>
 
 {% if registrations %}
-{# 批次核准（#11）。表格每一列各有自己的核准／拒絕 form，巢狀 form 是無效 HTML，
-   所以這個 form 放在表格外，勾選框與送出鈕用 HTML5 的 form="" 屬性指回來。 #}
+{% comment %} 批次核准（#11）。表格每一列各有自己的核准／拒絕 form，巢狀 form 是無效 HTML，
+   所以這個 form 放在表格外，勾選框與送出鈕用 HTML5 的 form="" 屬性指回來。 {% endcomment %}
 <form method="post" id="bulk-form">
   {% csrf_token %}
   <input type="hidden" name="action" value="bulk_approve">
@@ -124,8 +124,8 @@
             <a href="{% url 'accounts:registration_edit' reg.pk %}" class="btn btn-sm btn-outline-secondary">
               <i class="bi bi-pencil"></i>
             </a>
-            {# 刪除限管理員（2026-09-09 收緊），已核准的也可刪。
-               已核准的另外警告：刪申請紀錄不會刪掉核准時建立的帳號。 #}
+            {% comment %} 刪除限管理員（2026-09-09 收緊），已核准的也可刪。
+               已核准的另外警告：刪申請紀錄不會刪掉核准時建立的帳號。 {% endcomment %}
             {% if user.is_superuser or user.is_admin_role %}
             <form method="post" action="{% url 'accounts:registration_delete' reg.pk %}" class="d-inline">
               {% csrf_token %}

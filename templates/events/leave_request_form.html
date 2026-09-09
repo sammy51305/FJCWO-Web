@@ -25,8 +25,8 @@
       </div>
       <a href="{% url 'events:my_leave_requests' %}" class="btn btn-secondary">查看我的請假紀錄</a>
     {% else %}
-      {# #13-9：系統送出不等於通知到人，分部長還是要自己講一聲。
-         分部長目前系統裡沒有這個概念（見 #14），所以先寫成不指名的靜態文字。 #}
+      {% comment %} #13-9：系統送出不等於通知到人，分部長還是要自己講一聲。
+         分部長目前系統裡沒有這個概念（見 #14），所以先寫成不指名的靜態文字。 {% endcomment %}
       <div class="alert alert-warning d-flex gap-2 align-items-start">
         <i class="bi bi-megaphone mt-1"></i>
         <div>

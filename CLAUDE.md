@@ -76,6 +76,8 @@ venv\Scripts\python.exe manage.py test                # 執行全部測試（預
 - 權限檢查：`@login_required` + `if not request.user.is_officer` 雙層
 - N+1 防護：跨 FK 查詢一律加 `select_related` / `prefetch_related`
 - 冪等操作：用 `get_or_create`，不用手動判斷 exist
+- 模板註解：`{# #}` **只能單行**；跨行一律用 `{% comment %}…{% endcomment %}`，
+  否則 Django 不當它是註解、整段會印在頁面上（`TemplateCommentSyntaxTest` 會擋）
 - 測試結構：每個 app 一支 `tests.py`，class 用中文 docstring 說明目的
 - Commit message：`type(scope): 中文說明`（type = feat / fix / docs / refactor…，scope = app 名稱；完整規範見 `_notes/WORKFLOW.md`）
 

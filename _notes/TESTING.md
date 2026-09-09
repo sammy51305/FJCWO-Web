@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-09-09（共 542 個測試）
+> 最後更新：2026-09-09（共 543 個測試）
 
 ---
 
@@ -90,9 +90,9 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **542 個測試**，分布在 8 個 app。
+共 **543 個測試**，分布在 8 個 app。
 
-> 最近一次全站測試：2026-09-09 執行 `python manage.py test`，**542/542 全數通過、無 regression**（System check 亦無問題）。
+> 最近一次全站測試：2026-09-09 執行 `python manage.py test`，**543/543 全數通過、無 regression**（System check 亦無問題）。
 
 ### `apps/accounts/tests.py`（158 個）
 
@@ -109,7 +109,7 @@ python manage.py test --noinput
 | `MemberDeleteTest` | 無關聯紀錄的帳號可真正刪除、有關聯紀錄（如出席）的帳號擋下並保留、不能刪除自己、一般團員無法刪除他人、管理員／superuser 可強制刪除有關聯紀錄的帳號、PROTECT 關聯（如發過公告）即使管理員也無法繞過 |
 | `UserRoleTest` | `is_officer` 各角色行為（member/officer/admin/superuser）、`is_staff` 與 `is_superuser` 自動設定 |
 | `RegistrationTest` | 顯示名稱為「入團申請」（#13-2）、申請（公開存取、重複申請防止、送出建立紀錄）、狀態查詢（用 email 查）、幹部審核（核准/拒絕）、核准同步建立 User 帳號（含 must_change_password）、寄送臨時密碼信件、Email 重複時擋下不建立重複帳號 |
-| `RegistrationManageTest` | 依姓名/Email 搜尋、依狀態篩選、拒絕可重新開放審核（核准不行）、新增申請紀錄（幹部限定）、編輯基本資料（不影響審核狀態）、刪除申請紀錄（已核准者不可刪除，一般團員不可操作）|
+| `RegistrationManageTest` | 依姓名/Email 搜尋、依狀態篩選、拒絕可重新開放審核（核准不行）、新增申請紀錄（幹部限定）、編輯基本資料（不影響審核狀態）、刪除申請紀錄（限管理員：幹部與團員都不可、按鈕也不顯示；已核准者可刪；刪紀錄不會刪掉核准時建立的帳號）|
 | `MemberCreateTest` | 存取控制（未登入/一般團員/幹部）、POST 新增團員成功（角色固定 member）、帳號依 Email 自動產生、Email 重複不建立記錄、寄送臨時密碼信件 |
 | `ForcePasswordChangeTest` | `must_change_password` 使用者任何頁面都被導向設定密碼頁、一般使用者不受影響、設定密碼頁本身不被攔截、成功設定後清除 flag 並可用新密碼登入、密碼不一致/太弱被擋、臨時密碼登入後仍被導向設定密碼頁（含錯誤密碼登入失敗的驗證）|
 | `MemberDirectoryReportTest` | 通訊錄列印報表：存取控制（未登入/一般團員無權限含電話Email→導回通訊錄/幹部可看）、顯示姓名電話Email、依樂器族群分組、列印按鈕、status 篩選（預設在團排除退團、inactive、all）|
@@ -184,7 +184,7 @@ python manage.py test --noinput
 |-------|---------|
 | `PushLineMessageTest` | credentials 齊全時發出 API 請求、TOKEN 缺少時略過、GROUP_ID 缺少時略過、API 失敗時 silent fail |
 
-### `apps/public/tests.py`（45 個）
+### `apps/public/tests.py`（46 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -193,6 +193,7 @@ python manage.py test --noinput
 | `CharterEditTest` | 存取控制（未登入/一般團員/幹部）、POST 儲存章程並 redirect、二次更新不新增資料 |
 | `VenueManageTest` | 存取控制（未登入/一般團員/幹部）、依名稱搜尋、依類別篩選、新增/編輯場地、新增/刪除時段、刪除限管理員、被演出活動引用（PROTECT）時即使管理員也無法刪除 |
 | `RobotsTxtTest` | robots.txt：掛在網站根目錄回純文字、未登入可讀、noindex 模式整站禁止、正常模式只擋內部路徑（公開頁不受影響）、noindex 模式每個回應帶 X-Robots-Tag、正常模式不帶 |
+| `TemplateCommentSyntaxTest` | 全掃 `templates/`，禁止多行 `{# #}`——Django 的 `{# #}` 只支援單行，中間有換行就不是註解、會整段印在頁面上（一般 view 測試抓不到：頁面照樣 200、元素也都在）|
 | `DemoCommandTest` | demo 資料指令（`seed_demo` / `clear_demo`）：建立展示資料、重複執行不產生重複資料、`clear_demo` 完整清除且刪除順序能通過各處 PROTECT、只刪 demo 資料不動主檔與非 demo 帳號、`--dry-run` 不改動資料庫 |
 
 ---
