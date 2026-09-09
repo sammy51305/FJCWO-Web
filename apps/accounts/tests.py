@@ -618,7 +618,7 @@ class UserRoleTest(TestCase):
 
 
 class RegistrationTest(TestCase):
-    """校友報到申請系統"""
+    """入團申請系統（原「校友報到申請」，#13-2 改名）"""
 
     def setUp(self):
         self.family = InstrumentFamily.objects.create(
@@ -637,6 +637,24 @@ class RegistrationTest(TestCase):
         self.apply_url = reverse('accounts:registration_apply')
         self.status_url = reverse('accounts:registration_status')
         self.review_url = reverse('accounts:registration_review')
+
+    # ── T00 顯示名稱（#13-2）─────────────────────────────────
+
+    def test_apply_page_uses_new_wording(self):
+        """
+        #13-2：對外顯示一律叫「入團申請」，不再是「校友報到申請」。
+        原名容易讓還沒畢業的在校生以為自己不能申請。
+        """
+        r = self.client.get(self.apply_url)
+        self.assertContains(r, '入團申請')
+        self.assertNotContains(r, '校友報到')
+
+    def test_review_page_uses_new_wording(self):
+        """幹部端的審核頁同樣改名，避免兩邊叫法不一致"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.review_url)
+        self.assertContains(r, '入團申請審核')
+        self.assertNotContains(r, '校友報到')
 
     # ── T10 申請表單（公開）──────────────────────────────────
 
@@ -783,7 +801,7 @@ class RegistrationTest(TestCase):
 
 
 class RegistrationManageTest(TestCase):
-    """校友報到申請的完整管理功能：查詢、重新審核、新增、編輯、刪除"""
+    """入團申請的完整管理功能：查詢、重新審核、新增、編輯、刪除"""
 
     def setUp(self):
         self.family = InstrumentFamily.objects.create(
@@ -960,7 +978,7 @@ class RegistrationManageTest(TestCase):
 
 
 class MemberCreateTest(TestCase):
-    """幹部手動新增團員帳號（不透過校友報到申請）"""
+    """幹部手動新增團員帳號（不透過入團申請）"""
 
     def setUp(self):
         self.family = InstrumentFamily.objects.create(

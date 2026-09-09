@@ -102,7 +102,8 @@ def leave_request_create(request, rehearsal_pk):
                 rehearsal=rehearsal,
                 reason=reason,
             )
-            messages.success(request, '請假申請已送出。')
+            # #13-9：提示要在送出後再講一次——填表時那則 alert 已隨頁面離開
+            messages.success(request, '請假申請已送出，記得另外通知自己的分部長。')
             return redirect('events:my_leave_requests')
 
     return render(request, 'events/leave_request_form.html', {

@@ -81,6 +81,23 @@ class LeaveRequestTestCase(TestCase):
         r = self.client.get(self.leave_url)
         self.assertContains(r, self.event.name)
 
+    # ── T02b 分部長提示（#13-9）──────────────────────────────
+
+    def test_form_shows_section_leader_reminder(self):
+        """
+        #13-9：請假表單要提醒團員另外通知分部長。
+        系統只把申請送到幹部審核，不會通知分部長（分部長本身系統還沒有這個概念，見 #14）。
+        """
+        self.client.force_login(self.member)
+        r = self.client.get(self.leave_url)
+        self.assertContains(r, '記得另外通知自己的分部長')
+
+    def test_success_message_repeats_section_leader_reminder(self):
+        """送出後導向請假紀錄頁，提示要再講一次——表單上那則已隨頁面離開"""
+        self.client.force_login(self.member)
+        r = self.client.post(self.leave_url, {'reason': '有考試'}, follow=True)
+        self.assertContains(r, '記得另外通知自己的分部長')
+
     # ── T03 送出空白原因 ─────────────────────────────────────
 
     def test_empty_reason_is_rejected(self):

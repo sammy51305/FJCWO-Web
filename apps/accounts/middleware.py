@@ -15,7 +15,7 @@ _EXEMPT_PREFIXES = ('/admin/', settings.STATIC_URL, settings.MEDIA_URL)
 
 class ForcePasswordChangeMiddleware:
     """
-    幹部手動建立團員帳號或核准校友報到時，會給一組系統產生的臨時密碼，
+    幹部手動建立團員帳號或核准入團申請時，會給一組系統產生的臨時密碼，
     並將 User.must_change_password 設為 True。
     這個 middleware 攔截該使用者的所有請求，強制導向設定新密碼頁面，
     直到完成設定為止，避免臨時密碼被長期當作正式密碼使用。

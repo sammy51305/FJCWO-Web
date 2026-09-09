@@ -14,6 +14,7 @@ class FinanceRecord(models.Model):
         INSTRUMENT_PURCHASE = 'instrument_purchase', '樂器購置費'
         INSTRUMENT_MAINTENANCE = 'instrument_maintenance', '樂器保養費'
         SCORE = 'score', '樂譜費'
+        INSURANCE = 'insurance', '保險費'
         MEMBERSHIP = 'membership', '會費'
         OTHER = 'other', '其他'
 

@@ -94,7 +94,7 @@ def index(request):
             MembershipFee.objects.filter(
                 pk__in=[fee.pk for fee in reviewed_fees]
             ).update(result_seen=True)
-        # 幹部：待審核的校友報到申請數、待確認會費筆數
+        # 幹部：待審核的入團申請數、待確認會費筆數
         if request.user.is_officer:
             from apps.accounts.models import Registration
             context['pending_registrations_count'] = Registration.objects.filter(

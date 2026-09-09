@@ -255,6 +255,28 @@ class FinanceRecordCRUDTest(TestCase):
         data.update(over)
         return data
 
+    # ── 分類（#13-10 新增保險費）──
+    def test_insurance_category_exists(self):
+        """#13-10：財務收支要有「保險費」分類（幹部 2026-08-12 回饋）"""
+        self.assertIn('insurance', FinanceRecord.Category.values)
+        self.assertEqual(FinanceRecord.Category.INSURANCE.label, '保險費')
+
+    def test_insurance_appears_in_create_form(self):
+        """新增收支的表單要列出保險費選項（choices 由 model 動態帶出）"""
+        self.client.force_login(self.officer)
+        r = self.client.get(reverse('finance:finance_create'))
+        self.assertContains(r, 'insurance')
+        self.assertContains(r, '保險費')
+
+    def test_can_create_insurance_expense(self):
+        """保險費支出能實際存進資料庫"""
+        self.client.force_login(self.officer)
+        self.client.post(reverse('finance:finance_create'), self._valid_payload(
+            type='expense', category='insurance', description='團員平安保險年費',
+        ))
+        record = FinanceRecord.objects.get(category='insurance')
+        self.assertEqual(record.get_category_display(), '保險費')
+
     # ── 存取控制 ──
     def test_list_unauthenticated_redirects(self):
         r = self.client.get(self.list_url)
