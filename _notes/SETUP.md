@@ -13,6 +13,7 @@
 5. [步驟四：建立 .env](#步驟四建立-env)
 6. [機密設定 SOP（LINE Bot / Email）](#機密設定-sopline-bot--email)
    - [情境 E：Render ＋ Neon 免費測試站](#情境-erender--neon-免費測試站2026-09-07-建置)
+   - [情境 F：`git pull` 之後要跑什麼](#情境-fgit-pull-之後要跑什麼)
 7. [步驟五：執行 Migration](#步驟五執行-migration)
 8. [步驟六：載入基礎資料（Fixtures）](#步驟六載入基礎資料fixtures)
 9. [步驟七：建立 Superuser](#步驟七建立-superuser)
@@ -210,6 +211,30 @@ DB_PORT=5432
 3. 新電腦完成步驟四建立 `.env` 後，從安全筆記複製貼上，覆蓋對應變數即可。
 
 > 比起只存在單一個人電腦裡，密碼管理工具更容易交接，也不會因換人換電腦而遺失。
+
+---
+
+### 情境 F：`git pull` 之後要跑什麼
+
+拉了別人（或自己在另一台）推的新程式碼後，**程式碼更新了但你的環境沒有**，
+兩種東西可能落後：
+
+| 症狀 | 原因 | 解法 |
+|------|------|------|
+| `ModuleNotFoundError: No module named 'xxx'` | `requirements.txt` 加了新套件 | `pip install -r requirements.txt` |
+| `relation "xxx" does not exist`、欄位不存在 | 有新的 migration 沒套用 | `python manage.py migrate` |
+
+保險起見，**每次 pull 完順手跑這兩行**（與步驟二、步驟五是同樣的指令，
+已裝的套件會跳過、已套用的 migration 不會重跑，很快）：
+
+```bash
+venv\Scripts\python.exe -m pip install -r requirements.txt
+venv\Scripts\python.exe manage.py migrate
+```
+
+> **不需要跑 `makemigrations`**——遷移檔是跟著程式碼進 repo 的，`pull` 就拿到了。
+> 在自己機器上 `makemigrations` 只會在「你改了 model」時才該做；沒改卻跑出新檔案，
+> 通常代表你的分支跟別人的 model 有分歧，要先確認而不是直接產生。
 
 ---
 
@@ -415,6 +440,22 @@ python manage.py loaddata fixtures/venues.json
 - `venues.json`：排練場地世韻藝術有限公司（含 3 個時段）、演出場地輔仁大學野聲堂等 4 處
 
 > `instruments.json` 和 `sections.json` 必須在 `score_parts_manage` 分譜上傳功能使用前載入，否則 UI 不會有任何樂器可選。
+
+### 想要有東西可以點？再灌一份假資料
+
+fixtures 只有主檔（樂器、聲部、場地），載完系統仍是空的——沒有演出、沒有排練、沒有樂譜，
+畫面幾乎每一頁都是「目前沒有資料」。要實際操作或看功能長什麼樣，再跑：
+
+```bash
+python manage.py seed_demo
+```
+
+會建立團員帳號、演出與排練、樂譜、財產、財務會費、公告等一整套展示資料。
+**可重複執行、不會產生重複資料**；清除用 `clear_demo`。
+資料內容、demo 動線與注意事項見 [DEMO.md](DEMO.md)。
+
+> ⚠️ demo 帳號的預設密碼寫在 DEMO.md 裡（等於公開），**任何連得到外面的環境**
+> 都要用 `DEMO_PASSWORD` 環境變數蓋掉，見情境 E。
 
 ---
 
