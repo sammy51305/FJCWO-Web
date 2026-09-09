@@ -29,6 +29,7 @@ Phase 2 功能全部完成（含 LINE Bot 群組通知），Phase 3（會議紀�
 > 首次在新機器建置環境（安裝套件、建資料庫、載入基礎資料）請參考 [SETUP.md](_notes/SETUP.md)，照步驟一～九走即可完成。
 
 ```bash
+venv\Scripts\python.exe -m pip install -r requirements.txt  # git pull 後：套件有更新時（見下）
 venv\Scripts\python.exe manage.py runserver           # 啟動開發伺服器
 venv\Scripts\python.exe manage.py makemigrations      # 改了 Model 後：產生遷移檔（見下表）
 venv\Scripts\python.exe manage.py migrate             # 套用遷移到資料庫（見下表）
@@ -44,6 +45,10 @@ venv\Scripts\python.exe manage.py test apps.scores --verbosity=2  # 只測單一
 | `migrate` | 讀遷移檔，實際去改資料庫的表結構 | ✅ | ① 改完 Model 接著跑；② 新拉程式碼、或遇到 `relation does not exist` 時，單獨跑這行 |
 
 順序固定 `makemigrations` → `migrate`（先產檔、再套用）。純粹新拉別人的程式碼時，遷移檔已在 repo 裡，只要跑 `migrate`。
+
+**`git pull` 之後的例行動作**：套件與資料庫都可能落後程式碼。`ModuleNotFoundError` → 跑 `pip install -r requirements.txt`；`relation does not exist` 或欄位不存在 → 跑 `migrate`。保險起見兩行都跑（已裝的會跳過、已套用的不會重跑）。詳見 [SETUP.md](_notes/SETUP.md) 情境 F。
+
+**本機想要有資料可以點**：fixtures 只有主檔，載完系統仍是空的。跑 `manage.py seed_demo` 建立整套展示資料（可重複執行、`clear_demo` 清除），內容見 [DEMO.md](_notes/DEMO.md)。
 
 ## 開發流程（每次必須依序執行）
 

@@ -26,6 +26,8 @@ CLAUDE.md（專案根目錄 — 工作指引：概述 / 環境 / 慣例）
 |----------|---------|
 | 系統有哪些功能、操作流程怎麼走 | [OVERVIEW.md](OVERVIEW.md) |
 | 要 demo 給幹部看，照什麼順序點 | [DEMO.md](DEMO.md) |
+| 本機想要有假資料可以點 | [DEMO.md](DEMO.md)（`seed_demo` / `clear_demo`），SETUP 步驟六亦有指路 |
+| `git pull` 之後要跑什麼、ModuleNotFoundError 怎麼辦 | [SETUP.md](SETUP.md) 情境 F |
 | 某個 Model 有哪些欄位 | [Architecture.md](Architecture.md) 三、資料庫設計 |
 | 某個頁面需要什麼權限才能進 | [Architecture.md](Architecture.md) 四、頁面與權限結構 |
 | 目前做到哪個 Phase | [Architecture.md](Architecture.md) 七、開發階段規劃 |
