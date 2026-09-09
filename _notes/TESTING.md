@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-09-07（共 521 個測試）
+> 最後更新：2026-09-09（共 526 個測試）
 
 ---
 
@@ -90,9 +90,9 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **521 個測試**，分布在 8 個 app。
+共 **526 個測試**，分布在 8 個 app。
 
-> 最近一次全站測試：2026-09-07 執行 `python manage.py test`，**521/521 全數通過、無 regression**（System check 亦無問題）。
+> 最近一次全站測試：2026-09-09 執行 `python manage.py test`，**526/526 全數通過、無 regression**（System check 亦無問題）。
 
 ### `apps/accounts/tests.py`（152 個）
 
@@ -132,12 +132,12 @@ python manage.py test --noinput
 | `EventDeleteTest` | 團員/幹部無法刪除、GET 不刪除、管理員 POST 刪除並導回列表、刪除 cascade 排練、刪除按鈕在列表頁與詳情頁皆出現（管理員可見/幹部不可見）|
 | `RehearsalManageTest` | 存取控制（未登入/團員/幹部）、新增排練成功、重複 sequence 被擋、空日期被擋、編輯排練更新 sequence |
 
-### `apps/scores/tests.py`（73 個）
+### `apps/scores/tests.py`（78 個）
 
 | Class | 測試內容 |
 |-------|---------|
 | `ScoreModelValidationTest` | `clean()` 驗證：總譜不可有樂器/聲部/full_score、分譜的 full_score 必須指向總譜；`__str__` 格式（含聲部/不含聲部/總譜） |
-| `ScoreListViewTest` | 存取控制、預設顯示全部、`type` 篩選、`instrument` 篩選、關鍵字搜尋、無結果空狀態、分譜顯示已綁定/未綁定總譜、刪除按鈕限管理員可見 |
+| `ScoreListViewTest` | 存取控制、只列總譜（#13-4：分譜不出現、舊 `?type=part` 網址失效）、分譜份數欄、`instrument` 篩選改篩「有此樂器分譜的總譜」（含去重、排除、份數不受篩選影響）、關鍵字搜尋、無結果空狀態、未綁總譜分譜的幹部限定警告區、刪除按鈕限管理員可見 |
 | `ScoreDetailViewTest` | 存取控制、曲名/作曲顯示、404、無 PDF 顯示提示、麵包屑帶/不帶篩選條件連回列表 |
 | `ScoreCreateViewTest` | 存取控制（未登入/一般團員/幹部）、POST 新增總譜成功並導向詳情頁、POST 新增分譜（含樂器）成功、空曲名不建立記錄、分譜缺樂器不建立記錄、新增分譜時指定 full_score 正確綁定、總譜忽略殘留的 full_score 值 |
 | `ScoreEditViewTest` | 存取控制（未登入/一般團員/幹部）、GET 既有資料預先帶入欄位、404、POST 更新成功、空曲名不更新、未上傳新檔案保留原檔、上傳新檔案取代原檔、編輯分譜可綁定/更新 full_score |
@@ -316,7 +316,6 @@ def test_invalid_state_raises(self):
 | App | 功能 | 說明 |
 |-----|------|------|
 | `public` | `about_manage` / `about_create` / `about_edit` / `about_delete` | 關於百韻內容管理，尚無自動測試 |
-| `scores` | `score_list` 未過濾屬於總譜的分譜 | 分譜目前仍出現在列表，無對應測試 |
 | `scores` | 上傳時的伺服器端 PDF 格式驗證 | 目前僅靠 HTML `accept=".pdf"` 限制 |
 | `meetings` | 所有功能 | Phase 3，尚未實作 |
 | `notifications` | Admin 觸發通知的整合測試 | 需要 mock Admin save_model，目前僅覆蓋 utils 層 |

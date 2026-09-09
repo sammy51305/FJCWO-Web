@@ -18,8 +18,8 @@
 
 {% if not user_family %}
 <div class="alert alert-warning">
-  你的帳號尚未設定樂器族群，無法自動篩選分譜。請洽幹部協助設定，或直接到
-  <a href="{% url 'scores:score_list' %}">樂譜庫存</a> 搜尋下載。
+  你的帳號尚未設定樂器族群，無法自動篩選分譜。請洽幹部協助設定，
+  或到 <a href="{% url 'scores:score_list' %}">樂譜庫存</a> 找到曲目、點「詳細」後從分譜清單自行下載。
 </div>
 {% elif not groups %}
 <div class="alert alert-info">

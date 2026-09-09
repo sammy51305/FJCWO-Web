@@ -221,36 +221,88 @@ class ScoreListViewTest(TestCase):
         r = self.client.get(self.url)
         self.assertEqual(r.status_code, 200)
 
-    # ── T02 列表顯示 ─────────────────────────────────────────
+    # ── T02 列表只列總譜（#13-4）─────────────────────────────
 
-    def test_list_shows_all_scores_by_default(self):
-        """預設顯示所有樂譜"""
+    def test_list_shows_full_scores_only(self):
+        """#13-4：清單只列總譜，分譜（含已綁定與未綁定）完全不出現"""
         self.client.force_login(self.member)
         r = self.client.get(self.url)
         self.assertContains(r, '天空之城')
+        self.assertNotContains(r, '天空之城（單簧管）')
+        self.assertNotContains(r, '孤立分譜（單簧管）')
 
-    def test_filter_by_full_type(self):
-        """type=full 只顯示總譜，不顯示分譜"""
+    def test_type_param_no_longer_shows_parts(self):
+        """
+        #13-4：譜種篩選器已移除。舊網址帶著 ?type=part 進來（書籤、舊連結）
+        不應該變成分譜清單——參數被忽略，仍然只列總譜。
+        """
         self.client.force_login(self.member)
-        r = self.client.get(self.url, {'type': 'full'})
+        r = self.client.get(self.url, {'type': 'part'})
         self.assertContains(r, '天空之城')
         self.assertNotContains(r, '天空之城（單簧管）')
 
-    def test_filter_by_part_type(self):
-        """type=part 只顯示分譜"""
+    def test_part_count_column_shows_number_of_parts(self):
+        """列表顯示每首總譜底下的分譜份數（天空之城有 1 份）"""
         self.client.force_login(self.member)
-        r = self.client.get(self.url, {'type': 'part'})
-        self.assertContains(r, '天空之城（單簧管）')
-        self.assertNotContains(r, self.full_score.title + '</td>')
+        r = self.client.get(self.url)
+        self.assertContains(r, '1 份')
 
-    def test_filter_by_instrument(self):
-        """instrument 篩選只顯示對應樂器的分譜"""
+    def test_full_score_without_parts_shows_placeholder(self):
+        """沒有任何分譜的總譜，分譜欄顯示提示而非 0"""
+        Score.objects.create(title='無分譜曲', score_type=Score.ScoreType.FULL)
         self.client.force_login(self.member)
-        r = self.client.get(self.url, {
-            'type': 'part',
-            'instrument': self.instrument.pk,
-        })
-        self.assertContains(r, '天空之城（單簧管）')
+        r = self.client.get(self.url)
+        self.assertContains(r, '尚未上傳')
+
+    def test_filter_by_instrument_returns_full_scores(self):
+        """
+        #13-4：樂器篩選語意改為「底下有這個樂器分譜的總譜」。
+        總譜本身沒有 instrument 欄位，舊的 filter(instrument_id=...) 會永遠篩不出東西。
+        """
+        self.client.force_login(self.member)
+        r = self.client.get(self.url, {'instrument': self.instrument.pk})
+        self.assertContains(r, '天空之城')
+
+    def test_filter_by_instrument_excludes_full_scores_without_that_part(self):
+        """沒有該樂器分譜的總譜，不應出現在樂器篩選結果中"""
+        Score.objects.create(title='只有總譜的曲子', score_type=Score.ScoreType.FULL)
+        self.client.force_login(self.member)
+        r = self.client.get(self.url, {'instrument': self.instrument.pk})
+        self.assertNotContains(r, '只有總譜的曲子')
+
+    def test_filter_by_instrument_does_not_duplicate_rows(self):
+        """
+        同一總譜底下同一樂器有多個聲部時，join 會產生重複列，
+        view 用 distinct() 去重，總譜只應出現一次。
+        """
+        section2 = SectionType.objects.create(name='第二部')
+        Score.objects.create(
+            title='天空之城（單簧管二）',
+            score_type=Score.ScoreType.PART,
+            instrument=self.instrument,
+            section=section2,
+            full_score=self.full_score,
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(self.url, {'instrument': self.instrument.pk})
+        self.assertEqual(len(r.context['scores']), 1)
+
+    def test_part_count_counts_all_parts_under_instrument_filter(self):
+        """
+        套用樂器篩選時，分譜份數欄仍應是「該總譜的全部分譜數」，
+        而不是被篩選條件縮成「符合該樂器的分譜數」——annotate 在 filter 之前，
+        Django 會另開一個 join 給 filter 用，兩者不共用（此測試釘住這個行為）。
+        """
+        flute = InstrumentType.objects.create(name='長笛', family=self.instrument.family)
+        Score.objects.create(
+            title='天空之城（長笛）',
+            score_type=Score.ScoreType.PART,
+            instrument=flute,
+            full_score=self.full_score,
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(self.url, {'instrument': self.instrument.pk})
+        self.assertEqual(r.context['scores'][0].part_count, 2)
 
     def test_search_by_title(self):
         """q 參數依曲名搜尋"""
@@ -264,20 +316,31 @@ class ScoreListViewTest(TestCase):
         r = self.client.get(self.url, {'q': '完全不存在的曲名xyz'})
         self.assertContains(r, '沒有符合條件的樂譜')
 
-    # ── T03 分譜顯示所屬總譜 ─────────────────────────────────
+    # ── T03 未綁定總譜的分譜（#13-4 衍生）───────────────────
 
-    def test_part_score_shows_bound_full_score(self):
-        """已綁定 full_score 的分譜，列表應顯示所屬總譜名稱"""
-        self.client.force_login(self.member)
-        r = self.client.get(self.url)
-        self.assertContains(r, '屬於')
-        self.assertContains(r, self.full_score.title)
-
-    def test_unbound_part_score_shows_hint(self):
-        """未綁定 full_score 的分譜，列表應顯示未綁定提示"""
-        self.client.force_login(self.member)
+    def test_orphan_part_listed_for_officer(self):
+        """
+        分譜不再列在清單上之後，沒綁總譜的分譜就失去所有入口，
+        因此列在幹部限定的警告區塊裡，讓幹部點進去補綁定。
+        """
+        self.client.force_login(self.officer)
         r = self.client.get(self.url)
         self.assertContains(r, '未綁定總譜')
+        self.assertContains(r, '孤立分譜（單簧管）')
+
+    def test_orphan_part_not_listed_for_member(self):
+        """一般團員看不到未綁定分譜的警告區塊（那是幹部要處理的資料錯誤）"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertNotContains(r, '孤立分譜（單簧管）')
+
+    def test_orphan_block_absent_when_all_parts_bound(self):
+        """所有分譜都綁好總譜時，不顯示警告區塊"""
+        self.unbound_part_score.full_score = self.full_score
+        self.unbound_part_score.save()
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertNotContains(r, '份分譜未綁定總譜')
 
     # ── T04 刪除按鈕：限管理員 ───────────────────────────────
 
@@ -353,12 +416,12 @@ class ScoreDetailViewTest(TestCase):
 
     def test_breadcrumb_preserves_list_query_params(self):
         """
-        從列表帶著篩選條件（如 ?type=full）進入詳情頁時，
+        從列表帶著篩選條件（如 ?q=天空）進入詳情頁時，
         麵包屑「樂譜庫存」連結應帶回同樣的篩選條件，而不是導回無篩選的預設列表。
         """
         self.client.force_login(self.member)
-        r = self.client.get(self.url, {'type': 'full'})
-        self.assertContains(r, f'{reverse("scores:score_list")}?type=full')
+        r = self.client.get(self.url, {'q': '天空'})
+        self.assertContains(r, f'{reverse("scores:score_list")}?q=')
 
     def test_breadcrumb_without_query_params_links_to_plain_list(self):
         """直接進入詳情頁（沒有帶篩選條件）時，麵包屑應連回不帶查詢字串的列表頁"""

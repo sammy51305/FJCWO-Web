@@ -3,7 +3,7 @@
 {% block title %}樂譜庫存 — 百韻管樂團{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-1">
   <h2 class="mb-0">樂譜庫存</h2>
   {% if user.is_officer %}
   <a href="{% url 'scores:score_create' %}" class="btn btn-primary btn-sm">
@@ -11,6 +11,9 @@
   </a>
   {% endif %}
 </div>
+<p class="text-muted small mb-3">
+  清單只列總譜；各樂器分譜請點進總譜的「詳細」頁查看與下載。
+</p>
 
 <!-- 篩選列 -->
 <form method="get" class="row g-2 mb-4">
@@ -19,17 +22,10 @@
            placeholder="搜尋曲名…" value="{{ query }}">
   </div>
   <div class="col-auto">
-    <select name="type" class="form-select form-select-sm" onchange="this.form.submit()">
-      <option value="" {% if not selected_type %}selected{% endif %}>全部</option>
-      <option value="full" {% if selected_type == 'full' %}selected{% endif %}>總譜</option>
-      <option value="part" {% if selected_type == 'part' %}selected{% endif %}>分譜</option>
-    </select>
-  </div>
-  <div class="col-auto">
     <select name="instrument" class="form-select form-select-sm"
             onchange="this.form.submit()"
-            {% if selected_type == 'full' %}disabled title="總譜不依樂器篩選"{% endif %}>
-      <option value="">所有樂器</option>
+            title="篩出「底下有這個樂器分譜」的總譜">
+      <option value="">不限分譜樂器</option>
       {% for inst in instruments %}
       <option value="{{ inst.pk }}" {% if selected_instrument == inst.pk|stringformat:"s" %}selected{% endif %}>
         {{ inst.name }}
@@ -39,7 +35,7 @@
   </div>
   <div class="col-auto">
     <button type="submit" class="btn btn-sm btn-primary">搜尋</button>
-    {% if query or selected_type or selected_instrument %}
+    {% if query or selected_instrument %}
     <a href="{% url 'scores:score_list' %}" class="btn btn-sm btn-outline-secondary">清除</a>
     {% endif %}
   </div>
@@ -52,7 +48,7 @@
       <tr>
         <th>曲名</th>
         <th>作曲/編曲</th>
-        <th>類型</th>
+        <th class="text-end">分譜</th>
         <th>版權</th>
         <th class="text-end">實體數量</th>
         <th></th>
@@ -72,20 +68,11 @@
           {% if score.composer and score.arranger %} / {% endif %}
           {% if score.arranger %}編：{{ score.arranger }}{% endif %}
         </td>
-        <td>
-          {% if score.score_type == 'full' %}
-            <span class="badge bg-primary">總譜</span>
+        <td class="text-end">
+          {% if score.part_count %}
+            <span class="badge bg-secondary">{{ score.part_count }} 份</span>
           {% else %}
-            <span class="badge bg-secondary">分譜</span>
-            {% if score.instrument %}
-              <small class="ms-1">{{ score.instrument.name }}{% if score.section %}・{{ score.section.name }}{% endif %}</small>
-            {% endif %}
-            <br>
-            {% if score.full_score %}
-              <small class="text-muted">屬於《<a href="{% url 'scores:score_detail' score.full_score.pk %}">{{ score.full_score.title }}</a>》</small>
-            {% else %}
-              <small class="text-muted fst-italic">未綁定總譜</small>
-            {% endif %}
+            <span class="text-muted small">尚未上傳</span>
           {% endif %}
         </td>
         <td>
@@ -107,7 +94,7 @@
             <form method="post" action="{% url 'scores:score_delete' score.pk %}" class="d-inline">
               {% csrf_token %}
               <button type="submit" class="btn btn-sm btn-outline-danger"
-                      onclick="return confirm('確定要刪除樂譜《{{ score.title }}》嗎？{% if score.score_type == 'full' %}此操作將一併刪除所有分譜。{% endif %}無法復原。')">
+                      onclick="return confirm('確定要刪除總譜《{{ score.title }}》嗎？此操作將一併刪除所有分譜，無法復原。')">
                 <i class="bi bi-trash"></i>
               </button>
             </form>
@@ -123,12 +110,36 @@
 <p class="text-muted">沒有符合條件的樂譜。</p>
 {% endif %}
 
+{% if orphan_parts %}
+{# 分譜不再列在清單上，沒綁總譜的分譜等於失去入口；列出來讓幹部點進去補綁定 #}
+<div class="card border-warning mt-4">
+  <div class="card-header text-warning fw-semibold">
+    <i class="bi bi-exclamation-triangle"></i> 有 {{ orphan_parts|length }} 份分譜未綁定總譜
+  </div>
+  <div class="card-body">
+    <p class="small text-muted mb-2">
+      分譜應掛在所屬總譜底下才找得到。以下分譜沒有指定總譜，請點進去編輯、補上「所屬總譜」。
+    </p>
+    <ul class="list-unstyled mb-0">
+      {% for part in orphan_parts %}
+      <li class="small mb-1">
+        <a href="{% url 'scores:score_detail' part.pk %}">{{ part.title }}</a>
+        {% if part.instrument %}
+        <span class="text-muted">（{{ part.instrument.name }}{% if part.section %}・{{ part.section.name }}{% endif %}）</span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
 {% if page_obj.has_other_pages %}
 <nav class="mt-3">
   <ul class="pagination pagination-sm justify-content-center">
     {% if page_obj.has_previous %}
     <li class="page-item">
-      <a class="page-link" href="?{% if query %}q={{ query }}&{% endif %}{% if selected_type %}type={{ selected_type }}&{% endif %}{% if selected_instrument %}instrument={{ selected_instrument }}&{% endif %}page={{ page_obj.previous_page_number }}">上一頁</a>
+      <a class="page-link" href="?{% if query %}q={{ query }}&{% endif %}{% if selected_instrument %}instrument={{ selected_instrument }}&{% endif %}page={{ page_obj.previous_page_number }}">上一頁</a>
     </li>
     {% endif %}
     <li class="page-item disabled">
@@ -136,7 +147,7 @@
     </li>
     {% if page_obj.has_next %}
     <li class="page-item">
-      <a class="page-link" href="?{% if query %}q={{ query }}&{% endif %}{% if selected_type %}type={{ selected_type }}&{% endif %}{% if selected_instrument %}instrument={{ selected_instrument }}&{% endif %}page={{ page_obj.next_page_number }}">下一頁</a>
+      <a class="page-link" href="?{% if query %}q={{ query }}&{% endif %}{% if selected_instrument %}instrument={{ selected_instrument }}&{% endif %}page={{ page_obj.next_page_number }}">下一頁</a>
     </li>
     {% endif %}
   </ul>
