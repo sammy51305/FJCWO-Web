@@ -1,3 +1,7 @@
+import re
+from pathlib import Path
+
+from django.conf import settings
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -506,3 +510,33 @@ class RobotsTxtTest(TestCase):
     def test_no_header_in_normal_mode(self):
         """正式站模式不加 header，公開頁才收錄得到"""
         self.assertNotIn('X-Robots-Tag', self.client.get('/'))
+
+
+class TemplateCommentSyntaxTest(TestCase):
+    """模板註解語法檢查：`{# #}` 只能單行，多行會整段印在頁面上"""
+
+    # 換行夾在 {# 與 #} 之間 → Django 不視為註解，原樣輸出給使用者看
+    MULTILINE_HASH_COMMENT = re.compile(r'\{#(?:(?!#\}).)*?\n(?:(?!#\}).)*?#\}', re.S)
+
+    def test_no_multiline_hash_comments(self):
+        """
+        Django 的 `{# #}` **只支援單行**，中間有換行就不是註解，
+        整段（含 `{#`、`#}`）會原樣渲染到頁面上被使用者看到。多行註解要用
+        `{% comment %}...{% endcomment %}`。
+
+        2026-09-09 一次抓到 5 處，橫跨 #11／#13-4／#13-8／#13-9 與入團申請刪除權限，
+        其中幾處已經漏在畫面上一段時間——一般的 view 測試抓不到（頁面照樣 200、
+        該有的元素也都在），只有真的用眼睛看才會發現，所以改用這種結構檢查釘住。
+        """
+        offenders = []
+        for template_dir in settings.TEMPLATES[0]['DIRS']:
+            for path in sorted(Path(template_dir).rglob('*.html')):
+                text = path.read_text(encoding='utf-8')
+                for match in self.MULTILINE_HASH_COMMENT.finditer(text):
+                    line = text[:match.start()].count('\n') + 1
+                    offenders.append(f'{path}:{line}')
+        self.assertEqual(
+            offenders, [],
+            '以下位置用了多行 {# #}，會直接印在頁面上，請改成 '
+            '{% comment %}...{% endcomment %}：\n  ' + '\n  '.join(offenders)
+        )
