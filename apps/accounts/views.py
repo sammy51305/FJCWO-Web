@@ -16,6 +16,7 @@ from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .forms import BootstrapAuthenticationForm, ProfileForm
+from .imports import ImportError_, normalize_instrument, parse_csv, parse_date
 from .models import (
     InstrumentFamily, InstrumentType, Registration, SectionType, User,
     validate_national_id,
@@ -755,6 +756,66 @@ def registration_status(request):
     })
 
 
+def _approve_registration(reg, reviewer):
+    """核准一筆申請並建立帳號，回傳 (成功?, 說明)。單筆與批次共用同一套規則。"""
+    if reg.status != Registration.Status.PENDING:
+        return False, '狀態不是待審核'
+    if not reg.email:
+        return False, '沒有 Email，無法建立帳號'
+    if User.objects.filter(email=reg.email).exists():
+        return False, f'{reg.email} 已有帳號'
+
+    _, username, password, email_sent = _create_member_with_temp_password(
+        name=reg.name, email=reg.email,
+        instrument=reg.instrument, section=reg.section,
+        grad_year=reg.grad_year, phone=reg.phone,
+        birth_date=reg.birth_date, address=reg.address,
+        national_id=reg.national_id, line_id=reg.line_id,
+        alumni_info=reg.alumni_info,
+    )
+    reg.status = Registration.Status.APPROVED
+    reg.reviewed_by = reviewer
+    reg.reviewed_at = timezone.now()
+    reg.save()
+    if email_sent:
+        return True, ''
+    # 寄信失敗不讓核准失敗——帳號已經建好了，退回顯示帳密讓幹部自行轉達
+    return True, f'寄信失敗，帳號：{username}，臨時密碼：{password}'
+
+
+def _bulk_approve_registrations(request):
+    """批次核准勾選的申請（#11）。
+
+    **一筆失敗不影響其他筆**：300 筆裡有幾筆 Email 撞號是常態，
+    整批 rollback 只會讓幹部無從下手。失敗的逐筆列出原因，成功的照常建帳號。
+    """
+    ids = request.POST.getlist('reg_ids')
+    if not ids:
+        messages.error(request, '請先勾選要核准的申請。')
+        return redirect('accounts:registration_review')
+
+    approved, failed, mail_failures = 0, [], []
+    for reg in Registration.objects.filter(pk__in=ids, status=Registration.Status.PENDING):
+        ok, note = _approve_registration(reg, request.user)
+        if not ok:
+            failed.append(f'{reg.name}（{note}）')
+        else:
+            approved += 1
+            if note:
+                mail_failures.append(f'{reg.name} — {note}')
+
+    if approved:
+        messages.success(request, f'已核准 {approved} 筆，帳號密碼已寄出。')
+    if mail_failures:
+        messages.warning(
+            request,
+            '以下帳號建立成功但寄信失敗，請自行告知本人：' + '；'.join(mail_failures)
+        )
+    if failed:
+        messages.error(request, '以下未能核准：' + '；'.join(failed))
+    return redirect('accounts:registration_review')
+
+
 @login_required
 def registration_review(request):
     """幹部審核／管理校友報到申請：核准、拒絕、重新開放審核"""
@@ -765,6 +826,12 @@ def registration_review(request):
     if request.method == 'POST':
         reg_id = request.POST.get('reg_id')
         action = request.POST.get('action')
+
+        # 批次核准（#11）：勾選多筆一次處理。逐筆結果彙整成一則訊息，
+        # 不是每筆各噴一條——300 筆會把畫面洗掉。
+        if action == 'bulk_approve':
+            return _bulk_approve_registrations(request)
+
         reg = Registration.objects.filter(pk=reg_id).first()
 
         if reg and action == 'approve' and reg.status == Registration.Status.PENDING:
@@ -829,6 +896,111 @@ def registration_review(request):
         'status_choices': Registration.Status.choices,
         'pending_count': Registration.objects.filter(status=Registration.Status.PENDING).count(),
     })
+
+
+@login_required
+def registration_import(request):
+    """CSV 批次匯入報到申請（#11）。
+
+    **匯入目標是 Registration 而非直接建 User**：DESIGN §4.2 訂了「Registration 是這個帳號
+    怎麼來的唯一紀錄」，直接建 User 會讓這批帳號沒有來源、破壞稽核原則。代價是多一道核准，
+    用批次核准解決。
+
+    **一步匯入 ＋ 詳細報告，不做預覽確認制**：預覽要在兩個 request 之間保存解析結果，
+    而那裡面有身分證字號——存進 session 就是明文落在 django_session 表，
+    直接抵銷掉欄位加密（#13-1 決定二）。改用「錯誤列不寫入 ＋ 以 Email 冪等」達到同樣效果：
+    幹部照報告修好 CSV 重傳，不會產生重複。
+
+    **有問題的列一律列出來、不靜默略過**（DESIGN #11 風險表要求）。
+    """
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('accounts:registration_review')
+
+    result = None
+    if request.method == 'POST' and request.FILES.get('csv_file'):
+        upload = request.FILES['csv_file']
+        if upload.size > 5 * 1024 * 1024:
+            messages.error(request, '檔案過大（上限 5 MB）。')
+        else:
+            try:
+                rows, _ = parse_csv(upload.read())
+            except ImportError_ as exc:
+                messages.error(request, str(exc))
+            else:
+                result = _import_registration_rows(rows)
+                messages.success(
+                    request,
+                    f'匯入完成：新增 {len(result["created"])} 筆、'
+                    f'略過 {len(result["skipped"])} 筆。'
+                )
+
+    return render(request, 'accounts/registration_import.html', {'result': result})
+
+
+def _import_registration_rows(rows):
+    """把解析後的列寫進 Registration，回傳 {'created': [...], 'skipped': [...]}。
+
+    略過的原因逐列記下來給幹部處理——「哪幾筆沒進去、為什麼」是這個功能最重要的輸出，
+    比「成功幾筆」更需要看得清楚。
+    """
+    families = {f.name: f for f in InstrumentFamily.objects.all()}
+    existing_user_emails = set(
+        User.objects.exclude(email=None).values_list('email', flat=True)
+    )
+
+    created, skipped = [], []
+    seen_emails = set()
+
+    for line_no, row in enumerate(rows, start=2):     # 第 1 列是標題
+        name = row.get('name', '')
+        email = row.get('email', '')
+        label = name or f'第 {line_no} 列'
+
+        # 沒有 Email 就產不出 username、也寄不出臨時密碼，整條鏈路斷在這裡。
+        # 這是實際回覆裡最常見的缺漏（Email 那題是後來才加的），所以訊息要講清楚怎麼補。
+        if not email:
+            skipped.append((label, '缺 Email——無法建立帳號，請向本人補齊後重新匯入'))
+            continue
+        if not name:
+            skipped.append((f'第 {line_no} 列', '缺姓名'))
+            continue
+        if email in seen_emails:
+            skipped.append((label, f'同一份檔案裡 Email 重複（{email}）'))
+            continue
+        seen_emails.add(email)
+        if email in existing_user_emails:
+            skipped.append((label, f'{email} 已有系統帳號'))
+            continue
+        if Registration.objects.filter(email=email).exists():
+            skipped.append((label, f'{email} 已有申請紀錄（重複匯入會跳過）'))
+            continue
+
+        # 樂器對不上就留空給幹部指定，不猜——但要讓幹部知道有這件事
+        instrument_name = normalize_instrument(row.get('instrument', ''))
+        instrument = families.get(instrument_name)
+        notes = []
+        if instrument_name and instrument is None:
+            notes.append(f'樂器「{row.get("instrument")}」對不上系統樂器族群，已留空')
+
+        birth_date = parse_date(row.get('birth_date', ''))
+        if row.get('birth_date') and birth_date is None:
+            notes.append(f'出生年月日「{row.get("birth_date")}」格式無法辨識，已留空')
+
+        Registration.objects.create(
+            name=name,
+            email=email,
+            phone=row.get('phone', ''),
+            address=row.get('address', ''),
+            line_id=row.get('line_id', ''),
+            national_id=row.get('national_id', '').strip().upper(),
+            alumni_info=row.get('alumni_info', ''),
+            birth_date=birth_date,
+            instrument=instrument,
+        )
+        created.append((label, '；'.join(notes)))
+
+    return {'created': created, 'skipped': skipped}
 
 
 @login_required

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}批次匯入入團申請 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'accounts:registration_review' %}">校友報到審核</a></li>
+    <li class="breadcrumb-item active">批次匯入</li>
+  </ol>
+</nav>
+
+<h2 class="mb-4">批次匯入入團申請</h2>
+
+<div class="row">
+  <div class="col-lg-7">
+    <form method="post" enctype="multipart/form-data" class="card mb-4">
+      {% csrf_token %}
+      <div class="card-body">
+        <label class="form-label fw-semibold">Google 表單回覆的 CSV 檔</label>
+        <input type="file" name="csv_file" accept=".csv,text/csv" class="form-control mb-3" required>
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-upload"></i> 上傳並匯入
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card bg-light mb-4">
+      <div class="card-body small">
+        <p class="fw-semibold mb-2">匯入前請先確認</p>
+        <ul class="mb-2 ps-3">
+          <li>在 Google 表單的回覆頁選「下載回覆 (.csv)」</li>
+          <li><strong>第一列必須是題目標題</strong>，欄位靠標題文字對應，順序不拘</li>
+          <li>缺 Email 的列會被略過 —— 沒有 Email 就產不出帳號</li>
+        </ul>
+        <p class="mb-0 text-muted">
+          匯入只會建立「待審核」的申請紀錄，<strong>不會直接建帳號、不會寄信</strong>。
+          確認資料無誤後，再到審核頁批次核准。
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if result %}
+<h5 class="mb-3">匯入結果</h5>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="fs-3 fw-semibold text-success">{{ result.created|length }}</div>
+        <div class="small text-muted">已新增</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="fs-3 fw-semibold text-secondary">{{ result.skipped|length }}</div>
+        <div class="small text-muted">略過</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if result.skipped %}
+<div class="alert alert-warning">
+  <p class="fw-semibold mb-2"><i class="bi bi-exclamation-triangle me-1"></i> 以下未匯入，請處理後重新上傳</p>
+  <p class="small mb-2 text-muted">重複匯入同一份檔案不會產生重複資料，修好後整份重傳即可。</p>
+  <ul class="mb-0 small">
+    {% for label, reason in result.skipped %}
+    <li><strong>{{ label }}</strong> —— {{ reason }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if result.created %}
+<div class="table-responsive">
+  <table class="table table-sm align-middle">
+    <thead class="table-light">
+      <tr>
+        <th style="width: 14rem;">已新增</th>
+        <th>備註</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for label, note in result.created %}
+      <tr>
+        <td>{{ label }}</td>
+        <td class="small {% if note %}text-warning-emphasis{% else %}text-muted{% endif %}">
+          {{ note|default:"—" }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<a href="{% url 'accounts:registration_review' %}" class="btn btn-primary">
+  前往審核頁批次核准 →
+</a>
+{% endif %}
+{% endif %}
+{% endblock %}
