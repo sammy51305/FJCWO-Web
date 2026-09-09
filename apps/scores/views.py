@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
+from django.db.models import Count
 from django.db.models.deletion import ProtectedError
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -14,16 +15,27 @@ from .models import Score
 
 @login_required
 def score_list(request):
-    scores = Score.objects.select_related('instrument', 'section', 'parent_score', 'full_score')
+    """
+    #13-4：清單只列總譜，分譜完全不出現——要看分譜一律從總譜詳情頁進去。
 
-    score_type = request.GET.get('type', '')
+    連帶兩項調整：
+    - 「譜種」篩選器移除（清單只剩一種譜種，篩了也沒意義）。
+    - 「樂器」篩選器改變語意：總譜本身沒有 instrument 欄位，樂器是分譜才有的屬性，
+      直接沿用舊的 `filter(instrument_id=...)` 會永遠篩不出東西。改成篩
+      「底下有這個樂器分譜的總譜」，正好對應幹部實際想問的「哪幾首有單簧管分譜」。
+    """
+    scores = (
+        Score.objects.filter(score_type=Score.ScoreType.FULL)
+        .select_related('parent_score')
+        .annotate(part_count=Count('parts'))
+    )
+
     instrument_id = request.GET.get('instrument', '')
     query = request.GET.get('q', '').strip()
 
-    if score_type in ('full', 'part'):
-        scores = scores.filter(score_type=score_type)
     if instrument_id:
-        scores = scores.filter(instrument_id=instrument_id)
+        # 一首總譜底下同一樂器可能有多個聲部，join 會產生重複列，需要 distinct
+        scores = scores.filter(parts__instrument_id=instrument_id).distinct()
     if query:
         scores = scores.filter(title__icontains=query)
 
@@ -33,13 +45,23 @@ def score_list(request):
 
     instruments = InstrumentType.objects.select_related('family').all()
 
+    # 分譜不再出現在清單上之後，沒綁總譜的分譜就沒有任何入口可以走到——
+    # 那是資料錯誤（分譜本來就該掛在總譜下），列給幹部看，讓他們點進去補綁定。
+    orphan_parts = []
+    if request.user.is_officer:
+        orphan_parts = list(
+            Score.objects.filter(score_type=Score.ScoreType.PART, full_score__isnull=True)
+            .select_related('instrument', 'section')
+            .order_by('title')
+        )
+
     return render(request, 'scores/score_list.html', {
         'page_obj': page,
         'scores': page.object_list,
         'instruments': instruments,
-        'selected_type': score_type,
         'selected_instrument': instrument_id,
         'query': query,
+        'orphan_parts': orphan_parts,
     })
 
 

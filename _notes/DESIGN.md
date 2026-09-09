@@ -1440,19 +1440,62 @@ available_scores = Score.objects.filter(score_type=Score.ScoreType.FULL)
 
 **登入者可用**，一般團員與幹部皆可瀏覽。
 
-#### score_list：篩選與分頁
+#### score_list：只列總譜（#13-4）
+
+清單**固定只列總譜，分譜完全不出現**——要看分譜一律從總譜詳情頁進去：
 
 ```python
-# 三個可組合的篩選條件（均透過 GET 參數傳入）
-score_type    = request.GET.get('type', '')       # 'full' 或 'part'
-instrument_id = request.GET.get('instrument', '') # 樂器 ID
-query         = request.GET.get('q', '').strip()  # 曲名關鍵字（icontains）
+scores = (
+    Score.objects.filter(score_type=Score.ScoreType.FULL)
+    .annotate(part_count=Count('parts'))
+)
 
-# 每頁 30 筆
-paginator = Paginator(scores, 30)
+instrument_id = request.GET.get('instrument', '')  # 樂器 ID
+query         = request.GET.get('q', '').strip()   # 曲名關鍵字（icontains）
+
+if instrument_id:
+    scores = scores.filter(parts__instrument_id=instrument_id).distinct()
+
+paginator = Paginator(scores, 30)  # 每頁 30 筆
 ```
 
-三個條件可以自由組合，例如「只看長笛分譜」或「搜尋包含 '星' 字的曲子」。
+**為什麼分譜不列**：一首曲子動輒 20〜30 份分譜，混在清單裡會把總譜完全淹沒，
+而「找某首曲子的某個分譜」的實際動線本來就是「先找到曲子、再挑聲部」，
+總譜詳情頁的分譜清單正好就是那一步。演出當天的分譜下載另有 `performance_parts` 專屬入口。
+
+**連帶的兩項調整**：
+
+| 項目 | 改法 | 原因 |
+|------|------|------|
+| 「譜種」篩選器 | 移除 | 清單只剩一種譜種，篩了沒意義 |
+| 「樂器」篩選器 | 語意改為「底下有這個樂器分譜的總譜」 | 樂器是分譜才有的屬性（`Score.instrument`），總譜恆為 `NULL`；沿用舊的 `filter(instrument_id=...)` 會永遠篩不出東西 |
+
+樂器篩選改走 `parts__instrument_id` 反向 join。同一總譜底下同一樂器可能有多個聲部
+（第一部／第二部…），join 會產生重複列，**必須加 `distinct()`**。
+
+「類型」欄位（每列都是「總譜」，沒有資訊量）改為 **分譜份數**，用 `annotate(Count('parts'))`
+一次算完，避免每列各發一次 count 查詢。
+
+#### 未綁定總譜的分譜：清單頁的幹部警告區
+
+`Score.full_score` 是 `null=True`，`clean()` 也沒強制分譜必須綁總譜，
+因此可能存在「分譜但沒有所屬總譜」的資料。**#13-4 之後這種資料會失去所有入口**——
+清單不列分譜，總譜詳情頁又找不到它，等於憑空消失。
+
+不改 model（加 NOT NULL 要處理既有資料、且 `score_parts_manage` 上傳的分譜本來就一定有總譜），
+改在 `score_list` 撈出這批孤兒、以**幹部限定**的警告卡片列出，點進去可編輯補綁定：
+
+```python
+orphan_parts = []
+if request.user.is_officer:
+    orphan_parts = list(
+        Score.objects.filter(score_type=Score.ScoreType.PART, full_score__isnull=True)
+        ...
+    )
+```
+
+一般團員看不到——那是資料錯誤，不是他們要處理的事。
+分譜詳情頁同步補上「所屬總譜」連結（沒綁的顯示警告），讓進到分譜頁時有回頭路。
 
 #### 麵包屑保留列表篩選條件
 
@@ -1460,7 +1503,7 @@ paginator = Paginator(scores, 30)
 都用 `{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}` 把目前的 query string 原樣轉發：
 
 ```
-score_list（?type=full&q=天空）→ 詳細 → score_detail?type=full&q=天空 → 麵包屑 → score_list?type=full&q=天空
+score_list（?q=天空&instrument=3）→ 詳細 → score_detail?q=天空&instrument=3 → 麵包屑 → score_list?q=天空&instrument=3
 ```
 
 純 template 端處理，不需要 view 額外傳參數（`request` context processor 已在 `settings.py` 啟用）。
@@ -1896,7 +1939,7 @@ lookup table 也順便避免逐位團員各查一次的 N+1。
 | ✅ | #13-1 團員資料必填欄位大改 | **全部完成**（2026-09-08）：三個決定皆定案並實作，見 §4.2 |
 | ✅ | #11 校友名單批次匯入（Google 表單 → 系統） | **已完成**（2026-09-08，見該節）；待幹部補齊 13 筆缺漏的 Email 後即可實際匯入 |
 | ✅ | #10 部署 Web 供幹部測試 | **已完成**：測試站上線（Render＋Neon）、robots.txt、SMTP 皆就緒 |
-| **P1** | #13-4 樂譜庫存清單只列總譜 | 方向定案，可直接實作（#13-3／#13-5／#13-6／#13-7／#13-8 已完成）|
+| ✅ | #13-4 樂譜庫存清單只列總譜 | **已完成**（2026-09-09，見 §4.8）：清單固定只列總譜、譜種篩選移除、樂器篩選改篩「有此樂器分譜的總譜」，並補未綁定分譜的幹部警告區 |
 | **P1** | #12 首頁待審核提醒不完整（幹部漏審風險） | 方向已明確，可直接實作 |
 | **P2** | #13-2 / #13-9 / #13-10（改名、請假提示、保險費分類）| 小改，可順手做 |
 | **P2** | #14 分部長（聲部負責人） | 由 #13-9 衍生，實作方式待決定 |
@@ -2594,7 +2637,7 @@ demo 給幹部看之後收到的 10 項改動需求，**2026-08-12 當晚已逐�
 | 1 | 團員資料必填欄位大改（見下） | **P0** | ✅ 已完成（2026-09-08），三個決定皆定案並實作，見 §4.2 |
 | 2 | 「校友報到申請」改名為「入團申請」 | P2 | 已定案，純顯示文字 |
 | 3 | 公告分**上中下三欄**（幹部／團員／公開）＋修 nav bug | P1 | ✅ 已完成（2026-08-29），見 §4.10 |
-| 4 | 樂譜庫存清單只列總譜，分譜只在詳情看 | P1 | 已定案（語意已澄清）|
+| 4 | 樂譜庫存清單只列總譜，分譜只在詳情看 | P1 | ✅ 已完成（2026-09-09）|
 | 5 | 演出加「確認演出意願」＋意願統計，未表態列**待確認** | P1 | ✅ 已完成（2026-09-07），見 §4.22 |
 | 6 | **廢掉**演出請假，演出視為最後一場排練 | P1 | ✅ 已完成（2026-09-07），見 §4.22 |
 | 7 | 請假鎖在排練當天 23:59（+1 分鐘後不能申請）| P1 | ✅ 已完成（2026-09-09），見 §4.6 |
@@ -2750,6 +2793,13 @@ demo 給幹部看之後收到的 10 項改動需求，**2026-08-12 當晚已逐�
 實作：`score_list` 固定 `filter(score_type='full')`，詳情頁列出該總譜的分譜
 （`full_score` 反向關聯）。連帶「譜種」篩選器失去意義可一併移除，
 但**樂器篩選要重新考慮**——分譜才有樂器屬性，總譜沒有，現行的樂器篩選套在只有總譜的清單上會篩不出東西。
+
+> ✅ **已於 2026-09-09 實作完成**（見 §4.8）。三項決定：
+> - **樂器篩選**改成篩「底下有這個樂器分譜的總譜」（`parts__instrument_id` ＋ `distinct()`），
+>   而不是移除——這正好對應幹部實際想問的「哪幾首有單簧管分譜」，比拿掉更有用。
+> - **「類型」欄改成分譜份數**：清單只剩總譜後該欄每列都一樣，沒有資訊量。
+> - **意外發現的洞**：`full_score` 可為 NULL，改版後這種「孤兒分譜」會失去所有入口、
+>   等於從系統中消失。加了幹部限定的警告區列出並可點進去補綁定（不動 model）。
 
 #### 第 9 項：先做靜態提示文字
 
