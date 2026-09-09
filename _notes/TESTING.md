@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-09-07（共 509 個測試）
+> 最後更新：2026-09-07（共 521 個測試）
 
 ---
 
@@ -90,9 +90,9 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **509 個測試**，分布在 8 個 app。
+共 **521 個測試**，分布在 8 個 app。
 
-> 最近一次全站測試：2026-09-07 執行 `python manage.py test`，**509/509 全數通過、無 regression**（System check 亦無問題）。
+> 最近一次全站測試：2026-09-07 執行 `python manage.py test`，**521/521 全數通過、無 regression**（System check 亦無問題）。
 
 ### `apps/accounts/tests.py`（152 個）
 
@@ -115,16 +115,17 @@ python manage.py test --noinput
 | `MemberDirectoryReportTest` | 通訊錄列印報表：存取控制（未登入/一般團員無權限含電話Email→導回通訊錄/幹部可看）、顯示姓名電話Email、依樂器族群分組、列印按鈕、status 篩選（預設在團排除退團、inactive、all）|
 | `GuestManageTest` | 客座團員（槍手）管理：存取控制、CRUD（新增設 role=guest／不可登入／空 email 存 NULL、姓名必填、email 重複擋、編輯、刪除）、轉正（改 member／補 email／開通登入／強制改密碼、缺 email 擋）、資安（guest 即使有密碼也被登入表單擋、通訊錄排除 guest、guest 列表顯示）|
 
-### `apps/events/tests.py`（126 個）
+### `apps/events/tests.py`（138 個）
 
 | Class | 測試內容 |
 |-------|---------|
 | `LeaveRequestTestCase` | 請假申請的存取控制、空白/空白原因被擋、正常送出、重複申請防止、我的紀錄、幹部審核（核准/拒絕）、核准後同步出席紀錄、核准不覆寫已簽到的 PRESENT 紀錄、核准/拒絕後 result_seen 設為 False、刪除請假紀錄限管理員 |
+| `LeaveDeadlineTestCase` | #13-7／#13-8 請假截止：截止為排練當天 23:59（非開始時刻）、**用本地時區日期避免 UTC 少算一天**、排練已開始但當天仍可請假、隔天關閉、server 端擋直接 POST、演出表態共用同一條規則、過截止且無紀錄在報表算缺席、未到截止維持無紀錄、過期按鈕換色換文字與禁止游標 |
 | `PerformanceIntentTestCase` | 演出出席意願三態（#13-6）：存取控制、確認參加、不參加需填原因、改回確認要清掉原因、可反覆改且不產生第二筆、演出開始後鎖住、無效值與 GET 不改狀態、intent 與 attended 互不影響、統計頁限幹部、三態計數、**沒有紀錄的人要出現在待確認名單**、依聲部分組、顯示不參加原因、排除客座團員、詳情頁表態入口與目前狀態、我的請假頁不再有演出請假 |
 | `EventViewsTest` | 演出活動列表/詳情、排練詳情、摘要/備註顯示、申請請假按鈕（未來啟用/過去停用）、活動詳情頁請假捷徑連結（未來顯示/過去不顯示）|
 | `QRCodeTest` | QR 管理頁存取控制、產生 token、重新產生換 UUID、小時數邊界、停用/啟用 toggle、簽到頁顯示、已簽到提示、簽到確認建立出席紀錄 |
 | `SetlistManageTest` | 曲目管理存取控制、新增總譜成功、新增分譜被擋（404）、重複順序被擋、移除曲目 |
-| `AttendanceReportTest` | 存取控制（未登入/一般團員/幹部）、404、出席/請假/無紀錄分類計數、個人出席率計算 |
+| `AttendanceReportTest` | 存取控制（未登入/一般團員/幹部）、404、出席/請假分類計數、**「無紀錄」只保留給未過截止的排練（已過截止無紀錄＝缺席，#13-7）**、個人出席率計算 |
 | `LeaveStatsTest` | 存取控制、預設最新活動、排練層計數（核准/待審）、個人層出現、按總次數遞減排序 |
 | `LeaveRequestPastRehearsalTest` | 直接 POST 到已結束排練的請假 URL 應被 server-side 阻擋 |
 | `EventManageTest` | 存取控制（未登入/團員/幹部）、新增演出活動成功、空名稱被擋、已取消活動不出現在列表（role=admin 仍看得到）、編輯活動更新資料庫、不存在 pk 回 404 |

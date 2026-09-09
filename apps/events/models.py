@@ -1,3 +1,4 @@
+import datetime as dt
 import uuid
 
 from django.conf import settings
@@ -6,6 +7,23 @@ from django.db import models
 from django.utils import timezone
 
 from apps.public.models import Venue
+
+
+def day_end(moment):
+    """回傳 moment **當天**（本地時區）的 23:59:59.999999。
+
+    #13-7 定案：請假／表態的截止點是「當天 23:59」，不是「開始時刻」。
+    `Rehearsal` 只有單一 `date`、沒有結束時間，所以由**日期部分**推算——
+    這是刻意的推導，不是欄位缺漏。
+
+    用本地時區的日期而非 UTC 的：資料庫存 UTC，直接取 `.date()` 在台灣時間的
+    清晨或深夜會算錯一天（例如台北 8/15 07:00 的排練，UTC 是 8/14 23:00）。
+    """
+    local = timezone.localtime(moment)
+    return timezone.make_aware(
+        dt.datetime.combine(local.date(), dt.time.max),
+        timezone.get_current_timezone(),
+    )
 
 
 class PerformanceEvent(models.Model):
@@ -38,6 +56,15 @@ class PerformanceEvent(models.Model):
     def __str__(self):
         return self.name
 
+    @property
+    def intent_deadline(self):
+        """出席意願的表態截止：演出當天 23:59（與排練請假同一條規則，#13-7）。"""
+        return day_end(self.performance_date)
+
+    @property
+    def intent_open(self):
+        return timezone.now() <= self.intent_deadline
+
 
 class Rehearsal(models.Model):
     event = models.ForeignKey(
@@ -68,6 +95,19 @@ class Rehearsal(models.Model):
         verbose_name_plural = '排練列表'
         ordering = ['event', 'sequence']
         unique_together = [['event', 'sequence']]
+
+    @property
+    def leave_deadline(self):
+        """請假截止：排練當天 23:59（#13-7）。
+
+        **不提供補請假路徑**——過了就是過了，狀態直接列為未出席（2026-08-12 定案，
+        方向 c 團員事後補請、方向 d 幹部代登記皆不做）。
+        """
+        return day_end(self.date)
+
+    @property
+    def leave_open(self):
+        return timezone.now() <= self.leave_deadline
 
     def __str__(self):
         return f'{self.event.name} 第{self.sequence}次排練'
