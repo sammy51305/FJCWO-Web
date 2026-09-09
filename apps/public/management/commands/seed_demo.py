@@ -334,7 +334,7 @@ class Command(BaseCommand):
                               phone=phone, status=Registration.Status.PENDING),
             )
             n += created
-        self.log.append(f'校友報到待審新建 {n} 筆')
+        self.log.append(f'入團申請待審新建 {n} 筆')
 
     def _seed_scores(self):
         meta = {

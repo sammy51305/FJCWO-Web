@@ -104,7 +104,7 @@ class Command(BaseCommand):
             ('樂譜（總譜）', full_scores),
             ('排練', rehearsals),
             ('演出活動', events),
-            ('校友報到申請', registrations),
+            ('入團申請', registrations),
             ('會費期別 2026 下期', fee_periods),
             ('demo 帳號', users),
         ]

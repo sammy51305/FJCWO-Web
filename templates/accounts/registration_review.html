@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}校友報到審核 — 百韻管樂團{% endblock %}
+{% block title %}入團申請審核 — 百韻管樂團{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-  <h2 class="mb-0">校友報到審核</h2>
+  <h2 class="mb-0">入團申請審核</h2>
   <div class="d-flex gap-2 align-items-center">
     {% if pending_count %}
     <span class="badge bg-warning text-dark fs-6">待審核 {{ pending_count }} 筆</span>
@@ -124,10 +124,13 @@
             <a href="{% url 'accounts:registration_edit' reg.pk %}" class="btn btn-sm btn-outline-secondary">
               <i class="bi bi-pencil"></i>
             </a>
-            {% if reg.status != 'approved' %}
+            {# 刪除限管理員（2026-09-09 收緊），已核准的也可刪。
+               已核准的另外警告：刪申請紀錄不會刪掉核准時建立的帳號。 #}
+            {% if user.is_superuser or user.is_admin_role %}
             <form method="post" action="{% url 'accounts:registration_delete' reg.pk %}" class="d-inline">
               {% csrf_token %}
-              <button class="btn btn-sm btn-outline-danger" onclick="return confirm('刪除 {{ reg.name }} 的申請紀錄？此動作無法復原。')">
+              <button class="btn btn-sm btn-outline-danger"
+                      onclick="return confirm('刪除 {{ reg.name }} 的申請紀錄？{% if reg.status == 'approved' %}\n\n注意：核准時建立的團員帳號不會被刪除，這裡只移除申請紀錄。要停用團員請走團員管理的退團。{% endif %}\n\n此動作無法復原。')">
                 <i class="bi bi-trash"></i>
               </button>
             </form>

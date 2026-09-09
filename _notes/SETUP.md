@@ -340,7 +340,7 @@ python manage.py createsuperuser    # 自己的管理員帳號
    測試階段接受即可；要持久保存得接 Cloudflare R2 之類的物件儲存（見 DESIGN #10 路線 A 的「媒體」）。
 3. **Email 仍是 console backend**：沒填 `EMAIL_HOST_USER`／`PASSWORD` 的話，
    系統寄的臨時密碼信只會印在 Render 的 log 裡、收件人收不到。
-   要測「校友報到 → 收密碼信」整條流程（#11）就得填真的 SMTP。
+   要測「入團申請 → 收密碼信」整條流程（#11）就得填真的 SMTP。
 
 #### E-7　不讓搜尋引擎收錄測試站
 

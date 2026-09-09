@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-09-09（共 526 個測試）
+> 最後更新：2026-09-09（共 542 個測試）
 
 ---
 
@@ -90,11 +90,11 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **526 個測試**，分布在 8 個 app。
+共 **542 個測試**，分布在 8 個 app。
 
-> 最近一次全站測試：2026-09-09 執行 `python manage.py test`，**526/526 全數通過、無 regression**（System check 亦無問題）。
+> 最近一次全站測試：2026-09-09 執行 `python manage.py test`，**542/542 全數通過、無 regression**（System check 亦無問題）。
 
-### `apps/accounts/tests.py`（152 個）
+### `apps/accounts/tests.py`（158 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -108,18 +108,18 @@ python manage.py test --noinput
 | `SensitiveProfileFieldsTest` | #13-1 必填欄位大改：七個必填各自空白都擋下、樂器／聲部／畢業年份選填可留空、Registration 存得下聲部、身分證字號格式驗證與轉大寫、遮蔽只留末四碼（未填時為空字串）、居留證號可收、幹部端證號可留空、入學年科系原文照存、通訊錄與名冊報表不外洩身分證字號與住址、核准時四個敏感欄位整批帶進帳號、沒填樂器也能核准、既有帳號欄位空著仍可正常使用 |
 | `MemberDeleteTest` | 無關聯紀錄的帳號可真正刪除、有關聯紀錄（如出席）的帳號擋下並保留、不能刪除自己、一般團員無法刪除他人、管理員／superuser 可強制刪除有關聯紀錄的帳號、PROTECT 關聯（如發過公告）即使管理員也無法繞過 |
 | `UserRoleTest` | `is_officer` 各角色行為（member/officer/admin/superuser）、`is_staff` 與 `is_superuser` 自動設定 |
-| `RegistrationTest` | 校友報到申請（公開存取、重複申請防止、送出建立紀錄）、狀態查詢（用 email 查）、幹部審核（核准/拒絕）、核准同步建立 User 帳號（含 must_change_password）、寄送臨時密碼信件、Email 重複時擋下不建立重複帳號 |
+| `RegistrationTest` | 顯示名稱為「入團申請」（#13-2）、申請（公開存取、重複申請防止、送出建立紀錄）、狀態查詢（用 email 查）、幹部審核（核准/拒絕）、核准同步建立 User 帳號（含 must_change_password）、寄送臨時密碼信件、Email 重複時擋下不建立重複帳號 |
 | `RegistrationManageTest` | 依姓名/Email 搜尋、依狀態篩選、拒絕可重新開放審核（核准不行）、新增申請紀錄（幹部限定）、編輯基本資料（不影響審核狀態）、刪除申請紀錄（已核准者不可刪除，一般團員不可操作）|
 | `MemberCreateTest` | 存取控制（未登入/一般團員/幹部）、POST 新增團員成功（角色固定 member）、帳號依 Email 自動產生、Email 重複不建立記錄、寄送臨時密碼信件 |
 | `ForcePasswordChangeTest` | `must_change_password` 使用者任何頁面都被導向設定密碼頁、一般使用者不受影響、設定密碼頁本身不被攔截、成功設定後清除 flag 並可用新密碼登入、密碼不一致/太弱被擋、臨時密碼登入後仍被導向設定密碼頁（含錯誤密碼登入失敗的驗證）|
 | `MemberDirectoryReportTest` | 通訊錄列印報表：存取控制（未登入/一般團員無權限含電話Email→導回通訊錄/幹部可看）、顯示姓名電話Email、依樂器族群分組、列印按鈕、status 篩選（預設在團排除退團、inactive、all）|
 | `GuestManageTest` | 客座團員（槍手）管理：存取控制、CRUD（新增設 role=guest／不可登入／空 email 存 NULL、姓名必填、email 重複擋、編輯、刪除）、轉正（改 member／補 email／開通登入／強制改密碼、缺 email 擋）、資安（guest 即使有密碼也被登入表單擋、通訊錄排除 guest、guest 列表顯示）|
 
-### `apps/events/tests.py`（138 個）
+### `apps/events/tests.py`（140 個）
 
 | Class | 測試內容 |
 |-------|---------|
-| `LeaveRequestTestCase` | 請假申請的存取控制、空白/空白原因被擋、正常送出、重複申請防止、我的紀錄、幹部審核（核准/拒絕）、核准後同步出席紀錄、核准不覆寫已簽到的 PRESENT 紀錄、核准/拒絕後 result_seen 設為 False、刪除請假紀錄限管理員 |
+| `LeaveRequestTestCase` | 請假申請的存取控制、分部長提示出現在表單與送出後訊息（#13-9）、空白/空白原因被擋、正常送出、重複申請防止、我的紀錄、幹部審核（核准/拒絕）、核准後同步出席紀錄、核准不覆寫已簽到的 PRESENT 紀錄、核准/拒絕後 result_seen 設為 False、刪除請假紀錄限管理員 |
 | `LeaveDeadlineTestCase` | #13-7／#13-8 請假截止：截止為排練當天 23:59（非開始時刻）、**用本地時區日期避免 UTC 少算一天**、排練已開始但當天仍可請假、隔天關閉、server 端擋直接 POST、演出表態共用同一條規則、過截止且無紀錄在報表算缺席、未到截止維持無紀錄、過期按鈕換色換文字與禁止游標 |
 | `PerformanceIntentTestCase` | 演出出席意願三態（#13-6）：存取控制、確認參加、不參加需填原因、改回確認要清掉原因、可反覆改且不產生第二筆、演出開始後鎖住、無效值與 GET 不改狀態、intent 與 attended 互不影響、統計頁限幹部、三態計數、**沒有紀錄的人要出現在待確認名單**、依聲部分組、顯示不參加原因、排除客座團員、詳情頁表態入口與目前狀態、我的請假頁不再有演出請假 |
 | `EventViewsTest` | 演出活動列表/詳情、排練詳情、摘要/備註顯示、申請請假按鈕（未來啟用/過去停用）、活動詳情頁請假捷徑連結（未來顯示/過去不顯示）|
@@ -132,13 +132,13 @@ python manage.py test --noinput
 | `EventDeleteTest` | 團員/幹部無法刪除、GET 不刪除、管理員 POST 刪除並導回列表、刪除 cascade 排練、刪除按鈕在列表頁與詳情頁皆出現（管理員可見/幹部不可見）|
 | `RehearsalManageTest` | 存取控制（未登入/團員/幹部）、新增排練成功、重複 sequence 被擋、空日期被擋、編輯排練更新 sequence |
 
-### `apps/scores/tests.py`（78 個）
+### `apps/scores/tests.py`（83 個）
 
 | Class | 測試內容 |
 |-------|---------|
 | `ScoreModelValidationTest` | `clean()` 驗證：總譜不可有樂器/聲部/full_score、分譜的 full_score 必須指向總譜；`__str__` 格式（含聲部/不含聲部/總譜） |
 | `ScoreListViewTest` | 存取控制、只列總譜（#13-4：分譜不出現、舊 `?type=part` 網址失效）、分譜份數欄、`instrument` 篩選改篩「有此樂器分譜的總譜」（含去重、排除、份數不受篩選影響）、關鍵字搜尋、無結果空狀態、未綁總譜分譜的幹部限定警告區、刪除按鈕限管理員可見 |
-| `ScoreDetailViewTest` | 存取控制、曲名/作曲顯示、404、無 PDF 顯示提示、麵包屑帶/不帶篩選條件連回列表 |
+| `ScoreDetailViewTest` | 存取控制、曲名/作曲顯示、404、無 PDF 顯示提示、麵包屑帶/不帶篩選條件連回列表、總譜詳情頁連到每份分譜（#13-4 後分譜的唯一入口）、管理員可刪單一分譜、刪分譜導回所屬總譜、刪總譜仍導回清單、幹部不可刪 |
 | `ScoreCreateViewTest` | 存取控制（未登入/一般團員/幹部）、POST 新增總譜成功並導向詳情頁、POST 新增分譜（含樂器）成功、空曲名不建立記錄、分譜缺樂器不建立記錄、新增分譜時指定 full_score 正確綁定、總譜忽略殘留的 full_score 值 |
 | `ScoreEditViewTest` | 存取控制（未登入/一般團員/幹部）、GET 既有資料預先帶入欄位、404、POST 更新成功、空曲名不更新、未上傳新檔案保留原檔、上傳新檔案取代原檔、編輯分譜可綁定/更新 full_score |
 | `ScoreDeleteViewTest` | 一般幹部無法刪除、管理員可刪除並導向列表、刪除總譜連帶刪除分譜（CASCADE）、被 Setlist 或 ScoreExchangeItem 引用（PROTECT）時即使管理員也無法刪除 |
@@ -152,7 +152,7 @@ python manage.py test --noinput
 |-------|---------|
 | `BorrowStatusReportTest` | 存取控制、空狀態訊息、借出中財產顯示、已還財產不顯示、逾期標記（overdue flag）、未到期不標記、overdue_count 正確計算 |
 
-### `apps/finance/tests.py`（72 個）
+### `apps/finance/tests.py`（75 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -163,7 +163,7 @@ python manage.py test --noinput
 | `FeeReviewTest` | 幹部確認/作廢（S2）：存取控制、確認→已繳(記 paid_at、result_seen=False、金額再快照)、作廢→void、已處理不可重複、管理員可硬刪/一般幹部不可刪 |
 | `FeeIncomeTest` | 確認繳費自動入帳（S3）：確認→產生會費收入(金額/日期=收款日、連結 finance_record)、作廢待確認不產生收入、幹部代登記已繳也入帳、已繳改未繳連動移除收入、管理員硬刪連動刪收入 |
 | `AnnualReportTest` | 當年度收支（S3）：存取控制、預設最新年度、當年收入/支出/結餘彙總（跨年不計入）、確認繳費的會費收入計入當年度 |
-| `FinanceRecordCRUDTest` | 收支明細：存取控制（未登入/團員/幹部）、新增（登記者自動帶入）、amount 0/負數/缺說明被擋、編輯、刪除限管理員（幹部擋下、管理員可刪）、列表收入/支出/結餘摘要 |
+| `FinanceRecordCRUDTest` | 收支明細：保險費分類存在／出現在表單／可實際建立（#13-10）、存取控制（未登入/團員/幹部）、新增（登記者自動帶入）、amount 0/負數/缺說明被擋、編輯、刪除限管理員（幹部擋下、管理員可刪）、列表收入/支出/結餘摘要 |
 | `FeeEditTest` | 會費登記（幹部代登記）：一般團員無權限、登記已繳（status=paid、設 paid_at 與收款幹部）、未繳（status=unpaid、兩者為空）、金額一律自期別快照（不受表單影響）、同 member+period 再登記更新不重複、缺團員/期別被擋 |
 
 ### `apps/announcements/tests.py`（28 個）

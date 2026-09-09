@@ -87,7 +87,7 @@
     <div class="alert alert-warning d-flex align-items-center gap-3 mb-0">
       <i class="bi bi-person-exclamation fs-4"></i>
       <div>
-        有 <strong>{{ pending_registrations_count }}</strong> 筆校友報到申請待審核。
+        有 <strong>{{ pending_registrations_count }}</strong> 筆入團申請待審核。
         <a href="{% url 'accounts:registration_review' %}" class="alert-link ms-2">前往審核 →</a>
       </div>
     </div>
@@ -117,7 +117,7 @@
   <hr class="my-4">
   <p>歡迎來到百韻校友管樂團官方網站。</p>
   <a href="{% url 'accounts:login' %}" class="btn btn-primary me-2">團員登入</a>
-  <a href="{% url 'accounts:registration_apply' %}" class="btn btn-outline-secondary">校友報到申請</a>
+  <a href="{% url 'accounts:registration_apply' %}" class="btn btn-outline-secondary">入團申請</a>
 </div>
 
 {% endif %}

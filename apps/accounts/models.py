@@ -213,8 +213,8 @@ class Registration(models.Model):
     created_at = models.DateTimeField('申請時間', auto_now_add=True)
 
     class Meta:
-        verbose_name = '校友報到申請'
-        verbose_name_plural = '校友報到申請列表'
+        verbose_name = '入團申請'
+        verbose_name_plural = '入團申請列表'
         ordering = ['-created_at']
 
     def __str__(self):

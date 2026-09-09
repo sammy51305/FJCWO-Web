@@ -25,6 +25,17 @@
       </div>
       <a href="{% url 'events:my_leave_requests' %}" class="btn btn-secondary">查看我的請假紀錄</a>
     {% else %}
+      {# #13-9：系統送出不等於通知到人，分部長還是要自己講一聲。
+         分部長目前系統裡沒有這個概念（見 #14），所以先寫成不指名的靜態文字。 #}
+      <div class="alert alert-warning d-flex gap-2 align-items-start">
+        <i class="bi bi-megaphone mt-1"></i>
+        <div>
+          <strong>送出後記得另外通知自己的分部長。</strong>
+          <div class="small mt-1">
+            系統只會把申請送到幹部審核，不會自動通知分部長；分部練習的人力調度要靠你先講一聲。
+          </div>
+        </div>
+      </div>
       <form method="post">
         {% csrf_token %}
         <div class="mb-3">

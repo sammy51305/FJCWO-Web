@@ -136,7 +136,7 @@ def _create_member_with_temp_password(
     birth_date=None, address='', national_id='', line_id='', alumni_info='',
 ):
     """
-    建立團員帳號（校友報到核准 / 幹部手動新增團員共用）：
+    建立團員帳號（入團申請核准 / 幹部手動新增團員共用）：
     帳號用 email 前綴自動產生，密碼是隨機臨時密碼，並標記 must_change_password，
     強制對方第一次登入後就設定自己的新密碼（見 ForcePasswordChangeMiddleware）。
     回傳 (user, username, password, email_sent)。
@@ -187,7 +187,7 @@ def logout_view(request):
 @login_required
 def change_password_view(request):
     """
-    強制設定新密碼頁面。幹部建立團員帳號或核准校友報到後，
+    強制設定新密碼頁面。幹部建立團員帳號或核准入團申請後，
     User.must_change_password 會是 True，ForcePasswordChangeMiddleware
     會把使用者導來這裡，直到成功設定新密碼為止。
     """
@@ -448,7 +448,7 @@ def member_delete(request, pk):
 
 @login_required
 def member_create(request):
-    """幹部手動新增團員帳號（不透過校友報到申請，例如指導老師或口頭建檔的人）"""
+    """幹部手動新增團員帳號（不透過入團申請，例如指導老師或口頭建檔的人）"""
     if not request.user.is_officer:
         messages.error(request, '權限不足。')
         return redirect('accounts:member_directory')
@@ -715,7 +715,7 @@ def _registration_form_context(request, *, action=None, registration=None):
 
 
 def registration_apply(request):
-    """校友報到申請（公開，不需登入）"""
+    """入團申請（公開，不需登入）"""
     if request.method == 'POST':
         data, errors = _parse_profile_fields(request.POST)
         if data['email'] and Registration.objects.filter(
@@ -818,7 +818,7 @@ def _bulk_approve_registrations(request):
 
 @login_required
 def registration_review(request):
-    """幹部審核／管理校友報到申請：核准、拒絕、重新開放審核"""
+    """幹部審核／管理入團申請：核准、拒絕、重新開放審核"""
     if not request.user.is_officer:
         messages.error(request, '權限不足。')
         return redirect('accounts:member_directory')
@@ -1005,7 +1005,7 @@ def _import_registration_rows(rows):
 
 @login_required
 def registration_create(request):
-    """幹部手動新增一筆校友報到申請紀錄（例如電話/現場口頭申請，補登進系統）"""
+    """幹部手動新增一筆入團申請紀錄（例如電話/現場口頭申請，補登進系統）"""
     if not request.user.is_officer:
         messages.error(request, '權限不足。')
         return redirect('accounts:registration_review')
@@ -1030,7 +1030,7 @@ def registration_create(request):
 
 @login_required
 def registration_edit(request, pk):
-    """幹部編輯校友報到申請的基本資料（不含審核狀態，狀態變更走核准/拒絕按鈕）"""
+    """幹部編輯入團申請的基本資料（不含審核狀態，狀態變更走核准/拒絕按鈕）"""
     reg = get_object_or_404(Registration, pk=pk)
     if not request.user.is_officer:
         messages.error(request, '權限不足。')
@@ -1056,17 +1056,25 @@ def registration_edit(request, pk):
 
 @login_required
 def registration_delete(request, pk):
-    """幹部刪除校友報到申請紀錄（僅限待審核／已拒絕，已核准的保留稽核軌跡）"""
-    if not request.user.is_officer:
-        messages.error(request, '權限不足。')
+    """管理員刪除入團申請紀錄（含已核准的）。
+
+    權限收成管理員限定（原本是 `is_officer`）：刪除在本系統一律是管理員的事——
+    團員通訊錄、演出活動、場地、樂譜都是這條線，入團申請原本是全站唯一的例外。
+
+    **已核准的紀錄也允許刪除**（2026-09-09 依幹部要求放寬）。原本擋掉是為了保留
+    「這個帳號是怎麼來的」的稽核軌跡，但實務上測試資料與重複申請都會卡在這裡清不掉，
+    而稽核軌跡對一個內部小系統的價值不足以抵過那個代價。
+
+    ⚠️ 刪掉已核准的申請紀錄**不會刪掉核准時建立的 User 帳號**——兩者是各自獨立的資料。
+    要停用團員請走團員管理的退團（`is_active=False`），這裡只是移除申請的紀錄。
+    """
+    if not (request.user.is_superuser or request.user.is_admin_role):
+        messages.error(request, '權限不足，僅管理員可刪除申請紀錄。')
         return redirect('accounts:registration_review')
 
     reg = get_object_or_404(Registration, pk=pk)
     if request.method == 'POST':
-        if reg.status == Registration.Status.APPROVED:
-            messages.error(request, '已核准的申請紀錄不可刪除，需保留稽核軌跡。')
-        else:
-            name = reg.name
-            reg.delete()
-            messages.success(request, f'已刪除 {name} 的申請紀錄。')
+        name = reg.name
+        reg.delete()
+        messages.success(request, f'已刪除 {name} 的申請紀錄。')
     return redirect('accounts:registration_review')
