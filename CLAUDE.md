@@ -34,8 +34,9 @@ venv\Scripts\python.exe manage.py runserver           # 啟動開發伺服器
 venv\Scripts\python.exe manage.py makemigrations      # 改了 Model 後：產生遷移檔（見下表）
 venv\Scripts\python.exe manage.py migrate             # 套用遷移到資料庫（見下表）
 venv\Scripts\python.exe manage.py test                # 執行全部測試（預期全部通過）
-venv\Scripts\python.exe manage.py test apps.scores --verbosity=2  # 只測單一 app
 ```
+
+只測單一 app、單一 class、單一 method 等執行選項，見 [TESTING.md](_notes/TESTING.md) 執行測試。
 
 **`makemigrations` 與 `migrate` 的差別**
 

@@ -224,7 +224,8 @@ DB_PORT=5432
 | `ModuleNotFoundError: No module named 'xxx'` | `requirements.txt` 加了新套件 | `pip install -r requirements.txt` |
 | `relation "xxx" does not exist`、欄位不存在 | 有新的 migration 沒套用 | `python manage.py migrate` |
 
-保險起見，**每次 pull 完順手跑這兩行**（已裝的套件會跳過、已套用的 migration 不會重跑，很快）：
+保險起見，**每次 pull 完順手跑這兩行**（與步驟二、步驟五是同樣的指令，
+已裝的套件會跳過、已套用的 migration 不會重跑，很快）：
 
 ```bash
 venv\Scripts\python.exe -m pip install -r requirements.txt
