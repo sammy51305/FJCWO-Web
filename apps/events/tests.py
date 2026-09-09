@@ -440,7 +440,7 @@ class EventViewsTest(TestCase):
         self.assertEqual(r.status_code, 404)
 
     def test_rehearsal_detail_leave_button_disabled_for_past(self):
-        """已結束排練的申請請假按鈕應為停用狀態"""
+        """過了截止的排練，按鈕換成停用樣式（#13-8：文字也換，不只變淡）"""
         past_rehearsal = Rehearsal.objects.create(
             event=self.event,
             sequence=99,
@@ -449,7 +449,7 @@ class EventViewsTest(TestCase):
         )
         self.client.force_login(self.member)
         r = self.client.get(reverse('events:rehearsal_detail', args=[past_rehearsal.pk]))
-        self.assertContains(r, '申請請假')
+        self.assertContains(r, '請假已截止')
         self.assertContains(r, 'disabled')
 
     def test_rehearsal_detail_leave_button_active_for_future(self):
@@ -807,7 +807,8 @@ class AttendanceReportTest(TestCase):
         rehearsals = r.context['rehearsals']
         self.assertEqual(rehearsals[0].stats['present'], 1)
         self.assertEqual(rehearsals[0].stats['leave'], 0)
-        self.assertEqual(rehearsals[0].stats['absent'], 0)
+        # #13-7：這場排練已過截止，沒有紀錄的其他團員一律算缺席（過了就是過了）
+        self.assertEqual(rehearsals[0].stats['no_record'], 0)
 
     def test_leave_status_counted_separately(self):
         """請假與缺席各自計入不同欄位"""
@@ -822,13 +823,23 @@ class AttendanceReportTest(TestCase):
         self.assertEqual(rehearsals[0].stats['leave'], 1)
         self.assertEqual(rehearsals[0].stats['present'], 0)
 
-    def test_no_record_count_includes_members_without_attendance(self):
-        """沒有出席紀錄的團員應計入無紀錄欄位"""
+    def test_no_record_only_for_rehearsals_before_deadline(self):
+        """「無紀錄」只保留給還沒過截止的排練（#13-7）。
+
+        過了截止仍無紀錄 → 算缺席，因為已經不可能再請假了；
+        還沒到截止的則代表「還沒發生」，標成缺席會誤導。
+        """
+        future = Rehearsal.objects.create(
+            event=self.event, sequence=98,
+            date=timezone.now() + timedelta(days=5), venue=self.venue,
+        )
         self.client.force_login(self.officer)
         r = self.client.get(self.url)
-        rehearsals = r.context['rehearsals']
-        # member 沒有任何紀錄 → no_record 至少為 1
-        self.assertGreaterEqual(rehearsals[0].stats['no_record'], 1)
+        by_seq = {x.sequence: x.stats for x in r.context['rehearsals']}
+        self.assertGreaterEqual(by_seq[future.sequence]['no_record'], 1)
+        self.assertEqual(by_seq[future.sequence]['absent'], 0)
+        # 已過截止的那場（setUp 建的）反過來：沒有無紀錄、全部算缺席
+        self.assertEqual(by_seq[self.rehearsal.sequence]['no_record'], 0)
 
     def test_member_row_rate_calculated(self):
         """個人出席率應正確計算"""
@@ -1374,11 +1385,14 @@ class PerformanceIntentTestCase(TestCase):
         )
         self.assertEqual(self._intent_of(self.member), PerformanceAttendance.Intent.DECLINED)
 
-    def test_cannot_set_intent_after_performance_started(self):
-        """演出已開始就鎖住，不能再變更（與排練請假同一條界線）"""
+    def test_cannot_set_intent_after_deadline(self):
+        """過了截止（演出當天 23:59）就鎖住——與排練請假同一條界線（#13-7）。
+
+        注意界線是「當天結束」而非「開始時刻」：演出已開始但當天還沒過完時仍可表態。
+        """
         past_event = PerformanceEvent.objects.create(
-            name='已開始的演出', type=PerformanceEvent.Type.CONCERT,
-            performance_date=timezone.now() - timedelta(hours=1),
+            name='昨天的演出', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() - timedelta(days=1),
             performance_venue=self.venue,
         )
         self.client.force_login(self.member)
@@ -1488,7 +1502,7 @@ class PerformanceIntentTestCase(TestCase):
         )
         self.client.force_login(self.member)
         r = self.client.get(reverse('events:event_detail', args=[past_event.pk]))
-        self.assertContains(r, '演出已開始，無法再變更出席意願')
+        self.assertContains(r, '已超過表態截止時間')
 
     def test_my_leave_page_no_longer_lists_performance_leave(self):
         """我的請假頁只剩排練請假（演出請假已廢除）"""
@@ -1496,3 +1510,147 @@ class PerformanceIntentTestCase(TestCase):
         r = self.client.get(reverse('events:my_leave_requests'))
         self.assertEqual(r.status_code, 200)
         self.assertNotContains(r, '演出請假')
+
+
+class LeaveDeadlineTestCase(TestCase):
+    """#13-7／#13-8：請假與表態截止改為「當天 23:59」，過期樣式明確"""
+
+    def setUp(self):
+        self.member = User.objects.create_user(
+            username='dl_member', email='dl_member@test.local',
+            password='testpass123', name='截止測試團員', role=User.Role.MEMBER,
+        )
+        self.officer = User.objects.create_user(
+            username='dl_officer', email='dl_officer@test.local',
+            password='testpass123', name='截止測試幹部', role=User.Role.OFFICER,
+        )
+        self.venue = Venue.objects.create(name='截止測試場地', type='rehearsal')
+        self.perf_venue = Venue.objects.create(name='截止測試演出場地', type='performance')
+        self.event = PerformanceEvent.objects.create(
+            name='截止測試音樂會', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + timedelta(days=30),
+            performance_venue=self.perf_venue,
+        )
+
+    def _rehearsal(self, when, sequence=1):
+        return Rehearsal.objects.create(
+            event=self.event, sequence=sequence, date=when, venue=self.venue
+        )
+
+    # ── 截止點的計算 ────────────────────────────────────────
+
+    def test_deadline_is_end_of_rehearsal_day(self):
+        """截止是排練「當天 23:59」，不是排練開始時刻"""
+        import datetime as dt
+        morning = timezone.make_aware(
+            dt.datetime(2026, 8, 15, 9, 0), timezone.get_current_timezone()
+        )
+        deadline = timezone.localtime(self._rehearsal(morning).leave_deadline)
+        self.assertEqual((deadline.year, deadline.month, deadline.day), (2026, 8, 15))
+        self.assertEqual((deadline.hour, deadline.minute), (23, 59))
+
+    def test_deadline_uses_local_date_not_utc(self):
+        """用本地時區的日期算——台北清晨的排練在 UTC 是前一天，取錯會少一天"""
+        import datetime as dt
+        early = timezone.make_aware(
+            dt.datetime(2026, 8, 15, 7, 0), timezone.get_current_timezone()
+        )
+        self.assertEqual(timezone.localtime(self._rehearsal(early).leave_deadline).day, 15)
+
+    def test_still_open_after_rehearsal_started(self):
+        """排練已開始但當天還沒過完 → 仍可請假（這正是 #13-7 要改的行為）"""
+        started = timezone.now() - timedelta(hours=2)
+        rehearsal = self._rehearsal(started)
+        # 只在「今天」這個條件成立時才有意義（跨日執行測試時略過）
+        if timezone.localtime(started).date() == timezone.localdate():
+            self.assertTrue(rehearsal.leave_open)
+
+    def test_closed_after_that_day(self):
+        """隔天就關閉"""
+        self.assertFalse(self._rehearsal(timezone.now() - timedelta(days=1)).leave_open)
+
+    def test_future_rehearsal_open(self):
+        self.assertTrue(self._rehearsal(timezone.now() + timedelta(days=3)).leave_open)
+
+    # ── server 端阻擋 ───────────────────────────────────────
+
+    def test_post_after_deadline_is_blocked(self):
+        """過了截止直接 POST 也擋下，不只靠前端 disabled"""
+        past = self._rehearsal(timezone.now() - timedelta(days=2))
+        self.client.force_login(self.member)
+        r = self.client.post(
+            reverse('events:leave_request_create', args=[past.pk]),
+            {'reason': '想繞過前端'}, follow=True,
+        )
+        self.assertFalse(LeaveRequest.objects.filter(rehearsal=past).exists())
+        self.assertContains(r, '已超過請假截止時間')
+
+    def test_post_on_rehearsal_day_still_allowed(self):
+        """排練當天（即使已開始）仍收得下請假"""
+        today = self._rehearsal(timezone.now() - timedelta(hours=1))
+        if timezone.localtime(today.date).date() != timezone.localdate():
+            self.skipTest('跨日執行，情境不成立')
+        self.client.force_login(self.member)
+        self.client.post(
+            reverse('events:leave_request_create', args=[today.pk]), {'reason': '臨時有事'}
+        )
+        self.assertTrue(LeaveRequest.objects.filter(rehearsal=today, member=self.member).exists())
+
+    # ── 演出表態沿用同一條規則 ──────────────────────────────
+
+    def test_performance_intent_uses_same_rule(self):
+        """演出表態與排練請假共用 day_end()，不會各自演化出不同界線"""
+        past_event = PerformanceEvent.objects.create(
+            name='昨天的演出', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() - timedelta(days=1),
+            performance_venue=self.perf_venue,
+        )
+        self.assertFalse(past_event.intent_open)
+        self.client.force_login(self.member)
+        r = self.client.post(
+            reverse('events:performance_intent_set', args=[past_event.pk]),
+            {'intent': 'confirmed'}, follow=True,
+        )
+        self.assertFalse(
+            PerformanceAttendance.objects.filter(event=past_event, member=self.member).exists()
+        )
+        self.assertContains(r, '已超過表態截止時間')
+
+    # ── 過期後視為缺席（#13-7）──────────────────────────────
+
+    def test_report_counts_missing_as_absent_after_deadline(self):
+        """已過截止又沒紀錄 → 報表算缺席（過了就是過了，不留補請假路徑）"""
+        self._rehearsal(timezone.now() - timedelta(days=3), sequence=1)
+        self.client.force_login(self.officer)
+        r = self.client.get(reverse('events:attendance_report', args=[self.event.pk]))
+        stats = r.context['rehearsals'][0].stats
+        self.assertEqual(stats['no_record'], 0)
+        self.assertEqual(stats['absent'], len(r.context['member_rows']))
+
+    def test_report_keeps_no_record_for_future_rehearsal(self):
+        """未到截止的排練維持「無紀錄」——那代表還沒發生，標缺席會誤導"""
+        self._rehearsal(timezone.now() + timedelta(days=5), sequence=2)
+        self.client.force_login(self.officer)
+        r = self.client.get(reverse('events:attendance_report', args=[self.event.pk]))
+        future = [x for x in r.context['rehearsals'] if x.sequence == 2][0]
+        self.assertEqual(future.stats['absent'], 0)
+        self.assertGreater(future.stats['no_record'], 0)
+
+    # ── #13-8 過期樣式 ─────────────────────────────────────
+
+    def test_expired_button_is_visually_distinct(self):
+        """過期按鈕要一眼看得出來：換色、換文字、禁止游標，不只是變淡"""
+        past = self._rehearsal(timezone.now() - timedelta(days=2))
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:rehearsal_detail', args=[past.pk]))
+        self.assertContains(r, '請假已截止')
+        self.assertContains(r, 'cursor: not-allowed')
+        self.assertNotContains(r, reverse('events:leave_request_create', args=[past.pk]))
+
+    def test_open_rehearsal_shows_active_link(self):
+        """未過期則是可點的連結，不出現截止樣式"""
+        future = self._rehearsal(timezone.now() + timedelta(days=3))
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:rehearsal_detail', args=[future.pk]))
+        self.assertContains(r, reverse('events:leave_request_create', args=[future.pk]))
+        self.assertNotContains(r, '請假已截止')

@@ -185,7 +185,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 |------|------|
 | name | 活動名稱 |
 | type | 類型：音樂會 / 比賽 / 錄音 / 聯演 |
-| performance_date | 演出日期時間 |
+| performance_date | 演出日期時間（出席意願表態截止＝當天 23:59，見 DESIGN §4.6）|
 | performance_venue | 演出場地（關聯 Venue）|
 | status | 籌備中 / 確認 / 已結束 / 已取消 |
 
@@ -198,7 +198,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 |------|------|------|
 | event | ✓ | 所屬演出活動（關聯 PerformanceEvent）|
 | sequence | ✓ | 排練次數（第幾次排練，可自動依日期順序計算）|
-| date | ✓ | 排練日期時間 |
+| date | ✓ | 排練日期時間（**請假截止＝當天 23:59**，由日期部分推算；見 DESIGN §4.6）|
 | venue | ✓ | 排練場地（關聯 Venue）|
 | time_slot | | 使用時段（關聯 VenueTimeSlot，選填）|
 | summary_progress | | 今日進度（排了哪些曲目、哪些段落）|

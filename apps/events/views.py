@@ -84,8 +84,14 @@ def leave_request_create(request, rehearsal_pk):
 
     if request.method == 'POST':
         reason = request.POST.get('reason', '').strip()
-        if rehearsal.date <= timezone.now():
-            messages.error(request, '排練已結束，無法申請請假。')
+        # 截止是「排練當天 23:59」而非開始時刻（#13-7）。server 端擋，
+        # 不只靠前端把按鈕改 disabled——避免直接 POST 到 URL 繞過。
+        if not rehearsal.leave_open:
+            messages.error(
+                request,
+                f'已超過請假截止時間（{timezone.localtime(rehearsal.leave_deadline):%Y/%m/%d} 23:59），'
+                '無法再申請請假。'
+            )
         elif not reason:
             messages.error(request, '請填寫請假原因。')
         elif existing:
@@ -133,10 +139,14 @@ def performance_intent_set(request, event_pk):
     if request.method != 'POST' or intent not in PerformanceAttendance.Intent.values:
         return redirect('events:event_detail', pk=event.pk)
 
-    # 表態期限與排練請假一致：演出開始就鎖住。
-    # TODO(#13-7)：排練請假截止改為「當天 23:59」時，這裡要一併改，兩者規則必須同步。
-    if event.performance_date <= timezone.now():
-        messages.error(request, '演出已開始，無法再變更出席意願。')
+    # 表態截止與排練請假同一條規則：當天 23:59（#13-7）。
+    # 兩者共用 models.day_end()，不會各自演化出不同的界線。
+    if not event.intent_open:
+        messages.error(
+            request,
+            f'已超過表態截止時間（{timezone.localtime(event.intent_deadline):%Y/%m/%d} 23:59），'
+            '無法再變更出席意願。'
+        )
         return redirect('events:event_detail', pk=event.pk)
 
     if intent == PerformanceAttendance.Intent.DECLINED and not reason:
@@ -514,11 +524,26 @@ def attendance_report(request, pk):
         )
     }
 
+    def status_of(rehearsal, member):
+        """取某人在某場排練的狀態。
+
+        **已過請假截止、又沒有任何紀錄 → 視為缺席**（#13-7：過了就是過了，
+        不留補請假路徑，狀態直接列為未出席）。還沒到截止的排練維持「無紀錄」——
+        那代表「還沒發生」，標成缺席會誤導。
+
+        用顯示層判斷而不是批次寫入資料：不必養一個排程去掃過期排練，
+        而且哪天規則調整（例如改回可補請假），舊資料不會已經被寫死成缺席。
+        """
+        status = attendance_map.get((rehearsal.pk, member.pk))
+        if status:
+            return status
+        return RehearsalAttendance.Status.ABSENT if not rehearsal.leave_open else None
+
     # 每場排練的統計數字
     for rehearsal in rehearsals:
         counts = {'present': 0, 'leave': 0, 'absent': 0}
         for member in members:
-            s = attendance_map.get((rehearsal.pk, member.pk))
+            s = status_of(rehearsal, member)
             if s:
                 counts[s] += 1
         counts['no_record'] = len(members) - sum(counts.values())
@@ -527,7 +552,7 @@ def attendance_report(request, pk):
     # 每位團員的橫列資料
     member_rows = []
     for member in members:
-        statuses = [attendance_map.get((r.pk, member.pk)) for r in rehearsals]
+        statuses = [status_of(r, member) for r in rehearsals]
         present_count = statuses.count('present')
         total = len(rehearsals)
         member_rows.append({
