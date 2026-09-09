@@ -228,6 +228,8 @@ def score_delete(request, pk):
     刪除樂譜限管理員（admin 角色或 superuser），跟演出活動／場地／團員通訊錄的刪除權限一致。
     若已被排入演出曲目單（Setlist）或對外交換紀錄（ScoreExchangeItem）引用（PROTECT）會被擋下；
     刪除總譜會連帶刪除底下所有分譜（Score.full_score 為 CASCADE，屬既有預期行為）。
+    刪掉分譜後導回所屬總譜而不是清單——#13-4 之後清單不列分譜，導回清單等於把人丟在找不到
+    原本那首曲子的地方。
     """
     score = get_object_or_404(Score, pk=pk)
     if not (request.user.is_superuser or request.user.is_admin_role):
@@ -235,7 +237,10 @@ def score_delete(request, pk):
         return redirect('scores:score_detail', pk=pk)
 
     if request.method == 'POST':
-        title = score.title
+        title = str(score)
+        # #13-4 之後清單不列分譜，刪完分譜再導回清單就找不回原本那首曲子了。
+        # 先記下所屬總譜，刪完導回去，讓幹部可以接著處理同一首的其他分譜。
+        parent_pk = score.full_score_id
         try:
             score.delete()
             messages.success(request, f'已刪除樂譜《{title}》。')
@@ -245,6 +250,8 @@ def score_delete(request, pk):
                 f'《{title}》已被演出曲目單或對外交換紀錄引用，請先處理相關資料後再刪除。'
             )
             return redirect('scores:score_detail', pk=pk)
+        if parent_pk:
+            return redirect('scores:score_detail', pk=parent_pk)
         return redirect('scores:score_list')
     return redirect('scores:score_detail', pk=pk)
 

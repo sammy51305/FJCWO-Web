@@ -820,6 +820,10 @@ class RegistrationManageTest(TestCase):
             username='mng_member', password='x', name='一般團員',
             email='mng_member@test.local', role=User.Role.MEMBER,
         )
+        self.admin = User.objects.create_user(
+            username='mng_admin', password='x', name='管理員',
+            email='mng_admin@test.local', role=User.Role.ADMIN,
+        )
         self.review_url = reverse('accounts:registration_review')
         self.create_url = reverse('accounts:registration_create')
 
@@ -945,26 +949,84 @@ class RegistrationManageTest(TestCase):
 
     # ── 刪除申請紀錄 ────────────────────────────────────
 
-    def test_officer_can_delete_pending_registration(self):
-        """待審核的申請紀錄可被刪除"""
+    def test_admin_can_delete_pending_registration(self):
+        """待審核的申請紀錄可被管理員刪除"""
         from .models import Registration
         reg = Registration.objects.create(
             name='要刪除的人', instrument=self.family, grad_year=110, email='todelete@test.local',
         )
-        self.client.force_login(self.officer)
+        self.client.force_login(self.admin)
         self.client.post(reverse('accounts:registration_delete', args=[reg.pk]))
         self.assertFalse(Registration.objects.filter(pk=reg.pk).exists())
 
-    def test_approved_registration_cannot_be_deleted(self):
-        """已核准的申請紀錄不可刪除，需保留稽核軌跡"""
+    def test_admin_can_delete_approved_registration(self):
+        """
+        已核准的申請紀錄也可刪除（2026-09-09 依幹部要求放寬）。
+        原本擋掉是為了保留稽核軌跡，但測試資料與重複申請都會卡在這裡清不掉。
+        """
         from .models import Registration
         reg = Registration.objects.create(
-            name='已核准不可刪', instrument=self.family, grad_year=110,
-            email='approved_keep@test.local', status=Registration.Status.APPROVED,
+            name='已核准可刪', instrument=self.family, grad_year=110,
+            email='approved_del@test.local', status=Registration.Status.APPROVED,
+        )
+        self.client.force_login(self.admin)
+        self.client.post(reverse('accounts:registration_delete', args=[reg.pk]))
+        self.assertFalse(Registration.objects.filter(pk=reg.pk).exists())
+
+    def test_deleting_approved_registration_keeps_the_user_account(self):
+        """
+        刪申請紀錄不等於刪帳號——核准時建立的 User 必須留著。
+        兩者是各自獨立的資料，要停用團員得走團員管理的退團。
+        """
+        from .models import Registration
+        account = User.objects.create_user(
+            username='kept_account', password='x', name='已建立的團員',
+            email='kept@test.local', role=User.Role.MEMBER,
+        )
+        reg = Registration.objects.create(
+            name='已建立的團員', instrument=self.family, grad_year=110,
+            email='kept@test.local', status=Registration.Status.APPROVED,
+        )
+        self.client.force_login(self.admin)
+        self.client.post(reverse('accounts:registration_delete', args=[reg.pk]))
+        self.assertFalse(Registration.objects.filter(pk=reg.pk).exists())
+        self.assertTrue(User.objects.filter(pk=account.pk).exists())
+
+    def test_officer_cannot_delete_registration(self):
+        """
+        刪除收成管理員限定（2026-09-09）。全站刪除一律是管理員的事
+        （團員、演出、場地、樂譜皆然），入團申請原本是唯一的例外。
+        """
+        from .models import Registration
+        reg = Registration.objects.create(
+            name='幹部不能刪這個', instrument=self.family, grad_year=110,
+            email='officer_cant@test.local',
         )
         self.client.force_login(self.officer)
         self.client.post(reverse('accounts:registration_delete', args=[reg.pk]))
         self.assertTrue(Registration.objects.filter(pk=reg.pk).exists())
+
+    def test_delete_button_hidden_from_officer(self):
+        """幹部在審核頁看不到刪除按鈕（不是只有後端擋）"""
+        from .models import Registration
+        reg = Registration.objects.create(
+            name='列表上的人', instrument=self.family, grad_year=110,
+            email='in_list@test.local',
+        )
+        self.client.force_login(self.officer)
+        r = self.client.get(self.review_url)
+        self.assertNotContains(r, reverse('accounts:registration_delete', args=[reg.pk]))
+
+    def test_delete_button_visible_to_admin(self):
+        """管理員在審核頁看得到刪除按鈕"""
+        from .models import Registration
+        reg = Registration.objects.create(
+            name='列表上的人', instrument=self.family, grad_year=110,
+            email='in_list2@test.local',
+        )
+        self.client.force_login(self.admin)
+        r = self.client.get(self.review_url)
+        self.assertContains(r, reverse('accounts:registration_delete', args=[reg.pk]))
 
     def test_member_cannot_delete_registration(self):
         """一般團員無法刪除申請紀錄"""

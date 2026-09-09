@@ -278,7 +278,7 @@ Django 官方建議用 `settings.AUTH_USER_MODEL`，因為 User model 可能被�
 | `registration_review` | `GET/POST /accounts/register/review/` | 幹部管理頁：查詢／篩選所有申請、核准／拒絕／重新開放審核 |
 | `registration_create` | `GET/POST /accounts/register/create/` | 幹部手動新增一筆申請紀錄（例如電話報到，補登進系統）|
 | `registration_edit` | `GET/POST /accounts/register/<pk>/edit/` | 幹部編輯申請的基本資料，不含審核狀態 |
-| `registration_delete` | `POST /accounts/register/<pk>/delete/` | 幹部刪除申請紀錄，已核准者不可刪除 |
+| `registration_delete` | `POST /accounts/register/<pk>/delete/` | **管理員**刪除申請紀錄（含已核准者）|
 
 `registration_status` 設計為公開頁面，讓申請者不需帳號就能確認申請進度，
 避免對方不斷來電詢問。查詢以 Email 為鍵，列出該 Email 所有申請紀錄。
@@ -314,11 +314,31 @@ if status_filter in Registration.Status.values:
 的申請（`registration_review` view 用 `elif reg and action == 'reopen' and reg.status == Registration.Status.REJECTED`
 擋下 `approved` 的情況）。
 
-#### 為什麼已核准的申請不能刪除
+#### 刪除申請紀錄：限管理員，已核准的也可刪（2026-09-09 修訂）
 
-同樣的稽核軌跡考量：`registration_delete` 對 `status=approved` 的紀錄直接擋下並顯示錯誤訊息。
-帳號建立後，這筆 `Registration` 就是「這個帳號怎麼來的」的唯一紀錄，刪掉會讓帳號變成不知從何而來。
-待審核／已拒絕的紀錄沒有這個顧慮（沒有對應帳號），可以自由刪除，用於清理重複或誤填的申請。
+**原本的設計**：`registration_delete` 權限為 `is_officer`，且對 `status=approved` 直接擋下——
+理由是稽核軌跡，帳號建立後這筆 `Registration` 就是「這個帳號怎麼來的」的唯一紀錄。
+
+**改成什麼**（幹部實際使用後回報）：
+
+| | 原本 | 現在 |
+|---|---|---|
+| 誰能刪 | `is_officer` | `is_superuser` 或 `is_admin_role` |
+| 已核准的 | 一律擋下 | 可刪 |
+
+**兩項都有理由**：
+
+- **權限收成管理員**：刪除在本系統一律是管理員的事——團員通訊錄、演出活動、場地、樂譜
+  都是這條線，入團申請原本是全站唯一的例外，不一致本身就是個坑。
+- **放寬已核准的**：稽核軌跡的價值在一個內部小系統裡，抵不過「測試資料與重複申請永遠清不掉」
+  的代價。實務上幹部第一個撞到的就是 demo 期間留下的已核准紀錄刪不掉。
+
+⚠️ **刪申請紀錄不等於刪帳號**。核准時建立的 `User` 是獨立的資料，不會被連帶刪除；
+要停用團員得走團員管理的退團（`is_active=False`）。已核准紀錄的刪除確認對話框會明講這件事，
+避免幹部誤以為按下去就把人踢出團了。
+
+> `reopen` 仍然只接受 `status=rejected`（見上一節）——那是因為 `approved` 的「復原」
+> 會讓 status 與實際帳號狀態脫節，跟能不能刪除是兩回事。
 
 #### 核准申請 / 手動新增團員：共用的帳號建立邏輯
 
@@ -1512,6 +1532,20 @@ if request.user.is_officer:
 
 一般團員看不到——那是資料錯誤，不是他們要處理的事。
 分譜詳情頁同步補上「所屬總譜」連結（沒綁的顯示警告），讓進到分譜頁時有回頭路。
+
+#### 分譜的唯一入口（#13-4 的補救）
+
+清單不列分譜之後，**總譜詳情頁的分譜清單就是進入分譜的唯一入口**。
+初版只在那裡放了「下載」連結、沒有連到分譜詳情頁，結果是已綁定的分譜
+**編輯不到也刪不掉**——庫存清單已經不列它，而分譜清單只給下載。
+（`score_detail` / `score_edit` / `score_delete` 三個 view 本身都好好的，缺的只是那條連結。）
+
+修法是分譜清單每一格補一個「詳細」連結。`ScoreDetailViewTest` 有一則測試專門釘住這條路，
+避免日後改版又把它拿掉。
+
+順帶調整 `score_delete` 的導向：**刪掉分譜後導回所屬總譜**，不是導回清單。
+清單已經不列分譜，導回清單等於把幹部丟在找不到原本那首曲子的地方；
+導回總譜則可以接著處理同一首的其他分譜。刪掉總譜時沒有可回去的曲目，維持導回清單。
 
 #### 麵包屑保留列表篩選條件
 

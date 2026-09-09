@@ -374,10 +374,32 @@ class ScoreDetailViewTest(TestCase):
             name='詳情測試員',
             role=User.Role.MEMBER,
         )
+        self.officer = User.objects.create_user(
+            username='score_detail_officer', password='x', name='詳情幹部',
+            email='scoredetail_officer@test.local', role=User.Role.OFFICER,
+        )
+        self.admin = User.objects.create_user(
+            username='score_detail_admin', password='x', name='詳情管理員',
+            email='scoredetail_admin@test.local', role=User.Role.ADMIN,
+        )
         self.score = Score.objects.create(
             title='卡門組曲',
             score_type=Score.ScoreType.FULL,
             composer='比才',
+        )
+        # #13-4 之後分譜只能從總譜詳情頁進入，故詳情測試需要一組總譜＋分譜
+        family = InstrumentFamily.objects.create(
+            name='長笛族', category=InstrumentFamily.Category.WOODWIND
+        )
+        self.instrument = InstrumentType.objects.create(name='長笛', family=family)
+        self.full_score = Score.objects.create(
+            title='阿爾卑斯交響曲', score_type=Score.ScoreType.FULL
+        )
+        self.part_score = Score.objects.create(
+            title='阿爾卑斯交響曲（長笛）',
+            score_type=Score.ScoreType.PART,
+            instrument=self.instrument,
+            full_score=self.full_score,
         )
         self.url = reverse('scores:score_detail', args=[self.score.pk])
 
@@ -401,6 +423,48 @@ class ScoreDetailViewTest(TestCase):
         r = self.client.get(self.url)
         self.assertContains(r, '卡門組曲')
         self.assertContains(r, '比才')
+
+    # ── 分譜的入口與刪除（#13-4 衍生）─────────────────────
+
+    def test_full_score_detail_links_to_each_part(self):
+        """
+        #13-4 之後庫存清單不列分譜，總譜詳情頁的分譜清單是進入分譜的**唯一**入口。
+        少了這個連結，分譜就編輯不到也刪不掉（此測試釘住那條路）。
+        """
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('scores:score_detail', args=[self.full_score.pk]))
+        self.assertContains(r, reverse('scores:score_detail', args=[self.part_score.pk]))
+
+    def test_admin_can_delete_a_part(self):
+        """管理員可以刪掉單一分譜，不影響所屬總譜"""
+        self.client.force_login(self.admin)
+        self.client.post(reverse('scores:score_delete', args=[self.part_score.pk]))
+        self.assertFalse(Score.objects.filter(pk=self.part_score.pk).exists())
+        self.assertTrue(Score.objects.filter(pk=self.full_score.pk).exists())
+
+    def test_deleting_a_part_redirects_back_to_its_full_score(self):
+        """
+        刪完分譜要導回所屬總譜，不是導回清單——清單已經不列分譜，
+        導回清單等於把人丟在找不到原本那首曲子的地方。
+        """
+        self.client.force_login(self.admin)
+        r = self.client.post(reverse('scores:score_delete', args=[self.part_score.pk]))
+        self.assertRedirects(
+            r, reverse('scores:score_detail', args=[self.full_score.pk]),
+            fetch_redirect_response=False,
+        )
+
+    def test_deleting_a_full_score_still_redirects_to_list(self):
+        """總譜刪掉後沒有可回去的曲目，維持導回清單"""
+        self.client.force_login(self.admin)
+        r = self.client.post(reverse('scores:score_delete', args=[self.full_score.pk]))
+        self.assertRedirects(r, reverse('scores:score_list'), fetch_redirect_response=False)
+
+    def test_officer_cannot_delete_a_part(self):
+        """刪除限管理員，幹部不行（與全站刪除權限一致）"""
+        self.client.force_login(self.officer)
+        self.client.post(reverse('scores:score_delete', args=[self.part_score.pk]))
+        self.assertTrue(Score.objects.filter(pk=self.part_score.pk).exists())
 
     def test_detail_404_on_invalid_pk(self):
         """不存在的樂譜 pk 應回 404"""

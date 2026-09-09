@@ -1056,17 +1056,25 @@ def registration_edit(request, pk):
 
 @login_required
 def registration_delete(request, pk):
-    """幹部刪除入團申請紀錄（僅限待審核／已拒絕，已核准的保留稽核軌跡）"""
-    if not request.user.is_officer:
-        messages.error(request, '權限不足。')
+    """管理員刪除入團申請紀錄（含已核准的）。
+
+    權限收成管理員限定（原本是 `is_officer`）：刪除在本系統一律是管理員的事——
+    團員通訊錄、演出活動、場地、樂譜都是這條線，入團申請原本是全站唯一的例外。
+
+    **已核准的紀錄也允許刪除**（2026-09-09 依幹部要求放寬）。原本擋掉是為了保留
+    「這個帳號是怎麼來的」的稽核軌跡，但實務上測試資料與重複申請都會卡在這裡清不掉，
+    而稽核軌跡對一個內部小系統的價值不足以抵過那個代價。
+
+    ⚠️ 刪掉已核准的申請紀錄**不會刪掉核准時建立的 User 帳號**——兩者是各自獨立的資料。
+    要停用團員請走團員管理的退團（`is_active=False`），這裡只是移除申請的紀錄。
+    """
+    if not (request.user.is_superuser or request.user.is_admin_role):
+        messages.error(request, '權限不足，僅管理員可刪除申請紀錄。')
         return redirect('accounts:registration_review')
 
     reg = get_object_or_404(Registration, pk=pk)
     if request.method == 'POST':
-        if reg.status == Registration.Status.APPROVED:
-            messages.error(request, '已核准的申請紀錄不可刪除，需保留稽核軌跡。')
-        else:
-            name = reg.name
-            reg.delete()
-            messages.success(request, f'已刪除 {name} 的申請紀錄。')
+        name = reg.name
+        reg.delete()
+        messages.success(request, f'已刪除 {name} 的申請紀錄。')
     return redirect('accounts:registration_review')

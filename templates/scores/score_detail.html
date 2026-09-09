@@ -124,13 +124,18 @@
           <div class="border rounded px-3 py-2 small">
             <div class="fw-medium">{{ part.instrument.name }}</div>
             {% if part.section %}<div class="text-muted">{{ part.section.name }}</div>{% endif %}
-            {% if part.file %}
-            <a href="{% url 'scores:score_download' part.pk %}" class="text-success">
-              <i class="bi bi-download"></i> 下載
-            </a>
-            {% else %}
-            <span class="text-muted">尚未上傳</span>
-            {% endif %}
+            <div class="d-flex gap-2 mt-1">
+              {% if part.file %}
+              <a href="{% url 'scores:score_download' part.pk %}" class="text-success">
+                <i class="bi bi-download"></i> 下載
+              </a>
+              {% else %}
+              <span class="text-muted">尚未上傳</span>
+              {% endif %}
+              {# #13-4 之後這裡是進入分譜詳情的唯一入口。沒有這個連結，
+                 分譜就編輯不到也刪不掉——庫存清單已經不列分譜了。 #}
+              <a href="{% url 'scores:score_detail' part.pk %}" class="text-secondary">詳細</a>
+            </div>
           </div>
           {% endfor %}
         </div>
