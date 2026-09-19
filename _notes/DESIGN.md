@@ -1987,6 +1987,11 @@ lookup table 也順便避免逐位團員各查一次的 N+1。
   共用一個欄位會失去「說要來但沒到」這個最需要追蹤的情況。
   也刻意不沿用舊的兩個布林（`confirmed` + `on_leave`），那組合會產生「兩個都 True」的矛盾狀態
   且無程式碼阻止；三態單一欄位讓矛盾直接不可表示（見 §4.22）。
+- **自訂 `LOGGING`，不沿用 Django 預設**：預設的 console handler 帶 `require_debug_true`，
+  `django.request`（500 的 traceback）實際上只走 `mail_admins`——也就是 `DEBUG=False` 的測試站
+  噴 500 時，Render 的 Logs 什麼都看不到，線上出錯無從查起。改成一律寫 stderr（PaaS 慣例：
+  不寫 log 檔，容器重啟就沒了，交給平台收）。等級由 `DJANGO_LOG_LEVEL` 控制，預設 `INFO`，
+  但 `django.request` 固定 `ERROR` 且不受它影響。
 - **演出「沒有出席紀錄」等於「待確認」，不預先建列**：硬建一筆反而分不出「按過」與「沒按過」，
   而「沒按過的人」正是幹部要追的對象。統計因此從團員名單反推、不掃 attendance 表（見 §4.22）。
 

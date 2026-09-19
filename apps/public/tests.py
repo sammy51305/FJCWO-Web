@@ -1,10 +1,12 @@
 import datetime as dt
+import io
+import logging
 import re
 from pathlib import Path
 
 from django.conf import settings
-from django.test import TestCase, override_settings
-from django.urls import reverse
+from django.test import Client, TestCase, override_settings
+from django.urls import path, reverse
 from django.utils import timezone
 
 from apps.accounts.models import User
@@ -620,6 +622,62 @@ class RobotsTxtTest(TestCase):
     def test_no_header_in_normal_mode(self):
         """正式站模式不加 header，公開頁才收錄得到"""
         self.assertNotIn('X-Robots-Tag', self.client.get('/'))
+
+
+def _raise_boom(request):
+    """故意噴例外的 view，只給 LoggingConfigTest 用。"""
+    raise RuntimeError('LOGGING 測試用的例外')
+
+
+class _BoomUrlConf:
+    """臨時 URLConf：Django 只要求這個物件有 `urlpatterns`。
+
+    用 class 而不是 `SimpleNamespace`——`get_resolver` 會對它做 lru_cache，
+    參數必須可雜湊。
+    """
+
+    urlpatterns = [path('boom/', _raise_boom)]
+
+
+class LoggingConfigTest(TestCase):
+    """DEBUG=False 時 500 的 traceback 要印得出來（Render Logs 才查得到線上錯誤）"""
+
+    def _console_handler(self):
+        handlers = logging.getLogger('django.request').handlers
+        self.assertTrue(handlers, 'django.request 沒有掛任何 handler')
+        return handlers[0]
+
+    def test_console_handler_is_not_limited_to_debug(self):
+        """handler 不能帶 require_debug_true——那正是 Django 預設值的問題所在
+
+        預設設定的 console handler 有 `require_debug_true` 過濾器，`DEBUG=False`
+        的線上站噴 500 時什麼都不會印，等於出錯無從查起。
+        """
+        handler = self._console_handler()
+        self.assertIsInstance(handler, logging.StreamHandler)
+        self.assertEqual(handler.filters, [])
+
+    @override_settings(
+        DEBUG=False,
+        ROOT_URLCONF=_BoomUrlConf,
+    )
+    def test_unhandled_exception_traceback_written_to_console(self):
+        """DEBUG=False 時，未捕捉的例外要連 traceback 一起寫進 stderr"""
+        handler = self._console_handler()
+        buffer = io.StringIO()
+        original = handler.setStream(buffer)
+        # raise_request_exception 只能在 Client 建構時指定；預設的 self.client
+        # 會把 view 的例外往外丟，測不到「伺服器回 500 並記 log」的行為。
+        client = Client(raise_request_exception=False)
+        try:
+            r = client.get('/boom/')
+        finally:
+            handler.setStream(original)
+
+        self.assertEqual(r.status_code, 500)
+        written = buffer.getvalue()
+        self.assertIn('RuntimeError', written)
+        self.assertIn('LOGGING 測試用的例外', written)
 
 
 class TemplateCommentSyntaxTest(TestCase):

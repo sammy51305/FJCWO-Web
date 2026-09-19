@@ -171,3 +171,49 @@ if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 else:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+# Django 的預設設定裡，`django.request`（也就是 500 的 traceback）只交給
+# `mail_admins` handler，console handler 帶著 `require_debug_true` 過濾器——
+# 意思是 `DEBUG=False` 的測試站／正式站噴 500 時，**Render 的 Logs 什麼都看不到**，
+# 只剩 gunicorn 自己的訊息，等於線上出錯完全無從查起。
+#
+# 這裡全部改寫到 stderr：PaaS 上不寫 log 檔（容器重啟就沒了、免費方案也沒有磁碟），
+# stdout/stderr 由平台收走就是慣例做法。本機開發跑 runserver 時一樣看得到。
+LOG_LEVEL = os.environ.get('DJANGO_LOG_LEVEL', 'INFO').upper()
+
+LOGGING = {
+    'version': 1,
+    # 不要關掉既有 logger：Django 內部與各 app 的 logger 都還要能用
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {
+            'format': '[{asctime}] {levelname} {name}: {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',  # 預設就是 stderr
+            'formatter': 'standard',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': LOG_LEVEL,
+    },
+    'loggers': {
+        # 未捕捉的例外：不論 DEBUG 與否都要印出 traceback，這是加這段的主要目的
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        # 本專案自己的 logger（如 apps.notifications 的 LINE 推播成功／略過／失敗）
+        'apps': {
+            'handlers': ['console'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+    },
+}

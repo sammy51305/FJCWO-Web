@@ -342,6 +342,25 @@ python manage.py createsuperuser    # 自己的管理員帳號
    系統寄的臨時密碼信只會印在 Render 的 log 裡、收件人收不到。
    要測「入團申請 → 收密碼信」整條流程（#11）就得填真的 SMTP。
 
+#### E-6　去哪裡看 log
+
+Render 後台 → 服務 `fjcwo-web`：
+
+| 分頁 | 看得到什麼 | 什麼時候看 |
+|------|-----------|-----------|
+| **Logs** | 網站執行中的輸出（gunicorn ＋ Django）| 頁面噴 500、推播沒送出、信沒寄出 |
+| **Events** | 每次部署的紀錄，點進去有 build log | 部署失敗、`build.sh` 的 `pip install`／`collectstatic`／`migrate` 出錯 |
+
+免費方案的 log 保留時間有限，出事後盡快去看。
+
+常見會在 Logs 看到的：500 的完整 traceback、`LINE notification skipped/failed`、
+console backend 印出來的臨時密碼信全文。
+
+> Django 的**預設** logging 設定會讓 `DEBUG=False` 的站完全看不到 500 的原因
+> （console handler 帶 `require_debug_true`）。專案已在 `config/settings.py` 的
+> `LOGGING` 覆寫掉這個行為，改成一律寫 stderr 由 Render 收走。
+> 要更細的追蹤可把 `DJANGO_LOG_LEVEL` 設成 `DEBUG`，但會很吵，查完記得改回來。
+
 #### E-7　不讓搜尋引擎收錄測試站
 
 測試站網址是公開的，可能被搜尋引擎爬到。設 `DJANGO_ROBOTS_NOINDEX=True` 會同時做兩件事：

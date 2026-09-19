@@ -38,6 +38,10 @@ services:
       # ⚠️ 換掉這個值會讓既有密文解不開，等同資料遺失——設定後不要再動。
       - key: DJANGO_FIELD_ENCRYPTION_KEY
         generateValue: true
+      # log 等級。預設 INFO 就夠用，要追細節才臨時改 DEBUG（會很吵）。
+      # 500 的 traceback 不受這個值影響，一律寫進 stderr、在 Render 的 Logs 看得到。
+      - key: DJANGO_LOG_LEVEL
+        value: INFO
       # ---- 寄信（#11 校友匯入的最後一哩：核准 → 寄臨時密碼信）----
       # 四個都填才會切到真的 SMTP；少任一個就退回 console backend（信只印在 log、收不到）。
       - key: EMAIL_HOST
