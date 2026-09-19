@@ -1,3 +1,4 @@
+import datetime as dt
 import re
 from pathlib import Path
 
@@ -107,6 +108,115 @@ class IndexDashboardLeaveResultTest(TestCase):
         self.client.force_login(self.member)
         r = self.client.get(self.url)
         self.assertNotContains(r, '已核准')
+
+
+class IndexNextRehearsalTest(TestCase):
+    """首頁「下次排練」卡片挑哪一場（當天的排練整天都要留著）"""
+
+    def setUp(self):
+        from apps.events.models import PerformanceEvent
+
+        self.member = User.objects.create_user(
+            username='card_member', password='x', name='卡片測試團員',
+            email='card_member@test.local', role=User.Role.MEMBER,
+        )
+        self.venue = Venue.objects.create(name='卡片測試場地', type=Venue.Type.REHEARSAL)
+        self.event = PerformanceEvent.objects.create(
+            name='卡片測試演出', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now(), performance_venue=self.venue,
+        )
+        self.today = timezone.localdate()
+
+    def _at(self, day_offset, hour):
+        """回傳「今天 + day_offset 天」的 hour 點整（本地時區）。
+
+        測試不看真實時鐘幾點——時間一律由今天的日期推算、再把 now 直接餵給
+        `_dashboard_rehearsal`，否則清晨或深夜跑測試會因為跨日而飄。
+        """
+        return timezone.make_aware(
+            dt.datetime.combine(self.today + dt.timedelta(days=day_offset),
+                                dt.time(hour, 0)),
+            timezone.get_current_timezone(),
+        )
+
+    def _rehearsal(self, sequence, moment):
+        from apps.events.models import Rehearsal
+
+        return Rehearsal.objects.create(
+            event=self.event, sequence=sequence, date=moment, venue=self.venue,
+        )
+
+    def test_rehearsal_already_started_today_stays_on_card(self):
+        """排練開始時刻一過，卡片仍要顯示這場，不能跳成下一場
+
+        這是團員最需要簽到、看排練日誌的時間點（2026-09-19 幹部回饋）。
+        """
+        from apps.public.views import _dashboard_rehearsal
+
+        today_rehearsal = self._rehearsal(1, self._at(0, 19))
+        self._rehearsal(2, self._at(7, 19))
+
+        rehearsal, started = _dashboard_rehearsal(self._at(0, 20))
+        self.assertEqual(rehearsal, today_rehearsal)
+        self.assertTrue(started)
+
+    def test_upcoming_rehearsal_shown_when_none_started_today(self):
+        """今天還沒有任何排練開始時，顯示最近一場未來的排練"""
+        from apps.public.views import _dashboard_rehearsal
+
+        soon = self._rehearsal(1, self._at(7, 19))
+        self._rehearsal(2, self._at(14, 19))
+
+        rehearsal, started = _dashboard_rehearsal(self._at(0, 20))
+        self.assertEqual(rehearsal, soon)
+        self.assertFalse(started)
+
+    def test_today_rehearsal_wins_over_later_same_day(self):
+        """同一天多場時取最近開始的那場，不是早上已結束的那場"""
+        from apps.public.views import _dashboard_rehearsal
+
+        self._rehearsal(1, self._at(0, 9))
+        evening = self._rehearsal(2, self._at(0, 19))
+
+        rehearsal, started = _dashboard_rehearsal(self._at(0, 20))
+        self.assertEqual(rehearsal, evening)
+        self.assertTrue(started)
+
+    def test_yesterday_rehearsal_not_shown(self):
+        """昨天的排練隔天就要換掉，不會賴在首頁"""
+        from apps.public.views import _dashboard_rehearsal
+
+        self._rehearsal(1, self._at(-1, 19))
+
+        rehearsal, started = _dashboard_rehearsal(self._at(0, 20))
+        self.assertIsNone(rehearsal)
+        self.assertFalse(started)
+
+    def test_no_rehearsal_at_all(self):
+        """完全沒有排練時回傳 None，不炸掉"""
+        from apps.public.views import _dashboard_rehearsal
+
+        rehearsal, started = _dashboard_rehearsal(self._at(0, 20))
+        self.assertIsNone(rehearsal)
+        self.assertFalse(started)
+
+    def test_card_renders_path_hint(self):
+        """卡片要標出這場排練平常自己要從哪裡點進去"""
+        self._rehearsal(1, self._at(0, 0))
+        self.client.force_login(self.member)
+
+        r = self.client.get(reverse('public:index'))
+        self.assertContains(r, '路徑：演出活動')
+        self.assertContains(r, '第 1 次排練')
+
+    def test_card_marks_today_rehearsal_in_progress(self):
+        """當天已開始的排練，卡片標題改成「今天的排練」並標進行中"""
+        self._rehearsal(1, self._at(0, 0))
+        self.client.force_login(self.member)
+
+        r = self.client.get(reverse('public:index'))
+        self.assertContains(r, '今天的排練')
+        self.assertContains(r, '進行中')
 
 
 class PublicPagesTest(TestCase):

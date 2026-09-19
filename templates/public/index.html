@@ -37,15 +37,27 @@
   <!-- 下次排練 -->
   <div class="col-md-6">
     <div class="card h-100">
-      <div class="card-header fw-semibold">
-        <i class="bi bi-calendar-event me-1"></i> 下次排練
+      <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+        <span>
+          <i class="bi bi-calendar-event me-1"></i>
+          {% if next_rehearsal_started %}今天的排練{% else %}下次排練{% endif %}
+        </span>
+        {% if next_rehearsal_started %}<span class="badge bg-success">進行中</span>{% endif %}
       </div>
       <div class="card-body">
         {% if next_rehearsal %}
           <p class="mb-1 fw-semibold">{{ next_rehearsal.event.name }}</p>
           <p class="mb-1"><i class="bi bi-clock me-1 text-muted"></i>{{ next_rehearsal.date|date:"Y/m/d（D）H:i" }}</p>
-          <p class="mb-3"><i class="bi bi-geo-alt me-1 text-muted"></i>{{ next_rehearsal.venue.name }}</p>
-          <a href="{% url 'events:rehearsal_detail' next_rehearsal.pk %}" class="btn btn-sm btn-outline-primary">詳情</a>
+          <p class="mb-2"><i class="bi bi-geo-alt me-1 text-muted"></i>{{ next_rehearsal.venue.name }}</p>
+          {% comment %} 路徑標示：讓人知道這張卡片的內容平常自己要從哪裡找得到
+             （2026-09-19 幹部回饋「順便在上面寫一下路徑」）。 {% endcomment %}
+          <p class="text-muted small mb-3">
+            <i class="bi bi-signpost-2 me-1"></i>路徑：演出活動 ›
+            {{ next_rehearsal.event.name }} › 第 {{ next_rehearsal.sequence }} 次排練
+          </p>
+          <a href="{% url 'events:rehearsal_detail' next_rehearsal.pk %}" class="btn btn-sm btn-outline-primary">
+            {% if next_rehearsal.summary_progress %}排練摘要{% else %}詳情{% endif %}
+          </a>
         {% else %}
           <p class="text-muted mb-0">近期無排練安排。</p>
         {% endif %}

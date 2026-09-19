@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 
 from django.conf import settings
 from django.contrib import messages
@@ -46,18 +46,42 @@ def _parse_time(value):
         return None
 
 
+def _dashboard_rehearsal(now):
+    """首頁「下次排練」卡片要顯示哪一場，以及它是否已經開始。
+
+    不能只用 `date > now`——排練開始時刻一過，卡片就跳成下一場，而團員最需要
+    簽到、看排練日誌的時間點正好在那之後（2026-09-19 幹部回饋：「我想要排練的
+    時候簽到，但沒有找到簽到按鈕或 QR code」）。
+
+    比照請假截止 `day_end` 的慣例（見 `apps/events/models.py`）：**當天這場整天
+    都留在首頁**，隔天才換下一場。`Rehearsal` 沒有結束時間欄位，用「當天」當邊界
+    是刻意的推導，與 #13-7 同一套邏輯，不另立第二種時間慣例。
+
+    同一天有多場時取**最近開始的那場**——晚上七點的排練進行中時，要顯示的是它，
+    不是早上九點那場。
+    """
+    from apps.events.models import Rehearsal
+
+    today_start = timezone.make_aware(
+        datetime.combine(timezone.localdate(), time.min),
+        timezone.get_current_timezone(),
+    )
+    qs = Rehearsal.objects.select_related('event', 'venue')
+
+    started = qs.filter(date__gte=today_start, date__lte=now).order_by('-date').first()
+    if started:
+        return started, True
+    return qs.filter(date__gt=now).order_by('date').first(), False
+
+
 def index(request):
     context = {}
     if request.user.is_authenticated:
-        from apps.events.models import LeaveRequest, Rehearsal
-        # 下次排練（最近一場未來的排練）
-        context['next_rehearsal'] = (
-            Rehearsal.objects
-            .filter(date__gt=timezone.now())
-            .select_related('event', 'venue')
-            .order_by('date')
-            .first()
-        )
+        from apps.events.models import LeaveRequest
+        # 下次排練（當天這場整天都留著，不會一開始就跳成下一場）
+        rehearsal, started = _dashboard_rehearsal(timezone.now())
+        context['next_rehearsal'] = rehearsal
+        context['next_rehearsal_started'] = started
         # 我的待審請假
         context['pending_leaves'] = (
             LeaveRequest.objects
