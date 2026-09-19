@@ -373,6 +373,62 @@ class VenueManageTest(TestCase):
         self.assertContains(r, '演出場地甲')
         self.assertNotContains(r, '測試場地')
 
+    # ── 列表：用途說明與使用次數 ──────────────────────────
+
+    def test_list_explains_what_the_page_is_for(self):
+        """頁面要寫清楚用途與時機（幹部回饋：看不出這功能要幹嘛）"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.list_url)
+        self.assertContains(r, '場地主檔')
+        self.assertContains(r, '不是預約系統')
+
+    def test_list_shows_usage_counts(self):
+        """列出每個場地被幾場演出／排練用到
+
+        兩個 annotate 各自 JOIN，沒有 `distinct=True` 的話 1 場演出 × 2 場排練
+        會互相相乘、兩邊都變成 2——這個測試就是要擋住那種算法。
+        """
+        from apps.events.models import PerformanceEvent, Rehearsal
+
+        event = PerformanceEvent.objects.create(
+            name='使用次數測試演出', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now(), performance_venue=self.venue,
+        )
+        for sequence in (1, 2):
+            Rehearsal.objects.create(
+                event=event, sequence=sequence, date=timezone.now(), venue=self.venue,
+            )
+
+        self.client.force_login(self.officer)
+        r = self.client.get(self.list_url)
+
+        venue = r.context['venues'][0]
+        self.assertEqual(venue.event_count, 1)
+        self.assertEqual(venue.rehearsal_count, 2)
+        self.assertContains(r, '演出 1')
+        self.assertContains(r, '排練 2')
+
+    def test_unused_venue_marked_as_unused(self):
+        """沒被任何演出／排練用到的場地標「尚未使用」"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.list_url)
+        self.assertContains(r, '尚未使用')
+
+    def test_empty_state_guides_first_venue(self):
+        """一筆場地都沒有時，給引導而不是「沒有符合條件」"""
+        Venue.objects.all().delete()
+        self.client.force_login(self.officer)
+        r = self.client.get(self.list_url)
+        self.assertContains(r, '新增第一個場地')
+        self.assertNotContains(r, '沒有符合條件的場地')
+
+    def test_no_search_result_is_not_empty_state(self):
+        """搜尋不到跟一筆都沒有是兩回事，提示不能互換"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.list_url, {'q': '不存在的場地'})
+        self.assertContains(r, '沒有符合條件的場地')
+        self.assertNotContains(r, '新增第一個場地')
+
     # ── 新增 ────────────────────────────────────────────
 
     def test_officer_post_creates_venue(self):

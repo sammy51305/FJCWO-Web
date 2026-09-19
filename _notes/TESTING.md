@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-09-19（共 552 個測試）
+> 最後更新：2026-09-20（共 557 個測試）
 
 ---
 
@@ -90,7 +90,7 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **552 個測試**，分布在 8 個 app。
+共 **557 個測試**，分布在 8 個 app。
 
 > 最近一次全站測試：2026-09-19 執行 `python manage.py test`，**552/552 全數通過、無 regression**（System check 亦無問題）。
 
@@ -184,7 +184,7 @@ python manage.py test --noinput
 |-------|---------|
 | `PushLineMessageTest` | credentials 齊全時發出 API 請求、TOKEN 缺少時略過、GROUP_ID 缺少時略過、API 失敗時 silent fail |
 
-### `apps/public/tests.py`（55 個）
+### `apps/public/tests.py`（60 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -192,7 +192,7 @@ python manage.py test --noinput
 | `IndexNextRehearsalTest` | 首頁「下次排練」卡片挑哪一場：排練開始時刻一過**仍留在卡片上**（不跳成下一場）、今天沒有已開始的排練時顯示未來最近一場、同一天多場取最近開始的、昨天的排練不再顯示、完全沒排練時不炸掉；卡片渲染出路徑標示與「今天的排練／進行中」 |
 | `PublicPagesTest` | 首頁、關於百韻、章程三頁面的 200 回應與不需登入；章程有內容時顯示、無內容時顯示佔位文字 |
 | `CharterEditTest` | 存取控制（未登入/一般團員/幹部）、POST 儲存章程並 redirect、二次更新不新增資料 |
-| `VenueManageTest` | 存取控制（未登入/一般團員/幹部）、依名稱搜尋、依類別篩選、新增/編輯場地、新增/刪除時段、刪除限管理員、被演出活動引用（PROTECT）時即使管理員也無法刪除 |
+| `VenueManageTest` | 存取控制（未登入/一般團員/幹部）、依名稱搜尋、依類別篩選、新增/編輯場地、新增/刪除時段、刪除限管理員、被演出活動引用（PROTECT）時即使管理員也無法刪除；頁面寫出用途說明、列出被幾場演出／排練使用（`distinct=True` 防 JOIN 相乘）、未使用標「尚未使用」、一筆都沒有與搜尋不到給不同提示 |
 | `RobotsTxtTest` | robots.txt：掛在網站根目錄回純文字、未登入可讀、noindex 模式整站禁止、正常模式只擋內部路徑（公開頁不受影響）、noindex 模式每個回應帶 X-Robots-Tag、正常模式不帶 |
 | `LoggingConfigTest` | `LOGGING` 設定：console handler 沒有 `require_debug_true` 過濾器（那正是 Django 預設值會讓線上站看不到錯誤的原因）、`DEBUG=False` 時未捕捉的例外連 traceback一起寫進 stderr |
 | `TemplateCommentSyntaxTest` | 全掃 `templates/`，禁止多行 `{# #}`——Django 的 `{# #}` 只支援單行，中間有換行就不是註解、會整段印在頁面上（一般 view 測試抓不到：頁面照樣 200、元素也都在）|

@@ -10,6 +10,20 @@
   </a>
 </div>
 
+{% comment %} 幹部試用回饋：「場地管理的功能我沒有 get 到」。這頁是主檔維護，
+   光看一張清單看不出什麼時候該用，所以直接把用途與時機寫在頁面上。 {% endcomment %}
+<div class="alert alert-light border d-flex gap-3 mb-4">
+  <i class="bi bi-info-circle text-primary fs-5"></i>
+  <div class="small mb-0">
+    這裡是<strong>場地主檔</strong>——先在這裡建好場地，
+    之後<a href="{% url 'events:event_list' %}">新增演出活動或排練</a>時才能從下拉選單選到它，
+    場地的地址、交通、停車資訊也會自動帶進活動頁給團員看。
+    <br>
+    維護的是「這個場地長什麼樣子」（地址、容納人數、聯絡人、可借用時段與費用），
+    <strong>不是預約系統</strong>；哪一天要用哪個場地，是在各場演出與排練裡指定。
+  </div>
+</div>
+
 <!-- 搜尋／篩選列 -->
 <form method="get" class="row g-2 mb-4">
   <div class="col-sm-4 col-md-3">
@@ -41,6 +55,7 @@
         <th>類別</th>
         <th>地址</th>
         <th>時段數</th>
+        <th>使用中</th>
         <th></th>
       </tr>
     </thead>
@@ -57,6 +72,14 @@
         </td>
         <td class="small text-muted">{{ venue.address|default:"—" }}</td>
         <td>{{ venue.time_slots.count }}</td>
+        <td class="small">
+          {% if venue.event_count or venue.rehearsal_count %}
+            {% if venue.event_count %}<span class="badge bg-primary-subtle text-primary-emphasis">演出 {{ venue.event_count }}</span>{% endif %}
+            {% if venue.rehearsal_count %}<span class="badge bg-secondary-subtle text-secondary-emphasis">排練 {{ venue.rehearsal_count }}</span>{% endif %}
+          {% else %}
+            <span class="text-muted">尚未使用</span>
+          {% endif %}
+        </td>
         <td>
           <div class="d-flex gap-1">
             <a href="{% url 'public:venue_edit' venue.pk %}" class="btn btn-sm btn-outline-secondary">
@@ -78,6 +101,17 @@
   </table>
 </div>
 {% else %}
-<p class="text-muted">沒有符合條件的場地。</p>
+  {% if has_any_venue %}
+  <p class="text-muted">沒有符合條件的場地。</p>
+  {% else %}
+  <div class="text-center text-muted py-5">
+    <i class="bi bi-geo-alt fs-1 d-block mb-2"></i>
+    <p class="mb-3">還沒有任何場地。先把常用的排練室與演出廳建進來，<br>
+      之後排演出、排練就能直接選，不用每次重打地址。</p>
+    <a href="{% url 'public:venue_create' %}" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-lg"></i> 新增第一個場地
+    </a>
+  </div>
+  {% endif %}
 {% endif %}
 {% endblock %}
