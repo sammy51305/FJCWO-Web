@@ -92,7 +92,7 @@ python manage.py test --noinput
 
 共 **557 個測試**，分布在 8 個 app。
 
-> 最近一次全站測試：2026-09-19 執行 `python manage.py test`，**552/552 全數通過、無 regression**（System check 亦無問題）。
+> 最近一次全站測試：2026-10-04 執行 `python manage.py test`，**557/557 全數通過、無 regression**（System check 亦無問題）。
 
 ### `apps/accounts/tests.py`（158 個）
 
@@ -215,7 +215,8 @@ python manage.py test --noinput
 - **Django 框架本身**（路由解析、ORM 查詢語法等）
 - **靜態資源載入**（CSS / JS）
 - **管理後台**（Django Admin 由框架負責，不另寫測試）
-- **Phase 3 未實作的功能**（meetings、notifications）
+- **Phase 3 未實作的功能**（`meetings`）
+- **難以自動化的整合層**（`notifications` 的 Admin 觸發：utils 層已測，整合層見下方「尚未覆蓋」）
 
 ---
 

@@ -128,9 +128,14 @@ DB_PORT=5432
 | `LINE_GROUP_ID` | 推播的目標群組 | 同上（缺任一就跳過）| [utils.py](../apps/notifications/utils.py) |
 | `EMAIL_HOST_USER` | SMTP 帳號 | 自動改用 console backend，信印在終端機 | [settings.py](../config/settings.py) |
 | `EMAIL_HOST_PASSWORD` | SMTP 密碼 | 同上（缺任一就走 console）| [settings.py](../config/settings.py) |
+| `DJANGO_FIELD_ENCRYPTION_KEY` | 敏感個資欄位（出生年月日／住址／證號）的加解密金鑰 | 退回 dev 預設金鑰（本機能跑，但與正式站金鑰不同）| [settings.py](../config/settings.py) / [fields.py](../apps/accounts/fields.py) |
 
-> 兩組 fallback 的判斷都是「兩個值都要有」才啟用真功能，缺一即退回安全預設。
+> LINE 與 Email 兩組的判斷都是「兩個值都要有」才啟用真功能，缺一即退回安全預設。
 > LINE 的 silent fail 設計見 [DESIGN.md](DESIGN.md) §4.18；Email backend 切換邏輯見 [config/settings.py](../config/settings.py) `EMAIL_BACKEND` 那段。
+>
+> `DJANGO_FIELD_ENCRYPTION_KEY` 不同：它單一變數、沒填會退回內建 dev 金鑰，所以**本機開發不設也能跑**。
+> 但**金鑰決定既有密文能否解開**——一旦某個環境開始存真資料，就不能再換金鑰（換掉＝舊密文全部解不開）。
+> 正式環境務必設一組固定的隨機字串，見下方情境 E（E-3 / E-9）。
 
 **先判斷你屬於哪個情境，再往下看對應段落：**
 
@@ -432,7 +437,7 @@ python manage.py sendtestemail 你的信箱@example.com
 > ⚠️ **寄送額度**：一般 Gmail 帳號每日約數百封上限。#11 要一次核准三百位校友時
 > 很可能撞到限流，屆時要分批核准（DESIGN #11 風險表已列）。
 
-#### E-6　上線檢查
+#### E-9　上線檢查
 
 - [ ] `DJANGO_DEBUG=False`（`render.yaml` 已寫死，確認沒被改掉）
 - [ ] `DEMO_PASSWORD` 不是 `demo1234`

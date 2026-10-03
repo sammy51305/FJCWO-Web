@@ -1,6 +1,6 @@
 # FJCWO-Web 架構文件
 
-> 最後更新：2026-08-08（轉帳收款設定改結構化欄位：銀行代號 autocomplete、帳號去 dash、團員頁複製按鈕）
+> 最後更新：2026-10-04（文件整併審查：全 27 個 model 對照當前程式碼確認一致）
 > 本文件記錄系統架構決策與設計規劃，供開發參考。
 
 ---
@@ -467,6 +467,8 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 
 ### 會議紀錄（MeetingRecord）
 
+> ⚠️ **Phase 3，尚未實作**——以下為設計草案，`meetings` app 目前無此 model。實作時以此為藍本。
+
 | 欄位 | 說明 |
 |------|------|
 | title | 會議名稱 |
@@ -663,6 +665,8 @@ FJCWO-Web/
 │   └── sections.json       # 聲部（第一部〜第四部、Solo）
 ├── _notes/                 # 開發文件（不進 production）
 │   ├── Architecture.md
+│   ├── BACKLOG.md
+│   ├── DEMO.md
 │   ├── DESIGN.md
 │   ├── GUIDE.md
 │   ├── OVERVIEW.md
