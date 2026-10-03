@@ -105,9 +105,9 @@ git checkout -b Feature/xxxxx
    git push -u origin Feature/xxxxx
    ```
 2. 到 GitHub 開 PR：**base = `main`**，compare = 你的分支。
-3. PR 說明要讓審核的人不用猜，至少寫：
+3. PR 說明會**自動帶出範本**（`.github/pull_request_template.md`），照欄位填即可：
    - **做了什麼、為什麼**
-   - 影響的 app / Model / 頁面
+   - 影響的 app / Model / 頁面、有無 migration
    - **測試結果**（哪些 app 測試通過；動到多個 app 或 Model 時附全站測試結果）
    - 有沒有要特別注意的（資料遷移、權限邊界、相依關係）
 4. 指定 reviewer（目前為擁有者）。
