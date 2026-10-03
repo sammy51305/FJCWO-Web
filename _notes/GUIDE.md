@@ -23,6 +23,7 @@
 | `../CLAUDE.md` | **入口**。專案概述、常用指令、重要慣例 |
 | [WORKFLOW.md](WORKFLOW.md) | 開發流程、commit message、**Branch / PR / 審核**、commit 前 checklist、P/S/Phase 標記 |
 | [TESTING.md](TESTING.md) | 測試怎麼跑、測了什麼、還有什麼沒測 |
+| [BACKLOG.md](BACKLOG.md) | 待辦清單：還沒做的功能構想、優先權、已知未修問題 |
 
 ### 🧭 查系統怎麼設計
 | 文件 | 什麼時候開 |
@@ -58,9 +59,9 @@
 | 目前做到哪個 Phase | [Architecture.md](Architecture.md) 七、開發階段規劃 |
 | 某個系統的設計邏輯是什麼 | [DESIGN.md](DESIGN.md) 四、各系統運作邏輯 |
 | 這段程式「為什麼這樣寫」，是設計選擇還是 bug | [DESIGN.md](DESIGN.md) 附錄三 |
-| 有哪些已知的資料完整性問題還沒修 | [DESIGN.md](DESIGN.md) 附錄四 |
-| 有哪些構想中、還沒設計/實作的功能 | [DESIGN.md](DESIGN.md) 附錄五 |
-| 那些待辦哪個該先做 | [DESIGN.md](DESIGN.md) 附錄五開頭的優先順序表 |
+| 有哪些已知的資料完整性問題還沒修 | [BACKLOG.md](BACKLOG.md) 附錄四 |
+| 有哪些構想中、還沒設計/實作的功能 | [BACKLOG.md](BACKLOG.md) 附錄五 |
+| 那些待辦哪個該先做 | [BACKLOG.md](BACKLOG.md) 開頭的優先順序表 |
 | P0/P1/P2、S1/S2、Phase 差在哪 | [WORKFLOW.md](WORKFLOW.md) 標記慣例 |
 | 目前有幾個測試、測了什麼 | [TESTING.md](TESTING.md) |
 | 要新增測試，慣例是什麼 | [TESTING.md](TESTING.md) 新增測試的慣例 |
@@ -79,9 +80,10 @@
 | `../CLAUDE.md` | 專案入口：概述、開發環境、重要慣例、往各文件指路 | 詳細架構、設計邏輯、文件職責表 |
 | [GUIDE.md](GUIDE.md) | 文件導覽、各文件職責索引（本檔） | 文件的具體內容 |
 | [Architecture.md](Architecture.md) | Model 欄位表、頁面權限、系統清單、目錄結構、Phase 進度 | 設計邏輯、實作細節 |
-| [DESIGN.md](DESIGN.md) | FK 關聯圖、各系統設計邏輯與決策、設計選擇備忘、待評估項目 | 欄位清單（在 Architecture）|
+| [DESIGN.md](DESIGN.md) | FK 關聯圖、各系統設計邏輯與決策、設計選擇備忘 | 欄位清單（在 Architecture）、待辦（在 BACKLOG）|
+| [BACKLOG.md](BACKLOG.md) | 待辦清單：待開發功能構想與優先權表、待評估的資料完整性問題（原 DESIGN 附錄四、五）| 已實作系統的設計邏輯（在 DESIGN）|
 | [TESTING.md](TESTING.md) | 測試總數、各 class 說明、執行方式、未覆蓋功能 | 測試的具體程式碼 |
 | [SETUP.md](SETUP.md) | 從零建環境的步驟（含 fixtures 載入順序）| 架構設計 |
 | [OVERVIEW.md](OVERVIEW.md) | 功能總覽與操作流程（非技術人員版）| 技術實作細節 |
 | [DEMO.md](DEMO.md) | Demo 動線、開場前檢查、demo 資料內容與陷阱 | 系統行為說明（在 OVERVIEW）|
-| [WORKFLOW.md](WORKFLOW.md) | 開發標準流程、commit message 規範、協作（Branch/PR/審核/機敏檔防線）、commit 前 checklist、標記慣例（P/S/Phase）| 各文件內部的細節內容、個別待辦排在第幾（在 DESIGN 附錄五）|
+| [WORKFLOW.md](WORKFLOW.md) | 開發標準流程、commit message 規範、協作（Branch/PR/審核/機敏檔防線）、commit 前 checklist、標記慣例（P/S/Phase）| 各文件內部的細節內容、個別待辦排在第幾（在 BACKLOG.md）|
