@@ -112,6 +112,72 @@ class IndexDashboardLeaveResultTest(TestCase):
         self.assertNotContains(r, '已核准')
 
 
+class IndexOfficerPendingReviewTest(TestCase):
+    """首頁「待我處理的事項」：幹部待審排練請假筆數，與團員視角「我的請假」分開（#12）"""
+
+    def setUp(self):
+        from apps.events.models import PerformanceEvent, Rehearsal
+
+        self.officer = User.objects.create_user(
+            username='dash_officer', password='x', name='首頁幹部',
+            email='dash_officer@test.local', role=User.Role.OFFICER,
+        )
+        self.member = User.objects.create_user(
+            username='dash_mem', password='x', name='首頁團員',
+            email='dash_mem@test.local', role=User.Role.MEMBER,
+        )
+        venue = Venue.objects.create(name='待審場地', type=Venue.Type.REHEARSAL)
+        event = PerformanceEvent.objects.create(
+            name='待審演出', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now(), performance_venue=venue,
+        )
+        self.rehearsal = Rehearsal.objects.create(
+            event=event, sequence=1, date=timezone.now(), venue=venue,
+        )
+        self.url = reverse('public:index')
+
+    def _make_pending_leave(self, member):
+        from apps.events.models import LeaveRequest
+        return LeaveRequest.objects.create(
+            member=member, rehearsal=self.rehearsal, reason='請假',
+            status=LeaveRequest.Status.PENDING,
+        )
+
+    def test_officer_sees_todo_block_with_leave_review_link(self):
+        """有待審排練請假時，首頁出現「待我處理的事項」並連到請假審核頁"""
+        self._make_pending_leave(self.member)
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertContains(r, '待我處理的事項')
+        self.assertContains(r, '排練請假待審核')
+        self.assertContains(r, reverse('events:leave_review_list'))
+
+    def test_member_does_not_see_todo_block(self):
+        """一般團員看不到「待我處理的事項」，也沒有 pending_leaves_count"""
+        self._make_pending_leave(self.member)
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertNotContains(r, '待我處理的事項')
+        self.assertIsNone(r.context.get('pending_leaves_count'))
+
+    def test_officer_with_no_pending_hides_todo_block(self):
+        """沒有任何待審／待確認時，不顯示「待我處理的事項」"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertEqual(r.context['pending_leaves_count'], 0)
+        self.assertNotContains(r, '待我處理的事項')
+
+    def test_my_leaves_card_is_own_only_review_count_is_all(self):
+        """「我的請假」只含自己送的；「待我處理」的排練請假筆數是全團（視角分開）"""
+        self._make_pending_leave(self.officer)   # 自己送的
+        self._make_pending_leave(self.member)    # 別人送的
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertContains(r, '我的請假（待審核）')
+        self.assertEqual(r.context['pending_leaves'].count(), 1)   # 我的卡片：只有自己
+        self.assertEqual(r.context['pending_leaves_count'], 2)     # 待我處理：全團
+
+
 class IndexNextRehearsalTest(TestCase):
     """首頁「下次排練」卡片挑哪一場（當天的排練整天都要留著）"""
 

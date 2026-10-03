@@ -69,7 +69,7 @@
   <div class="col-md-6">
     <div class="card h-100">
       <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-calendar-x me-1"></i> 待審核請假</span>
+        <span><i class="bi bi-calendar-x me-1"></i> 我的請假（待審核）</span>
         {% if pending_leaves %}
           <span class="badge bg-warning text-dark">{{ pending_leaves.count }} 筆</span>
         {% endif %}
@@ -87,36 +87,44 @@
           </ul>
           <a href="{% url 'events:my_leave_requests' %}" class="btn btn-sm btn-outline-secondary">查看全部</a>
         {% else %}
-          <p class="text-muted mb-0">沒有待審核的請假申請。</p>
+          <p class="text-muted mb-0">你目前沒有待審核的請假。</p>
         {% endif %}
       </div>
     </div>
   </div>
 
-  {% if user.is_officer and pending_registrations_count %}
-  <!-- 幹部：待審核報到申請 -->
+  {% if user.is_officer %}
+  {% if pending_registrations_count or pending_leaves_count or pending_fees_count %}
+  <!-- 幹部：待我處理的事項（所有待審核／待確認集中一處，#12）-->
   <div class="col-12">
-    <div class="alert alert-warning d-flex align-items-center gap-3 mb-0">
-      <i class="bi bi-person-exclamation fs-4"></i>
-      <div>
-        有 <strong>{{ pending_registrations_count }}</strong> 筆入團申請待審核。
-        <a href="{% url 'accounts:registration_review' %}" class="alert-link ms-2">前往審核 →</a>
-      </div>
+    <div class="alert alert-warning mb-0">
+      <div class="fw-semibold mb-2"><i class="bi bi-clipboard-check me-1"></i> 待我處理的事項</div>
+      <ul class="list-unstyled mb-0 d-flex flex-column gap-1">
+        {% if pending_registrations_count %}
+        <li>
+          <i class="bi bi-person-exclamation me-1"></i>
+          有 <strong>{{ pending_registrations_count }}</strong> 筆入團申請待審核。
+          <a href="{% url 'accounts:registration_review' %}" class="alert-link ms-1">前往審核 →</a>
+        </li>
+        {% endif %}
+        {% if pending_leaves_count %}
+        <li>
+          <i class="bi bi-calendar-x me-1"></i>
+          有 <strong>{{ pending_leaves_count }}</strong> 筆排練請假待審核。
+          <a href="{% url 'events:leave_review_list' %}" class="alert-link ms-1">前往審核 →</a>
+        </li>
+        {% endif %}
+        {% if pending_fees_count %}
+        <li>
+          <i class="bi bi-cash-coin me-1"></i>
+          有 <strong>{{ pending_fees_count }}</strong> 筆會費繳納待確認。
+          <a href="{% url 'finance:fee_review_list' %}" class="alert-link ms-1">前往確認 →</a>
+        </li>
+        {% endif %}
+      </ul>
     </div>
   </div>
   {% endif %}
-
-  {% if user.is_officer and pending_fees_count %}
-  <!-- 幹部：待確認會費 -->
-  <div class="col-12">
-    <div class="alert alert-warning d-flex align-items-center gap-3 mb-0">
-      <i class="bi bi-cash-coin fs-4"></i>
-      <div>
-        有 <strong>{{ pending_fees_count }}</strong> 筆會費繳納待確認。
-        <a href="{% url 'finance:fee_review_list' %}" class="alert-link ms-2">前往確認 →</a>
-      </div>
-    </div>
-  </div>
   {% endif %}
 
 </div>

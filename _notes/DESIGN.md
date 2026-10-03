@@ -1424,17 +1424,30 @@ context['reviewed_leaves'] = reviewed_leaves
 if reviewed_leaves:
     LeaveRequest.objects.filter(pk__in=[leave.pk for leave in reviewed_leaves]).update(result_seen=True)
 
-# 幹部專屬：待審核的入團申請數（顯示提醒徽章）
+# 幹部：待我處理的事項（入團申請、排練請假、會費確認；集中成一塊，#12）
 if request.user.is_officer:
-    context['pending_registrations_count'] = (
-        Registration.objects.filter(status=Registration.Status.PENDING).count()
-    )
+    context['pending_registrations_count'] = Registration.objects.filter(status=Registration.Status.PENDING).count()
+    context['pending_leaves_count'] = LeaveRequest.objects.filter(status=LeaveRequest.Status.PENDING).count()
+    context['pending_fees_count'] = MembershipFee.objects.filter(status=MembershipFee.Status.REPORTED).count()
 ```
 
 **設計考量：**
 - 各查詢彼此獨立，無 N+1 問題（`select_related` 處理關聯）
-- `pending_registrations_count` 只給幹部，一般團員不需要看這個數字
+- 三個 `pending_*_count` 只給幹部，一般團員不需要看這些數字
 - import 放在 `if request.user.is_authenticated` 內部，避免未登入時引發不必要的查詢
+
+#### 幹部「待我處理的事項」與團員「我的請假」刻意分開（#12）
+
+首頁有兩塊外觀相似、視角卻完全不同的請假資訊，用不同標題與資料來源分開，避免幹部漏審：
+
+| 區塊 | 看得到的人 | 資料來源 | 意義 |
+|------|-----------|---------|------|
+| 「我的請假（待審核）」卡片 | 所有登入者 | `pending_leaves`（`filter(member=request.user)`）| **我自己送出、還沒被審**的假單 |
+| 「待我處理的事項」清單 | 僅幹部 | `pending_leaves_count`（全團 `status=pending`）＋入團申請＋會費確認 | **等著我去審／確認**的事項 |
+
+原本只有「我的請假」卡片，幹部登入看到「沒有待審核的請假」會誤讀成「沒有假要我審」，
+實際上可能有好幾筆躺在審核頁——漏了不會有任何跡象。現在幹部待審排練請假併進「待我處理的事項」
+（與入團申請、會費確認同一塊），**日後再加審核類型只需在這塊加一行**，不必每次改首頁結構。
 
 #### 為什麼「下次排練」不是 `date > now`
 
