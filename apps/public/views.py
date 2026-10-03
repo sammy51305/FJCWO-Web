@@ -118,11 +118,15 @@ def index(request):
             MembershipFee.objects.filter(
                 pk__in=[fee.pk for fee in reviewed_fees]
             ).update(result_seen=True)
-        # 幹部：待審核的入團申請數、待確認會費筆數
+        # 幹部：待我處理的事項（入團申請、排練請假、會費確認；集中成一塊，見 #12）
         if request.user.is_officer:
             from apps.accounts.models import Registration
             context['pending_registrations_count'] = Registration.objects.filter(
                 status=Registration.Status.PENDING
+            ).count()
+            # 全團待審排練請假（供幹部審核）——與上方「我的待審請假」是不同視角，別混用
+            context['pending_leaves_count'] = LeaveRequest.objects.filter(
+                status=LeaveRequest.Status.PENDING
             ).count()
             context['pending_fees_count'] = MembershipFee.objects.filter(
                 status=MembershipFee.Status.REPORTED

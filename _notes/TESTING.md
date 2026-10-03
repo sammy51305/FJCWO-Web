@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-09-20（共 557 個測試）
+> 最後更新：2026-10-04（共 561 個測試）
 
 ---
 
@@ -90,9 +90,9 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **557 個測試**，分布在 8 個 app。
+共 **561 個測試**，分布在 8 個 app。
 
-> 最近一次全站測試：2026-10-04 執行 `python manage.py test`，**557/557 全數通過、無 regression**（System check 亦無問題）。
+> 最近一次全站測試：2026-10-04 執行 `python manage.py test`，**561/561 全數通過、無 regression**（System check 亦無問題）。
 
 ### `apps/accounts/tests.py`（158 個）
 
@@ -184,11 +184,12 @@ python manage.py test --noinput
 |-------|---------|
 | `PushLineMessageTest` | credentials 齊全時發出 API 請求、TOKEN 缺少時略過、GROUP_ID 缺少時略過、API 失敗時 silent fail |
 
-### `apps/public/tests.py`（60 個）
+### `apps/public/tests.py`（64 個）
 
 | Class | 測試內容 |
 |-------|---------|
 | `IndexDashboardLeaveResultTest` | 首頁顯示未讀的核准/拒絕請假結果、待審核不顯示為結果、看過一次後 result_seen 變 True、已讀結果不再顯示、不會看到其他團員的結果 |
+| `IndexOfficerPendingReviewTest` | 首頁幹部「待我處理的事項」（#12）：有待審排練請假時顯示並連到審核頁、團員看不到也無 count、無待審時不顯示、「我的請假」只含自己而待審筆數為全團 |
 | `IndexNextRehearsalTest` | 首頁「下次排練」卡片挑哪一場：排練開始時刻一過**仍留在卡片上**（不跳成下一場）、今天沒有已開始的排練時顯示未來最近一場、同一天多場取最近開始的、昨天的排練不再顯示、完全沒排練時不炸掉；卡片渲染出路徑標示與「今天的排練／進行中」 |
 | `PublicPagesTest` | 首頁、關於百韻、章程三頁面的 200 回應與不需登入；章程有內容時顯示、無內容時顯示佔位文字 |
 | `CharterEditTest` | 存取控制（未登入/一般團員/幹部）、POST 儲存章程並 redirect、二次更新不新增資料 |
