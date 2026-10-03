@@ -124,16 +124,18 @@ fix(accounts): 修正幹部審核後未正確設定 reviewed_at
 
 ## Branch 策略
 
-| 情境 | 做法 |
+**多人協作後（2026-10-04 起）規則如下，依角色區分：**
+
+| 角色 | 做法 |
 |------|------|
-| 小修改（文件、單一 bug fix）| 直接 commit `main` |
-| 單一功能（一個 view + template）| 直接 commit `main` |
-| 較大功能（新 Model + 多個 view + 測試 + 文件）| 開 feature branch |
-| Phase 內的多功能開發 | 各自 feature branch，完成後 merge |
+| 協作者 | **所有變動**都開 branch + PR，不直接 push `main` |
+| 專案擁有者 | 功能走 branch + PR；純瑣事（文件小修、單行 fix）可經 branch protection 的 bypass list 直接 push `main` |
 
-**Feature branch 命名：** `feat/<簡短描述>`，例如 `feat/about-sections`、`feat/event-manage`
+**Branch 命名：** `Feature/<簡短描述>`（修 bug 用 `Fix/<描述>`），例如 `Feature/about-sections`、`Feature/event-manage`。
 
-**Merge 時機：** 該功能完整（程式 + 測試 + 文件），且 app 測試全部通過後才 merge。
+**Merge 方式：** 分支完整（程式 + 測試 + 文件）、app 測試全過後，開 GitHub PR，**審核通過才 merge**。
+
+> 完整的分支／PR／審核／衝突處理流程見 [COLLABORATION.md](COLLABORATION.md)。本節只列規則摘要。
 
 ---
 
