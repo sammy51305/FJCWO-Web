@@ -40,6 +40,14 @@ git clone <repo-url> FJCWO-Web
 cd FJCWO-Web
 ```
 
+**接著啟用專案的 git hook（每台新機器做一次）**，讓機敏檔／本機產物在 commit 當下就被擋下：
+
+```bash
+git config core.hooksPath .githooks
+```
+
+設定後，一旦有人（即使用 `git add -f`）把 `.env`、`*.csv`、`*.xlsx`、`db.sqlite3`、憑證金鑰等加進 commit，`.githooks/pre-commit` 會中止該次 commit。這是版控、全員共用的防線——**不設定就沒有這道保護**，所以列為 clone 後必做。
+
 ---
 
 ## 步驟二：建立虛擬環境

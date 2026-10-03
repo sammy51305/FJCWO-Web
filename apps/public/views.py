@@ -3,7 +3,7 @@ from datetime import datetime, time
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.db.models.deletion import ProtectedError
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -321,13 +321,22 @@ def venue_list(request):
     if type_filter in Venue.Type.values:
         venues = venues.filter(type=type_filter)
 
-    venues = venues.prefetch_related('time_slots').order_by('name')
+    # 每個場地被幾場演出／排練用到。這頁本身只是主檔，看不出「建這筆要幹嘛」，
+    # 標出使用次數才看得出它跟演出活動的關聯，也順便解釋了為什麼有些場地刪不掉
+    # （被引用時 PROTECT 會擋下）。`distinct=True` 不能省：兩個 annotate 各自 JOIN，
+    # 不去重的話 1 場演出 × 2 場排練會兩邊都算成 2。
+    venues = venues.annotate(
+        event_count=Count('performance_events', distinct=True),
+        rehearsal_count=Count('rehearsals', distinct=True),
+    ).prefetch_related('time_slots').order_by('name')
 
     return render(request, 'public/venue_list.html', {
         'venues': venues,
         'query': query,
         'type_filter': type_filter,
         'type_choices': Venue.Type.choices,
+        # 區分「一筆都還沒建」與「搜尋不到」——兩者要給的提示完全不同
+        'has_any_venue': Venue.objects.exists(),
     })
 
 

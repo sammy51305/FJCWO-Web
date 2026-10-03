@@ -1,0 +1,39 @@
+#!/bin/sh
+# 擋下機敏檔／本機產物被 commit（即使用 git add -f 繞過 .gitignore 也擋得住）。
+#
+# 啟用方式（每台新機器 clone 後做一次，見 SETUP.md）：
+#     git config core.hooksPath .githooks
+#
+# 若確認某次命中是誤判，調整下方 case 清單即可。
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+blocked=""
+for f in $staged; do
+  base=$(basename "$f")
+
+  # 範本檔允許進版控（本身不含真憑證）
+  case "$base" in
+    .env.example|.env.sample) continue ;;
+  esac
+
+  case "$f" in
+    .env|*/.env|.env.*|*/.env.*)   blocked="$blocked\n  $f  （環境變數／密鑰）" ;;
+    *.csv|*.xlsx)                  blocked="$blocked\n  $f  （資料匯出檔，可能含個資）" ;;
+    db.sqlite3|*/db.sqlite3)       blocked="$blocked\n  $f  （本機資料庫）" ;;
+    *.pem|*.key|*.pfx)             blocked="$blocked\n  $f  （憑證／金鑰）" ;;
+    .private/*|private/*)          blocked="$blocked\n  $f  （機敏資料夾）" ;;
+  esac
+done
+
+if [ -n "$blocked" ]; then
+  printf '\n\033[31m❌ 偵測到不該進版控的檔案，commit 已中止：\033[0m\n'
+  printf '%b\n' "$blocked"
+  printf '\n這些檔案屬於機敏資料或本機產物，不可進 git。\n'
+  printf '若要取消暫存：  git restore --staged <檔案>\n'
+  printf '若確認是誤判：  調整 .githooks/pre-commit 的規則\n\n'
+  exit 1
+fi
+
+exit 0

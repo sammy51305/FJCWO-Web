@@ -8,7 +8,7 @@
 ```
 CLAUDE.md（專案根目錄 — 工作指引：概述 / 環境 / 慣例）
     → GUIDE.md（你在這 — 文件地圖）
-        → 各專門文件（Architecture / DESIGN / TESTING / SETUP / OVERVIEW / WORKFLOW）
+        → 各專門文件（Architecture / DESIGN / TESTING / SETUP / OVERVIEW / WORKFLOW / COLLABORATION）
 ```
 
 ---
@@ -42,6 +42,8 @@ CLAUDE.md（專案根目錄 — 工作指引：概述 / 環境 / 慣例）
 | 第一次建立開發環境 | [SETUP.md](SETUP.md) |
 | 怎麼啟動開發伺服器 | [SETUP.md](SETUP.md) 步驟八；指令速查看 `../CLAUDE.md` 開發環境 |
 | commit 前要確認哪些文件 | [WORKFLOW.md](WORKFLOW.md) |
+| 我是新協作者，分支／PR 怎麼開、merge 怎麼走 | [COLLABORATION.md](COLLABORATION.md) |
+| Branch 命名與適用範圍（誰要開 branch）| [COLLABORATION.md](COLLABORATION.md)；摘要在 [WORKFLOW.md](WORKFLOW.md) Branch 策略 |
 
 ---
 
@@ -57,4 +59,5 @@ CLAUDE.md（專案根目錄 — 工作指引：概述 / 環境 / 慣例）
 | [SETUP.md](SETUP.md) | 從零建環境的步驟（含 fixtures 載入順序）| 架構設計 |
 | [OVERVIEW.md](OVERVIEW.md) | 功能總覽與操作流程（非技術人員版）| 技術實作細節 |
 | [DEMO.md](DEMO.md) | Demo 動線、開場前檢查、demo 資料內容與陷阱 | 系統行為說明（在 OVERVIEW）|
-| [WORKFLOW.md](WORKFLOW.md) | 開發標準流程、commit 前 checklist、commit message 規範、標記慣例（P/S/Phase）定義 | 各文件內部的細節內容、個別待辦排在第幾（在 DESIGN 附錄五）|
+| [WORKFLOW.md](WORKFLOW.md) | 開發標準流程、commit 前 checklist、commit message 規範、標記慣例（P/S/Phase）定義、Branch 策略摘要 | 各文件內部的細節內容、個別待辦排在第幾（在 DESIGN 附錄五）|
+| [COLLABORATION.md](COLLABORATION.md) | 多人協作流程：Feature branch 規則、PR 與審核、merge、衝突處理、協作注意事項 | 單人開發的標準流程細節（在 WORKFLOW）|
