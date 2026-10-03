@@ -1,22 +1,47 @@
 # _notes 文件導覽
 
-開發時不知道要查哪份文件，從這裡找。
-**本檔是「各文件職責」的唯一來源** —— CLAUDE.md 與 WORKFLOW.md 都指回這裡，不各自維護重複的職責表。
-
-新人閱讀動線：
-
-```
-CLAUDE.md（專案根目錄 — 工作指引：概述 / 環境 / 慣例）
-    → GUIDE.md（你在這 — 文件地圖）
-        → 各專門文件（Architecture / DESIGN / TESTING / SETUP / OVERVIEW / WORKFLOW / COLLABORATION）
-```
+開發時不知道要查哪份文件，從這裡找。**不用背——卡住就開這頁。**
+本檔是「各文件職責」的唯一來源，CLAUDE.md 與 WORKFLOW.md 都指回這裡，不各自維護重複的職責表。
 
 ---
 
 ## 目錄
 
-1. [我想知道…](#我想知道)
-2. [各文件的職責](#各文件的職責)
+1. [依情境找文件](#依情境找文件)
+2. [我想知道…](#我想知道)
+3. [各文件的職責](#各文件的職責)
+
+---
+
+## 依情境找文件
+
+把所有文件按「你在做什麼」分成四類，先看你屬於哪一格：
+
+### 🚀 要動手改 code（開發 / 協作）
+| 文件 | 什麼時候開 |
+|------|-----------|
+| `../CLAUDE.md` | **入口**。專案概述、常用指令、重要慣例 |
+| [WORKFLOW.md](WORKFLOW.md) | 開發流程、commit message、**Branch / PR / 審核**、commit 前 checklist、P/S/Phase 標記 |
+| [TESTING.md](TESTING.md) | 測試怎麼跑、測了什麼、還有什麼沒測 |
+
+### 🧭 查系統怎麼設計
+| 文件 | 什麼時候開 |
+|------|-----------|
+| [Architecture.md](Architecture.md) | **「有什麼」**：Model 欄位、頁面與權限、系統清單、目錄結構、Phase 進度 |
+| [DESIGN.md](DESIGN.md) | **「為什麼 / 怎麼運作」**：FK 關聯圖、各系統邏輯與決策、待評估問題、構想中功能 |
+
+### 🖥️ 建環境 / 換電腦
+| 文件 | 什麼時候開 |
+|------|-----------|
+| [SETUP.md](SETUP.md) | 從零建置、換機接手、`git pull` 後要跑什麼（情境 F）、Render 測試站（情境 E）|
+
+### 📣 介紹或展示系統（非技術）
+| 文件 | 什麼時候開 |
+|------|-----------|
+| [OVERVIEW.md](OVERVIEW.md) | 功能總覽與操作流程（給非技術的人看）|
+| [DEMO.md](DEMO.md) | demo 動線、開場前檢查、灌假資料（`seed_demo` / `clear_demo`）|
+
+> 🗺️ 還是不確定？往下看「我想知道…」用問題找答案。
 
 ---
 
@@ -41,9 +66,9 @@ CLAUDE.md（專案根目錄 — 工作指引：概述 / 環境 / 慣例）
 | 要新增測試，慣例是什麼 | [TESTING.md](TESTING.md) 新增測試的慣例 |
 | 第一次建立開發環境 | [SETUP.md](SETUP.md) |
 | 怎麼啟動開發伺服器 | [SETUP.md](SETUP.md) 步驟八；指令速查看 `../CLAUDE.md` 開發環境 |
-| commit 前要確認哪些文件 | [WORKFLOW.md](WORKFLOW.md) |
-| 我是新協作者，分支／PR 怎麼開、merge 怎麼走 | [COLLABORATION.md](COLLABORATION.md) |
-| Branch 命名與適用範圍（誰要開 branch）| [COLLABORATION.md](COLLABORATION.md)；摘要在 [WORKFLOW.md](WORKFLOW.md) Branch 策略 |
+| commit 前要確認哪些文件 | [WORKFLOW.md](WORKFLOW.md) Commit 前 Checklist |
+| 我是新協作者，分支／PR 怎麼開、merge 怎麼走 | [WORKFLOW.md](WORKFLOW.md) 協作與 Branch 流程 |
+| Branch 命名與適用範圍（誰要開 branch）| [WORKFLOW.md](WORKFLOW.md) 協作與 Branch 流程 |
 
 ---
 
@@ -59,5 +84,4 @@ CLAUDE.md（專案根目錄 — 工作指引：概述 / 環境 / 慣例）
 | [SETUP.md](SETUP.md) | 從零建環境的步驟（含 fixtures 載入順序）| 架構設計 |
 | [OVERVIEW.md](OVERVIEW.md) | 功能總覽與操作流程（非技術人員版）| 技術實作細節 |
 | [DEMO.md](DEMO.md) | Demo 動線、開場前檢查、demo 資料內容與陷阱 | 系統行為說明（在 OVERVIEW）|
-| [WORKFLOW.md](WORKFLOW.md) | 開發標準流程、commit 前 checklist、commit message 規範、標記慣例（P/S/Phase）定義、Branch 策略摘要 | 各文件內部的細節內容、個別待辦排在第幾（在 DESIGN 附錄五）|
-| [COLLABORATION.md](COLLABORATION.md) | 多人協作流程：Feature branch 規則、PR 與審核、merge、衝突處理、協作注意事項 | 單人開發的標準流程細節（在 WORKFLOW）|
+| [WORKFLOW.md](WORKFLOW.md) | 開發標準流程、commit message 規範、協作（Branch/PR/審核/機敏檔防線）、commit 前 checklist、標記慣例（P/S/Phase）| 各文件內部的細節內容、個別待辦排在第幾（在 DESIGN 附錄五）|
