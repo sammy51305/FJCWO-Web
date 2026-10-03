@@ -12,29 +12,29 @@
 2. [權限系統](#二權限系統)
 3. [資料庫設計與 Model 關聯](#三資料庫設計與-model-關聯)
 4. [各系統運作邏輯](#四各系統運作邏輯)
-   - [公開頁面（public）](#41-公開頁面public)
-   - [帳號與會員（accounts）](#42-帳號與會員accounts)
-   - [場地管理（band_public）](#43-場地管理band_public)
-   - [演出活動與排練（events）](#44-演出活動與排練events)
-   - [QR Code 簽到（events）](#45-qr-code-簽到events)
-   - [請假申請（events）](#46-請假申請events)
-   - [財務管理（finance）](#47-財務管理finance)
-   - [樂譜庫存（scores）](#48-樂譜庫存scores)
-   - [公用財產與借用（assets）](#49-公用財產與借用assets)
-   - [公告（announcements）](#410-公告announcements)
-   - [首頁 Dashboard（public）](#411-首頁-dashboardpublic)
-   - [演出曲目管理（events）](#412-演出曲目管理events)
-   - [樂譜瀏覽與下載（scores）](#413-樂譜瀏覽與下載scores)
-   - [報表：排練出席（events）](#414-報表排練出席events)
-   - [報表：財產借用現況（assets）](#415-報表財產借用現況assets)
-   - [報表：會費繳納狀況（finance）](#416-報表會費繳納狀況finance)
-   - [報表：請假統計（events）](#417-報表請假統計events)
-   - [報表：團員通訊錄名冊（accounts）](#報表團員通訊錄名冊accounts)
-   - [LINE 群組通知（notifications）](#418-line-群組通知notifications)
-   - [演出分譜下載（scores）](#419-演出分譜下載scores)
-   - [關於百韻內容管理（public）](#420-關於百韻內容管理public)
-   - [組織章程管理（public）](#421-組織章程管理public)
-   - [演出出席意願（events）](#422-演出出席意願events)
+   - [4.1 公開頁面（public）](#41-公開頁面public)
+   - [4.2 帳號與會員（accounts）](#42-帳號與會員accounts)
+   - [4.3 場地管理（band_public）](#43-場地管理band_public)
+   - [4.4 演出活動與排練（events）](#44-演出活動與排練events)
+   - [4.5 QR Code 簽到（events）](#45-qr-code-簽到events)
+   - [4.6 請假申請（events）](#46-請假申請events)
+   - [4.7 財務管理（finance）](#47-財務管理finance)
+   - [4.8 樂譜庫存（scores）](#48-樂譜庫存scores)
+   - [4.9 公用財產與借用（assets）](#49-公用財產與借用assets)
+   - [4.10 公告（announcements）](#410-公告announcements)
+   - [4.11 首頁 Dashboard（public）](#411-首頁-dashboardpublic)
+   - [4.12 演出曲目管理（events）](#412-演出曲目管理events)
+   - [4.13 樂譜瀏覽與下載（scores）](#413-樂譜瀏覽與下載scores)
+   - [4.14 報表：排練出席（events）](#414-報表排練出席events)
+   - [4.15 報表：財產借用現況（assets）](#415-報表財產借用現況assets)
+   - [4.16 報表：會費繳納狀況（finance）](#416-報表會費繳納狀況finance)
+   - [4.17 報表：請假統計（events）](#417-報表請假統計events)
+   - [報表：團員通訊錄名冊（accounts）— 附於報表群，無節號（見內文說明）](#報表團員通訊錄名冊accounts)
+   - [4.18 LINE 群組通知（notifications）](#418-line-群組通知notifications)
+   - [4.19 演出分譜下載（scores）](#419-演出分譜下載scores)
+   - [4.20 關於百韻內容管理（public）](#420-關於百韻內容管理public)
+   - [4.21 組織章程管理（public）](#421-組織章程管理public)
+   - [4.22 演出出席意願（events）](#422-演出出席意願events)
 
 **附錄**
 
@@ -85,15 +85,16 @@ apps/
 
 ## 二、權限系統
 
-### 三種角色
+### 四種角色
 
-`User.role` 欄位有三個值：
+`User.role` 欄位有四個值：
 
 | 值 | 顯示 | 說明 |
 |----|------|------|
 | `member` | 團員 | 一般會員，可查詢活動、申請請假、借用財產 |
 | `officer` | 幹部 | 可管理 QR Code、審核請假、查看通訊錄 |
-| `admin` | 管理員 | 等同幹部，另有 Django Admin 的完整控制權 |
+| `admin` | 管理員 | 等同幹部，另有 Django Admin 的完整控制權（`save()` 自動給 `is_superuser`）|
+| `guest` | 槍手 | 客座／外援團員，純名冊、**不可登入**（`set_unusable_password` ＋ 登入表單顯式拒絕），不列入通訊錄；`is_officer` 恆為 False。見 §4.2「客座團員」與 [BACKLOG.md](BACKLOG.md) §5 |
 
 ### `is_officer` 屬性
 
@@ -114,13 +115,16 @@ def is_officer(self):
 
 ```python
 def save(self, *args, **kwargs):
-    if self.is_superuser or self.role == self.Role.ADMIN:
+    if self.role == self.Role.ADMIN:    # admin 角色 → 取得 Django Admin 完整控制權
+        self.is_staff = True
+        self.is_superuser = True
+    elif self.is_superuser:             # superuser 也要能進 /admin/
         self.is_staff = True
     super().save(*args, **kwargs)
 ```
 
-`is_staff=True` 才能進入 `/admin/` 後台。`admin` 角色和 superuser 需要這個權限，
-所以在 `save()` 時自動設定，避免手動忘記勾選。
+`is_staff=True` 才能進入 `/admin/` 後台。`admin` 角色另外一併設 `is_superuser=True`
+（取得所有 model 的完整權限）；superuser 帳號則補上 `is_staff`。都在 `save()` 時自動設定，避免手動忘記勾選。
 
 ### 在 views 裡如何擋權限
 
@@ -347,13 +351,18 @@ if status_filter in Registration.Status.values:
 共用函式 `_create_member_with_temp_password()`：
 
 ```python
-def _create_member_with_temp_password(*, name, email, instrument=None, section=None, grad_year=None, phone=''):
+def _create_member_with_temp_password(
+    *, name, email, instrument=None, section=None, grad_year=None, phone='',
+    birth_date=None, address='', national_id='', line_id='', alumni_info='',
+):
     username = _unique_username(email.split('@')[0])  # 帳號沒收集，用 Email 帳號部分產生
     password = get_random_string(10)                    # 隨機臨時密碼
     user = User.objects.create_user(
         username=username, password=password,
         name=name, email=email, role=User.Role.MEMBER,
         instrument=instrument, section=section, grad_year=grad_year, phone=phone,
+        birth_date=birth_date, address=address, national_id=national_id,
+        line_id=line_id, alumni_info=alumni_info,  # 核准入團申請時敏感個資整批帶入（#13-1）
         must_change_password=True,   # 強制對方第一次登入後自行設定新密碼
     )
     email_sent = send_temp_password_email(user, username, password)
@@ -428,8 +437,9 @@ update_session_auth_hash(request, request.user)  # 避免改密碼後被登出
 
 校友報到申請流程假設對象是「本人上網填表」，但實務上有些團員是幹部直接口頭問完資料就手動建帳號
 （例如指導老師、非透過網路報到的人），這種情境不會經過 `Registration` 這張表。
-`member_create` 提供獨立的手動建帳號入口，表單只收基本資料（姓名、Email、樂器、聲部、畢業年份、電話），
-不收帳號/密碼/角色——帳密由上述共用邏輯自動處理，角色固定為團員。
+`member_create` 提供獨立的手動建帳號入口，表單收與入團申請相同的個人資料欄位
+（共用 `_parse_profile_fields()`，見下方 #13-1；幹部端身分證字號可留空 `require_national_id=False`），
+但不收帳號/密碼/角色——帳密由上述共用邏輯自動處理，角色固定為團員。
 
 #### 為什麼要繼承 AbstractUser？
 
@@ -643,7 +653,7 @@ view、template、form 用起來與一般欄位無異。
 `line_user_id` 是 LINE Bot 取得的內部 id（用於推播）。**兩者不可混用**，故為兩個欄位。
 
 **核准時整批帶進帳號**：`_create_member_with_temp_password()` 新增
-`birth_date`／`address`／`national_id`／`line_id` 參數，`registration_review` 核准時一併傳入。
+`birth_date`／`address`／`national_id`／`line_id`／`alumni_info` 參數，`registration_review` 核准時一併傳入。
 樂器改選填後，原本的 `reg.instrument.family` 會在沒填樂器時炸掉，已加 None 守衛。
 
 **本人永遠看得到自己的**：`ProfileForm` 含這些欄位，團員可自行補填；限制的是別人看不看得到。
@@ -1682,35 +1692,41 @@ for borrow in active_borrows:
 
 **檔案**：`apps/finance/views.py`（`membership_fee_report`）、路由：`/finance/membership/`
 
-**幹部限定**，按期別顯示所有團員的繳費狀態。
+**幹部限定**，按期別（`FeePeriod` 主檔）顯示所有團員的繳費狀態。
+期別自 §9 S1 起改為 FK 主檔、不再是自由文字；狀態改由 `MembershipFee.status` 推導（完整會費重構見 [BACKLOG.md](BACKLOG.md) 附錄五 §9）。
 
-#### 三種狀態
+#### 四種顯示狀態（由 `MembershipFee.status` 推導）
 
-| status | 條件 | 說明 |
-|--------|------|------|
-| `paid` | `MembershipFee` 存在且 `paid_at` 有值 | 已繳費 |
-| `unpaid` | `MembershipFee` 存在但 `paid_at` 為空 | 建了紀錄但尚未繳費 |
-| `no_record` | 該期別完全沒有 `MembershipFee` 紀錄 | 幹部尚未建立此人的紀錄 |
+| 顯示 | 條件 | 說明 |
+|------|------|------|
+| `paid`（已繳）| `status == PAID` | 已繳費，幹部確認過 |
+| `reported`（待確認）| `status == REPORTED` | 團員已自助申報，待幹部確認 |
+| `unpaid`（未繳）| `status == UNPAID` | 建了紀錄但尚未繳 |
+| `no_record`（無紀錄）| 無此人該期的 `MembershipFee`，**或該列已作廢（VOID）** | 尚未建立紀錄／作廢一律視為應繳未繳 |
 
-`no_record` 是透過比對「全體活躍團員」與「該期別 fee_map」的差集得出：
+名冊從「全體活躍非 admin 團員」出發、**排除槍手（`role=guest`）**，再與該期 `fee_map` 比對：
 
 ```python
+members = (User.objects.filter(is_active=True)
+           .exclude(role__in=[User.Role.ADMIN, User.Role.GUEST]) ...)
+S = MembershipFee.Status
 fee_map = {f.member_id: f for f in MembershipFee.objects.filter(period=selected_period)}
 for member in members:
-    fee = fee_map.get(member.pk)  # None = no_record
+    fee = fee_map.get(member.pk)
+    if fee is None or fee.status == S.VOID:  status = 'no_record'   # 無列或作廢＝應繳未繳
+    elif fee.status == S.PAID:               status = 'paid'
+    elif fee.status == S.REPORTED:           status = 'reported'
+    else:                                    status = 'unpaid'
 ```
 
 #### 預設期別
 
 ```python
-periods = MembershipFee.objects.values_list('period', flat=True).distinct().order_by('-period')
-selected_period = request.GET.get('period', '')
-if not selected_period and periods:
-    selected_period = periods[0]
+periods = FeePeriod.objects.all()   # 主檔 Meta 排序：由新到舊
+selected_period = periods.filter(pk=request.GET.get('period', '')).first() or periods.first()
 ```
 
-按 `period` 字串倒序排列，`'2026 上半年'` 排在 `'2025 下半年'` 之前，
-符合直覺（最新期別在前）而不需要額外的日期型別。
+期別是 `FeePeriod` 主檔（年份＋上/下期），由 pk 選取、預設最新一期，不再靠自由文字字串排序。
 
 ---
 
@@ -1953,11 +1969,11 @@ lookup table 也順便避免逐位團員各查一次的 N+1。
 
 #### 表態期限
 
-`performance_date <= now` 時 server 端直接擋，不只靠前端 disabled——避免直接 POST 繞過。
+截止點是**演出當天的 23:59**（`PerformanceEvent.intent_deadline = day_end(performance_date)`，
+由 `intent_open` 判斷）。view 層檢查 `intent_open`、不只靠前端 disabled——避免直接 POST 繞過。
 
-> ⚠️ **與 #13-7 的連動**：排練請假的截止點即將改為「當天 23:59」，屆時這裡要**一併改**，
-> 兩者規則必須同步，否則同一場活動的排練與演出會有兩套不同的截止邏輯。
-> 程式碼中已標 `TODO(#13-7)`。
+> 與排練請假（#13-7）**共用同一個 `models.day_end()`**（見 §4.6），兩者截止邏輯天然同步、
+> 不會各自演化出不同界線。#13-6 當時留的 `TODO(#13-7)` 已於 2026-09-09 收掉。
 
 #### Migration 的兩個資料保護
 
@@ -1967,6 +1983,21 @@ lookup table 也順便避免逐位團員各查一次的 N+1。
 2. **`on_leave=True` → `intent='declined'` 的資料搬遷**排在 `RemoveField` 之前。
    那些人的「我不參加」是真實表態過的資訊，不該隨欄位一起消失。
    反向不提供：三態塌回布林必然遺失「待確認」與「不參加」的區別。
+
+---
+
+## 附錄一：常見 Django 概念速查
+
+| 概念 | 說明 |
+|------|------|
+| `@login_required` | 裝飾器，未登入自動導到登入頁 |
+| `get_object_or_404` | 查不到資料時回傳 404，避免自己寫 try/except |
+| `messages` | 跨 request 的一次性提示訊息（成功/錯誤），存在 session |
+| `select_related` | JOIN 查詢，解決 ForeignKey 的 N+1 問題 |
+| `get_or_create` | 有就拿，沒有就建立，回傳 (instance, created) |
+| `TextChoices` | 列舉型別，資料庫存英文 key，顯示用中文 label |
+| `auto_now_add=True` | 建立時自動填入當前時間，之後不能修改 |
+| `null=True, blank=True` | null 是資料庫層允許 NULL；blank 是表單驗證層允許空白 |
 
 ---
 
@@ -2021,18 +2052,3 @@ lookup table 也順便避免逐位團員各查一次的 N+1。
 ## 附錄五：待開發功能構想（未設計，待討論）
 
 > 📦 已移至 [BACKLOG.md](BACKLOG.md)（編號不變，含優先權表與 #1~#16）。程式碼／文件裡「DESIGN 附錄五 #N／§N」的指引，到 BACKLOG.md 找同編號即可。
-
----
-
-## 附錄一：常見 Django 概念速查
-
-| 概念 | 說明 |
-|------|------|
-| `@login_required` | 裝飾器，未登入自動導到登入頁 |
-| `get_object_or_404` | 查不到資料時回傳 404，避免自己寫 try/except |
-| `messages` | 跨 request 的一次性提示訊息（成功/錯誤），存在 session |
-| `select_related` | JOIN 查詢，解決 ForeignKey 的 N+1 問題 |
-| `get_or_create` | 有就拿，沒有就建立，回傳 (instance, created) |
-| `TextChoices` | 列舉型別，資料庫存英文 key，顯示用中文 label |
-| `auto_now_add=True` | 建立時自動填入當前時間，之後不能修改 |
-| `null=True, blank=True` | null 是資料庫層允許 NULL；blank 是表單驗證層允許空白 |
