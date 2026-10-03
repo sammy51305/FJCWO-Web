@@ -20,7 +20,7 @@
 | 後端 | Django 6.x + PostgreSQL 16 |
 | 前端 | Bootstrap 5（無 JS 框架）|
 | 部署目標 | Nginx + Gunicorn + Ubuntu Server |
-| 通知 | LINE Bot（開發中）|
+| 通知 | LINE Bot 群組推播（已完成）|
 | AI | OpenAI Whisper + Claude API（Phase 3）|
 
 ## 快速開始
@@ -57,7 +57,7 @@ python manage.py runserver
 ## 執行測試
 
 ```bash
-python manage.py test                          # 全部（451 個）
+python manage.py test                          # 全部（557 個）
 python manage.py test apps.events              # 單一 app
 python manage.py test --verbosity=2            # 詳細輸出
 ```
@@ -72,21 +72,23 @@ python manage.py test --verbosity=2            # 詳細輸出
 | [`_notes/TESTING.md`](_notes/TESTING.md) | 測試覆蓋範圍、執行方式、新增測試的慣例 |
 | [`_notes/SETUP.md`](_notes/SETUP.md) | 從零建環境的完整步驟 |
 | [`_notes/OVERVIEW.md`](_notes/OVERVIEW.md) | 功能總覽與操作流程（非技術人員版）|
-| [`_notes/WORKFLOW.md`](_notes/WORKFLOW.md) | 開發標準流程、commit 前 checklist |
+| [`_notes/DEMO.md`](_notes/DEMO.md) | Demo 動線、灌假資料（`seed_demo` / `clear_demo`）|
+| [`_notes/WORKFLOW.md`](_notes/WORKFLOW.md) | 開發流程、協作（branch/PR/審核）、commit 前 checklist |
 
 ## 開發進度
 
 | Phase | 說明 | 狀態 |
 |-------|------|------|
 | Phase 1 | Django 基礎、登入、公開頁面 | 完成 |
-| Phase 2 | 演出、排練、QR 簽到、請假、樂譜、財務、公告等核心功能 | 完成（LINE Bot 除外）|
+| Phase 2 | 演出、排練、QR 簽到、請假、樂譜、財務、公告、LINE Bot 群組通知等核心功能 | 完成 |
 | Phase 3 | 會議紀錄 AI 摘要、演出手冊自動生成、手機版 UI | 待開發 |
 | Phase 4 | django-tenants 多租戶 SaaS 擴充 | 未來規劃 |
 
 ## 開發流程
 
 ```
-開發 → 測試通過 → Review → 更新文件 → git commit → git push
+開發 → 測試通過 → Review → 更新文件 → commit → push
 ```
 
-文件必須在 commit 之前更新完畢。Commit 前 checklist → [`_notes/WORKFLOW.md`](_notes/WORKFLOW.md)
+較大變動開 `Feature/<描述>` 分支走 PR、審核過才 merge。
+文件必須在 commit 之前更新完畢。完整流程與 commit 前 checklist → [`_notes/WORKFLOW.md`](_notes/WORKFLOW.md)

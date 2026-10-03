@@ -215,7 +215,8 @@ python manage.py test --noinput
 - **Django 框架本身**（路由解析、ORM 查詢語法等）
 - **靜態資源載入**（CSS / JS）
 - **管理後台**（Django Admin 由框架負責，不另寫測試）
-- **Phase 3 未實作的功能**（meetings、notifications）
+- **Phase 3 未實作的功能**（`meetings`）
+- **難以自動化的整合層**（`notifications` 的 Admin 觸發：utils 層已測，整合層見下方「尚未覆蓋」）
 
 ---
 

@@ -54,8 +54,11 @@ venv\Scripts\python.exe manage.py test                # 執行全部測試（預
 ## 開發流程（每次必須依序執行）
 
 ```
-開發 → 測試通過 → Review（git diff）→ 更新文件 → 確認 checklist → git commit → git push
+開發 → 測試通過 → Review（git diff）→ 更新文件 → 確認 checklist → commit → push
 ```
+
+**較大變動開 `Feature/<描述>` 分支走 PR、審核過才 merge；擁有者純瑣事可直接 push `main`。**
+完整的 branch / PR / 審核 / 機敏檔防線流程見 `_notes/WORKFLOW.md` 協作與 Branch 流程。
 
 **文件必須在 commit 之前更新完畢，不事後 amend。**
 
@@ -88,7 +91,7 @@ venv\Scripts\python.exe manage.py test                # 執行全部測試（預
 ```
 CLAUDE.md（你在這 — 工作指引）
     → _notes/GUIDE.md      不知道查哪份文件？從這裡找（唯一的文件職責索引）
-    → _notes/WORKFLOW.md   開發流程、commit 前 checklist、commit message 規範
+    → _notes/WORKFLOW.md   開發流程、協作（branch/PR/審核）、commit 前 checklist、commit message 規範
 ```
 
 各文件記錄什麼、該更新哪一份，一律以 `_notes/GUIDE.md` 為準，不在此重複維護。
