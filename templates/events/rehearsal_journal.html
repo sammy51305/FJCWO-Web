@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}團練日誌 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<h2 class="mb-1">團練日誌</h2>
+<p class="text-muted mb-4">已進行的排練，新的在上。點進去看當天進度、待改進事項與下次重點。</p>
+
+{% if page.object_list %}
+<div class="list-group mb-3">
+  {% for r in page.object_list %}
+  <a href="{% url 'events:rehearsal_detail' r.pk %}"
+     class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+    <span>
+      <span class="fw-semibold">{{ r.date|date:"Y/m/d（D）" }}</span>
+      {{ r.event.name }} › 第 {{ r.sequence }} 次
+      <span class="text-muted small ms-2">{{ r.venue.name }}</span>
+    </span>
+    {% if r.summary_progress %}
+      <span class="badge bg-success">有摘要</span>
+    {% else %}
+      <span class="badge bg-light text-muted border">尚無摘要</span>
+    {% endif %}
+  </a>
+  {% endfor %}
+</div>
+
+{% if page.has_other_pages %}
+<nav aria-label="分頁">
+  <ul class="pagination">
+    {% if page.has_previous %}
+    <li class="page-item"><a class="page-link" href="?page={{ page.previous_page_number }}">上一頁</a></li>
+    {% endif %}
+    <li class="page-item disabled"><span class="page-link">{{ page.number }} / {{ page.paginator.num_pages }}</span></li>
+    {% if page.has_next %}
+    <li class="page-item"><a class="page-link" href="?page={{ page.next_page_number }}">下一頁</a></li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
+{% else %}
+<p class="text-muted">還沒有進行過的排練。</p>
+{% endif %}
+{% endblock %}

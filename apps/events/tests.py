@@ -1706,3 +1706,68 @@ class LeaveDeadlineTestCase(TestCase):
         r = self.client.get(reverse('events:rehearsal_detail', args=[future.pk]))
         self.assertContains(r, reverse('events:leave_request_create', args=[future.pk]))
         self.assertNotContains(r, '請假已截止')
+
+
+class PracticeMenuTest(TestCase):
+    """導覽列「團練」選單：團練日誌清單與簽到入口"""
+
+    def setUp(self):
+        self.member = User.objects.create_user(
+            username='pm_member', email='pm@test.local', password='testpass123',
+            name='選單測試團員', role=User.Role.MEMBER,
+        )
+        self.venue = Venue.objects.create(name='選單測試場地', type='rehearsal')
+        self.event = PerformanceEvent.objects.create(
+            name='選單測試音樂會', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + timedelta(days=60),
+            performance_venue=self.venue,
+        )
+        self.past = Rehearsal.objects.create(
+            event=self.event, sequence=1, date=timezone.now() - timedelta(days=7),
+            venue=self.venue, summary_progress='練了第一樂章',
+        )
+        self.future = Rehearsal.objects.create(
+            event=self.event, sequence=2, date=timezone.now() + timedelta(days=7),
+            venue=self.venue,
+        )
+
+    def test_menu_visible_to_member_with_all_entries(self):
+        """登入團員的導覽列有「團練」下拉，含簽到／團練日誌／樂譜庫存／我的請假／我的會費"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('public:index'))
+        for url_name in ('events:checkin_entry', 'events:rehearsal_journal',
+                         'scores:score_list', 'events:my_leave_requests', 'finance:my_fees'):
+            self.assertContains(r, f'href="{reverse(url_name)}"')
+
+    def test_journal_requires_login(self):
+        """未登入看團練日誌導向登入頁"""
+        r = self.client.get(reverse('events:rehearsal_journal'))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    def test_journal_lists_only_started_rehearsals(self):
+        """團練日誌只列已開始的排練，未來的不出現；有摘要的標示「有摘要」"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:rehearsal_journal'))
+        self.assertContains(r, reverse('events:rehearsal_detail', args=[self.past.pk]))
+        self.assertNotContains(r, reverse('events:rehearsal_detail', args=[self.future.pk]))
+        self.assertContains(r, '有摘要')
+
+    def test_checkin_entry_redirects_to_open_qr(self):
+        """有 QR 有效的排練時，簽到入口直接導向該簽到頁"""
+        from .models import RehearsalQRToken
+        token = RehearsalQRToken.objects.create(
+            rehearsal=self.future, expires_at=timezone.now() + timedelta(hours=4),
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:checkin_entry'))
+        self.assertRedirects(
+            r, reverse('events:qr_checkin', args=[token.token]), fetch_redirect_response=False,
+        )
+
+    def test_checkin_entry_without_open_qr_explains(self):
+        """沒有開放簽到的排練時，導回首頁並說明"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:checkin_entry'), follow=True)
+        self.assertRedirects(r, reverse('public:index'))
+        self.assertContains(r, '目前沒有開放簽到的排練')

@@ -6,6 +6,7 @@ from collections import defaultdict
 import qrcode
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -77,6 +78,46 @@ def rehearsal_detail(request, pk):
         'now': timezone.now(),
         'checkin_token': qr_token.token if qr_token and qr_token.is_valid() else None,
     })
+
+
+@login_required
+def rehearsal_journal(request):
+    """
+    團練日誌：已開始（含今天）的排練，新到舊，連到各場排練摘要。
+
+    導覽列「團練 › 團練日誌」的入口。原本要讀排練摘要得逐層點
+    演出活動 › 活動 › 排練，2026-09 幹部回饋「要有地方可以閱讀到團練日誌」。
+    """
+    rehearsals = (
+        Rehearsal.objects
+        .filter(date__lte=timezone.now())
+        .select_related('event', 'venue')
+        .order_by('-date')
+    )
+    page = Paginator(rehearsals, 20).get_page(request.GET.get('page'))
+    return render(request, 'events/rehearsal_journal.html', {'page': page})
+
+
+@login_required
+def checkin_entry(request):
+    """
+    導覽列「團練 › 簽到」：找到目前 QR 有效的排練就導向簽到頁，沒有就說明原因。
+
+    不重用首頁的 `_dashboard_rehearsal`：那是「今天哪一場」，這裡要的是
+    「幹部現在開了簽到的是哪一場」，直接以 QR 有效性判斷最準。
+    """
+    now = timezone.now()
+    rehearsal = (
+        Rehearsal.objects
+        .filter(qr_token__is_active=True, qr_token__expires_at__gte=now)
+        .select_related('qr_token')
+        .order_by('date')
+        .first()
+    )
+    if rehearsal:
+        return redirect('events:qr_checkin', token=rehearsal.qr_token.token)
+    messages.info(request, '目前沒有開放簽到的排練。幹部開啟 QR Code 後，這裡就能直接簽到。')
+    return redirect('public:index')
 
 
 @login_required
