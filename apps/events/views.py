@@ -71,9 +71,11 @@ def rehearsal_detail(request, pk):
         Rehearsal.objects.select_related('event', 'venue', 'summary_by'),
         pk=pk
     )
+    qr_token = getattr(rehearsal, 'qr_token', None)
     return render(request, 'events/rehearsal_detail.html', {
         'rehearsal': rehearsal,
         'now': timezone.now(),
+        'checkin_token': qr_token.token if qr_token and qr_token.is_valid() else None,
     })
 
 

@@ -876,6 +876,16 @@ class ScoreDownloadViewTest(TestCase):
         r = self.client.get(reverse('scores:score_download', args=[99999]))
         self.assertEqual(r.status_code, 404)
 
+    def test_missing_file_on_disk_shows_message_not_500(self):
+        """DB 有檔案紀錄但磁碟上檔案不見（如雲端重新部署清空 media/）：導回詳情頁並提示，不是 500"""
+        score = Score.objects.create(
+            title='檔案遺失總譜', score_type=Score.ScoreType.FULL, file='scores/not_exist.pdf'
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('scores:score_download', args=[score.pk]), follow=True)
+        self.assertRedirects(r, reverse('scores:score_detail', args=[score.pk]))
+        self.assertContains(r, '檔案已遺失')
+
 
 @override_settings(MEDIA_ROOT=_TEMP_MEDIA)
 class ScorePartsManageTest(TestCase):

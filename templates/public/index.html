@@ -55,6 +55,11 @@
             <i class="bi bi-signpost-2 me-1"></i>路徑：演出活動 ›
             {{ next_rehearsal.event.name }} › 第 {{ next_rehearsal.sequence }} 次排練
           </p>
+          {% if checkin_token %}
+          <a href="{% url 'events:qr_checkin' checkin_token %}" class="btn btn-sm btn-success">
+            <i class="bi bi-qr-code-scan"></i> 我要簽到
+          </a>
+          {% endif %}
           <a href="{% url 'events:rehearsal_detail' next_rehearsal.pk %}" class="btn btn-sm btn-outline-primary">
             {% if next_rehearsal.summary_progress %}排練摘要{% else %}詳情{% endif %}
           </a>

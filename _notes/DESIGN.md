@@ -815,6 +815,10 @@ qr_checkin_confirm（POST）：建立或更新 RehearsalAttendance（status=pres
 幹部在 qr_manage 頁即時看到出席名單
 ```
 
+**團員的簽到入口**：除了掃 QR，團員也可以不掃碼——該場排練有「有效」的 QR token（啟用且未過期）時，
+首頁「下次排練」卡片與 `rehearsal_detail` 會多一顆「我要簽到」按鈕，直接連到 `qr_checkin`。
+沒有 token 或已停用／過期時不顯示（2026-09-19 回饋：「找不到簽到按鈕或 QR code」）。
+
 #### QR Code 圖片如何產生？
 
 ```python
@@ -1642,6 +1646,9 @@ return FileResponse(score.file.open('rb'), as_attachment=True, filename=...)
 
 沒有上傳 PDF 的樂譜，`score.file` 為空，直接回傳 404。
 用 `as_attachment=True` 讓瀏覽器觸發下載而非在 tab 內開啟。
+
+DB 有紀錄但磁碟上檔案不存在（`FileNotFoundError`，例如雲端免費方案重新部署後 `media/` 被清空）時，
+不回 500，改用 `messages.error` 提示「檔案已遺失，請聯絡譜務重新上傳」並導回所屬總譜詳情頁。
 
 ---
 

@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-10-04（共 561 個測試）
+> 最後更新：2026-10-14（共 565 個測試）
 
 ---
 
@@ -115,7 +115,7 @@ python manage.py test --noinput
 | `MemberDirectoryReportTest` | 通訊錄列印報表：存取控制（未登入/一般團員無權限含電話Email→導回通訊錄/幹部可看）、顯示姓名電話Email、依樂器族群分組、列印按鈕、status 篩選（預設在團排除退團、inactive、all）|
 | `GuestManageTest` | 客座團員（槍手）管理：存取控制、CRUD（新增設 role=guest／不可登入／空 email 存 NULL、姓名必填、email 重複擋、編輯、刪除）、轉正（改 member／補 email／開通登入／強制改密碼、缺 email 擋）、資安（guest 即使有密碼也被登入表單擋、通訊錄排除 guest、guest 列表顯示）|
 
-### `apps/events/tests.py`（140 個）
+### `apps/events/tests.py`（143 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -123,7 +123,7 @@ python manage.py test --noinput
 | `LeaveDeadlineTestCase` | #13-7／#13-8 請假截止：截止為排練當天 23:59（非開始時刻）、**用本地時區日期避免 UTC 少算一天**、排練已開始但當天仍可請假、隔天關閉、server 端擋直接 POST、演出表態共用同一條規則、過截止且無紀錄在報表算缺席、未到截止維持無紀錄、過期按鈕換色換文字與禁止游標 |
 | `PerformanceIntentTestCase` | 演出出席意願三態（#13-6）：存取控制、確認參加、不參加需填原因、改回確認要清掉原因、可反覆改且不產生第二筆、演出開始後鎖住、無效值與 GET 不改狀態、intent 與 attended 互不影響、統計頁限幹部、三態計數、**沒有紀錄的人要出現在待確認名單**、依聲部分組、顯示不參加原因、排除客座團員、詳情頁表態入口與目前狀態、我的請假頁不再有演出請假 |
 | `EventViewsTest` | 演出活動列表/詳情、排練詳情、摘要/備註顯示、申請請假按鈕（未來啟用/過去停用）、活動詳情頁請假捷徑連結（未來顯示/過去不顯示）|
-| `QRCodeTest` | QR 管理頁存取控制、產生 token、重新產生換 UUID、小時數邊界、停用/啟用 toggle、簽到頁顯示、已簽到提示、簽到確認建立出席紀錄 |
+| `QRCodeTest` | QR 管理頁存取控制、產生 token、重新產生換 UUID、小時數邊界、停用/啟用 toggle、簽到頁顯示、已簽到提示、簽到確認建立出席紀錄、團員簽到入口（排練詳情頁／首頁在 QR 有效時顯示「我要簽到」，無 QR 或已停用時不顯示）|
 | `SetlistManageTest` | 曲目管理存取控制、新增總譜成功、新增分譜被擋（404）、重複順序被擋、移除曲目 |
 | `AttendanceReportTest` | 存取控制（未登入/一般團員/幹部）、404、出席/請假分類計數、**「無紀錄」只保留給未過截止的排練（已過截止無紀錄＝缺席，#13-7）**、個人出席率計算 |
 | `LeaveStatsTest` | 存取控制、預設最新活動、排練層計數（核准/待審）、個人層出現、按總次數遞減排序 |
@@ -132,7 +132,7 @@ python manage.py test --noinput
 | `EventDeleteTest` | 團員/幹部無法刪除、GET 不刪除、管理員 POST 刪除並導回列表、刪除 cascade 排練、刪除按鈕在列表頁與詳情頁皆出現（管理員可見/幹部不可見）|
 | `RehearsalManageTest` | 存取控制（未登入/團員/幹部）、新增排練成功、重複 sequence 被擋、空日期被擋、編輯排練更新 sequence |
 
-### `apps/scores/tests.py`（83 個）
+### `apps/scores/tests.py`（84 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -142,7 +142,7 @@ python manage.py test --noinput
 | `ScoreCreateViewTest` | 存取控制（未登入/一般團員/幹部）、POST 新增總譜成功並導向詳情頁、POST 新增分譜（含樂器）成功、空曲名不建立記錄、分譜缺樂器不建立記錄、新增分譜時指定 full_score 正確綁定、總譜忽略殘留的 full_score 值 |
 | `ScoreEditViewTest` | 存取控制（未登入/一般團員/幹部）、GET 既有資料預先帶入欄位、404、POST 更新成功、空曲名不更新、未上傳新檔案保留原檔、上傳新檔案取代原檔、編輯分譜可綁定/更新 full_score |
 | `ScoreDeleteViewTest` | 一般幹部無法刪除、管理員可刪除並導向列表、刪除總譜連帶刪除分譜（CASCADE）、被 Setlist 或 ScoreExchangeItem 引用（PROTECT）時即使管理員也無法刪除 |
-| `ScoreDownloadViewTest` | 存取控制、無 PDF 回 404、無效 pk 回 404 |
+| `ScoreDownloadViewTest` | 存取控制、無 PDF 回 404、無效 pk 回 404、DB 有紀錄但磁碟檔案遺失時提示並導回詳情頁（不 500）|
 | `ScorePartsManageTest` | 存取控制（未登入/一般團員/幹部）、分譜 pk 回 404、無效 pk 回 404、POST 建立分譜記錄、重複上傳不重複建立（get_or_create）、POST 無檔案顯示警告 |
 | `PerformancePartsViewTest` | 演出分譜下載入口：存取控制（未登入/登入）、無效演出 pk 回 404、依登入者樂器族群篩選（列出同族群、排除他族群）、非本場曲目的分譜排除、未設族群顯示提示、無對應分譜顯示空狀態 |
 
