@@ -25,9 +25,17 @@
           <li class="nav-item"><a class="nav-link" href="{% url 'announcements:announcement_list' %}">公告</a></li>
           {% if user.is_authenticated %}
           <li class="nav-item"><a class="nav-link" href="{% url 'events:event_list' %}">演出活動</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'scores:score_list' %}">樂譜庫存</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'events:my_leave_requests' %}">我的請假</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'finance:my_fees' %}">我的會費</a></li>
+          {% comment %} 「團練」：團員每週會用到的東西收在一起（2026-09 幹部回饋）。 {% endcomment %}
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">團練</a>
+            <ul class="dropdown-menu">
+              <li><a class="dropdown-item" href="{% url 'events:checkin_entry' %}">簽到</a></li>
+              <li><a class="dropdown-item" href="{% url 'events:rehearsal_journal' %}">團練日誌</a></li>
+              <li><a class="dropdown-item" href="{% url 'scores:score_list' %}">樂譜庫存</a></li>
+              <li><a class="dropdown-item" href="{% url 'events:my_leave_requests' %}">我的請假</a></li>
+              <li><a class="dropdown-item" href="{% url 'finance:my_fees' %}">我的會費</a></li>
+            </ul>
+          </li>
           {% endif %}
           {% if user.is_officer %}
           <li class="nav-item"><a class="nav-link" href="{% url 'accounts:member_directory' %}">團員通訊錄</a></li>

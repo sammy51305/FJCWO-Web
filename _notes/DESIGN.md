@@ -793,7 +793,7 @@ Django 就會多發一次 SQL 查詢。有 10 筆排練就多 10 次查詢（N+1
 
 ### 4.5 QR Code 簽到（events）
 
-**檔案**：`apps/events/views.py`（`qr_manage`、`qr_generate`、`qr_toggle`、`qr_checkin`、`qr_checkin_confirm`）
+**檔案**：`apps/events/views.py`（`qr_manage`、`qr_generate`、`qr_toggle`、`qr_checkin`、`qr_checkin_confirm`、`checkin_entry`、`rehearsal_journal`）
 
 #### 整體流程
 
@@ -818,6 +818,17 @@ qr_checkin_confirm（POST）：建立或更新 RehearsalAttendance（status=pres
 **團員的簽到入口**：除了掃 QR，團員也可以不掃碼——該場排練有「有效」的 QR token（啟用且未過期）時，
 首頁「下次排練」卡片與 `rehearsal_detail` 會多一顆「我要簽到」按鈕，直接連到 `qr_checkin`。
 沒有 token 或已停用／過期時不顯示（2026-09-19 回饋：「找不到簽到按鈕或 QR code」）。
+
+#### 導覽列「團練」選單與團練日誌
+
+團員每週會用到的入口收進導覽列「團練」下拉：簽到、團練日誌、樂譜庫存、我的請假、我的會費
+（原本是各自平鋪的導覽項；「演出活動」維持頂層）。
+
+- `checkin_entry`（`/events/checkin/`）：找 QR 有效（啟用且未過期）的排練，有就導向 `qr_checkin`，
+  沒有就導回首頁並提示「目前沒有開放簽到的排練」。以 QR 有效性判斷，不重用首頁的 `_dashboard_rehearsal`
+  （那是「今天哪一場」，這裡要的是「幹部現在開了簽到的是哪一場」）。
+- `rehearsal_journal`（`/events/rehearsal/journal/`）：`date <= now` 的排練，新到舊、每頁 20 筆，
+  標示「有摘要／尚無摘要」，連到 `rehearsal_detail`。原本要讀排練摘要得逐層點演出活動 › 活動 › 排練。
 
 #### QR Code 圖片如何產生？
 
