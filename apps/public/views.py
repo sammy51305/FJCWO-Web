@@ -82,6 +82,10 @@ def index(request):
         rehearsal, started = _dashboard_rehearsal(timezone.now())
         context['next_rehearsal'] = rehearsal
         context['next_rehearsal_started'] = started
+        # 簽到入口：幹部開了有效的 QR Code 時，團員不用自己掃碼、直接點按鈕進簽到頁
+        # （2026-09-19 回饋：「找不到簽到按鈕或 QR code」）。
+        qr_token = getattr(rehearsal, 'qr_token', None) if rehearsal else None
+        context['checkin_token'] = qr_token.token if qr_token and qr_token.is_valid() else None
         # 我的待審請假
         context['pending_leaves'] = (
             LeaveRequest.objects

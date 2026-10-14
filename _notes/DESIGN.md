@@ -815,6 +815,10 @@ qr_checkin_confirm（POST）：建立或更新 RehearsalAttendance（status=pres
 幹部在 qr_manage 頁即時看到出席名單
 ```
 
+**團員的簽到入口**：除了掃 QR，團員也可以不掃碼——該場排練有「有效」的 QR token（啟用且未過期）時，
+首頁「下次排練」卡片與 `rehearsal_detail` 會多一顆「我要簽到」按鈕，直接連到 `qr_checkin`。
+沒有 token 或已停用／過期時不顯示（2026-09-19 回饋：「找不到簽到按鈕或 QR code」）。
+
 #### QR Code 圖片如何產生？
 
 ```python

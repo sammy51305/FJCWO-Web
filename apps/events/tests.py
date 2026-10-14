@@ -644,6 +644,41 @@ class QRCodeTest(TestCase):
         token.refresh_from_db()
         self.assertTrue(token.is_active)
 
+    # ── T07 團員簽到入口（不必自己掃碼）──────────────────────────
+
+    def test_detail_shows_checkin_button_when_token_valid(self):
+        """幹部開了有效 QR 後，團員在排練詳情頁看得到「我要簽到」並連到簽到頁"""
+        from .models import RehearsalQRToken
+        token = RehearsalQRToken.objects.create(
+            rehearsal=self.rehearsal, expires_at=timezone.now() + timedelta(hours=4),
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:rehearsal_detail', args=[self.rehearsal.pk]))
+        self.assertContains(r, '我要簽到')
+        self.assertContains(r, reverse('events:qr_checkin', args=[token.token]))
+
+    def test_detail_hides_checkin_button_without_or_with_expired_token(self):
+        """沒有 QR、或 QR 已停用／過期時，不顯示「我要簽到」"""
+        from .models import RehearsalQRToken
+        self.client.force_login(self.member)
+        url = reverse('events:rehearsal_detail', args=[self.rehearsal.pk])
+        self.assertNotContains(self.client.get(url), '我要簽到')
+        RehearsalQRToken.objects.create(
+            rehearsal=self.rehearsal, expires_at=timezone.now() + timedelta(hours=4),
+            is_active=False,
+        )
+        self.assertNotContains(self.client.get(url), '我要簽到')
+
+    def test_home_shows_checkin_button_for_todays_rehearsal(self):
+        """首頁「下次排練」卡片：該場有有效 QR 時顯示「我要簽到」"""
+        from .models import RehearsalQRToken
+        RehearsalQRToken.objects.create(
+            rehearsal=self.rehearsal, expires_at=timezone.now() + timedelta(hours=4),
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('public:index'))
+        self.assertContains(r, '我要簽到')
+
 
 class SetlistManageTest(TestCase):
     """演出曲目管理"""
