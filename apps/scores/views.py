@@ -365,7 +365,15 @@ def score_download(request, pk):
     score = get_object_or_404(Score, pk=pk)
     if not score.file:
         raise Http404
-    return FileResponse(score.file.open('rb'), as_attachment=True, filename=score.file.name.split('/')[-1])
+    try:
+        fh = score.file.open('rb')
+    except FileNotFoundError:
+        # DB 有紀錄但磁碟上沒檔案（例如雲端免費方案重新部署後 media/ 被清空）：
+        # 與其讓使用者看到 500，不如明講檔案遺失、請譜務重新上傳。
+        messages.error(request, '這份樂譜的檔案已遺失，無法下載，請聯絡譜務重新上傳。')
+        owner = score.full_score or score
+        return redirect('scores:score_detail', pk=owner.pk)
+    return FileResponse(fh, as_attachment=True, filename=score.file.name.split('/')[-1])
 
 
 @login_required

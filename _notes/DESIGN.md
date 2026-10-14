@@ -1643,6 +1643,9 @@ return FileResponse(score.file.open('rb'), as_attachment=True, filename=...)
 沒有上傳 PDF 的樂譜，`score.file` 為空，直接回傳 404。
 用 `as_attachment=True` 讓瀏覽器觸發下載而非在 tab 內開啟。
 
+DB 有紀錄但磁碟上檔案不存在（`FileNotFoundError`，例如雲端免費方案重新部署後 `media/` 被清空）時，
+不回 500，改用 `messages.error` 提示「檔案已遺失，請聯絡譜務重新上傳」並導回所屬總譜詳情頁。
+
 ---
 
 ### 4.14 報表：排練出席（events）
