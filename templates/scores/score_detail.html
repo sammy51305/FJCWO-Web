@@ -18,8 +18,7 @@
         <span class="badge bg-primary">總譜</span>
       {% else %}
         <span class="badge bg-secondary">分譜</span>
-        {% if score.instrument %}<span class="badge bg-light text-dark border">{{ score.instrument.name }}</span>{% endif %}
-        {% if score.section %}<span class="badge bg-light text-dark border">{{ score.section.name }}</span>{% endif %}
+        {% if score.instrument %}<span class="badge bg-light text-dark border">{{ score.instrument_label }}</span>{% endif %}
       {% endif %}
       {% if score.difficulty %}
         <span class="badge bg-light text-dark border">{{ score.get_difficulty_display }}</span>
@@ -91,10 +90,10 @@
           <dd class="col-sm-8">{{ score.get_source_display|default:"—" }}</dd>
           <dt class="col-sm-4">實體數量</dt>
           <dd class="col-sm-8">{{ score.physical_quantity }} 本</dd>
-          <dt class="col-sm-4">PDF</dt>
+          <dt class="col-sm-4">樂譜</dt>
           <dd class="col-sm-8">
-            {% if score.file %}
-              <a href="{% url 'scores:score_download' score.pk %}">下載</a>
+            {% if score.drive_url %}
+              <a href="{{ score.drive_url }}" target="_blank" rel="noopener noreferrer">在 Google Drive 開啟</a>
             {% else %}
               <span class="text-muted">無數位版本</span>
             {% endif %}
@@ -117,20 +116,19 @@
       </div>
       <div class="card-body">
         {% if not score.parts.all %}
-        <p class="text-muted mb-0">尚未上傳任何分譜。{% if user.is_officer %}可從上方「管理分譜」上傳。{% endif %}</p>
+        <p class="text-muted mb-0">尚未登錄任何分譜連結。{% if user.is_officer %}可從上方「管理」貼上各樂器的 Google Drive 連結。{% endif %}</p>
         {% endif %}
         <div class="d-flex flex-wrap gap-2">
           {% for part in score.parts.all %}
           <div class="border rounded px-3 py-2 small">
-            <div class="fw-medium">{{ part.instrument.name }}</div>
-            {% if part.section %}<div class="text-muted">{{ part.section.name }}</div>{% endif %}
+            <div class="fw-medium">{{ part.instrument_label }}</div>
             <div class="d-flex gap-2 mt-1">
-              {% if part.file %}
-              <a href="{% url 'scores:score_download' part.pk %}" class="text-success">
+              {% if part.drive_url %}
+              <a href="{{ part.drive_url }}" target="_blank" rel="noopener noreferrer" class="text-success">
                 <i class="bi bi-download"></i> 下載
               </a>
               {% else %}
-              <span class="text-muted">尚未上傳</span>
+              <span class="text-muted">尚無連結</span>
               {% endif %}
               {% comment %} #13-4 之後這裡是進入分譜詳情的唯一入口。沒有這個連結，
                  分譜就編輯不到也刪不掉——庫存清單已經不列分譜了。 {% endcomment %}

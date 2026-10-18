@@ -287,6 +287,63 @@ class IndexNextRehearsalTest(TestCase):
         self.assertContains(r, '進行中')
 
 
+class IndexPerformanceBlockTest(TestCase):
+    """首頁「演出活動」區塊：下次排練、我的請假、下載音樂會譜包在一起"""
+
+    def setUp(self):
+        from apps.events.models import PerformanceEvent
+
+        self.member = User.objects.create_user(
+            username='perf_member', password='x', name='區塊測試團員',
+            email='perf_member@test.local', role=User.Role.MEMBER,
+        )
+        self.venue = Venue.objects.create(name='區塊測試場地', type=Venue.Type.PERFORMANCE)
+        self.PerformanceEvent = PerformanceEvent
+
+    def _event(self, name, days, status=None):
+        return self.PerformanceEvent.objects.create(
+            name=name, type=self.PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + dt.timedelta(days=days),
+            performance_venue=self.venue,
+            status=status or self.PerformanceEvent.Status.CONFIRMED,
+        )
+
+    def test_block_contains_the_three_cards(self):
+        """首頁有「演出活動」區塊，內含下次排練、我的請假、下載音樂會譜"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('public:index'))
+        for text in ('演出活動', '下次排練', '我的請假', '下載音樂會譜'):
+            self.assertContains(r, text)
+
+    def test_download_card_links_to_each_upcoming_event(self):
+        """下載卡片列出近期演出，並連到該場的分譜下載頁"""
+        ev = self._event('秋季公演', 30)
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('public:index'))
+        self.assertContains(r, '秋季公演')
+        self.assertContains(r, reverse('scores:performance_parts', args=[ev.pk]))
+
+    def test_download_card_skips_finished_and_cancelled(self):
+        """已結束、已取消的演出不列在下載卡片"""
+        S = self.PerformanceEvent.Status
+        self._event('已結束的演出', -30, S.FINISHED)
+        self._event('已取消的演出', 10, S.CANCELLED)
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('public:index'))
+        self.assertNotContains(r, '已結束的演出')
+        self.assertNotContains(r, '已取消的演出')
+        self.assertContains(r, '近期沒有演出活動')
+
+    def test_download_card_shows_at_most_three_nearest(self):
+        """最多列最近的 3 場"""
+        for i in range(5):
+            self._event(f'第{i}場演出', 10 + i)
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('public:index'))
+        self.assertEqual(len(r.context['download_events']), 3)
+        self.assertEqual(r.context['download_events'][0].name, '第0場演出')
+
+
 class PublicPagesTest(TestCase):
     """公開頁面（未登入可瀏覽）"""
 

@@ -1079,16 +1079,20 @@ class ScoreType(models.TextChoices):
     PART = 'part', '分譜'   # 各樂器用，需要填樂器＋聲部
 ```
 
-`instrument` 和 `section` 欄位設為 `null=True, blank=True`，
-因為總譜不需要這兩個欄位，但分譜需要。
+`instrument` 欄位設為 `null=True, blank=True`，因為總譜不需要樂器，但分譜需要。
+
+> **2026-10 改版**：樂譜不再區分「聲部」（`Score.section` 移除；`SectionType` 仍給團員／入團申請使用），
+> 也不再自己存檔（`Score.file` 移除），改為 `drive_url` 記 Google Drive 連結。原因：Render 免費方案磁碟會在
+> 重新部署時清空上傳的 PDF，改由譜務把切好的總譜與各樂器分譜放進音樂會專用的 Drive 資料夾，系統只負責
+> 「把連結依樂器交給團員」。
 
 Model 層透過 `clean()` 驗證確保資料一致性：
 
 ```python
 def clean(self):
     if self.score_type == self.ScoreType.FULL:
-        if self.instrument or self.section:
-            raise ValidationError('總譜不應指定樂器或聲部。')
+        if self.instrument or self.custom_instrument_name:
+            raise ValidationError('總譜不應指定樂器。')
         if self.full_score:
             raise ValidationError('總譜不應指定所屬總譜。')
     elif self.score_type == self.ScoreType.PART:
@@ -1096,7 +1100,18 @@ def clean(self):
             raise ValidationError('分譜必須指定樂器。')
         if self.full_score and self.full_score.score_type != self.ScoreType.FULL:
             raise ValidationError('所屬總譜必須是總譜類型。')
+        # 樂器選「其他（手填）」必填名稱；其餘樂器不可手填名稱
 ```
+
+**Google Drive 連結**（`drive_url`）：存之前先過 `normalize_drive_url`——去頭尾空白，並拿掉網址裡的瀏覽器帳號編號
+`/u/數字/`（從瀏覽器複製常帶 `/drive/u/1/folders/…`，`1` 是「這個瀏覽器的第二個 Google 帳號」，別人點進去可能被帶去錯的帳號）。
+表單、分譜管理頁（樂器格與手填列）在驗證前整理，`Score.save()` 再整理一次當安全網（Admin 等入口也涵蓋）。
+只處理 Google 網域，其他網址原樣交給驗證擋掉；查詢參數保留。`validate_drive_url` 只收 `https` 且主機為 `drive.google.com`／`docs.google.com`，
+避免把團員導到任意外站。畫面上以 `target="_blank" rel="noopener noreferrer"` 連過去，系統不再提供 `/download/` 路由。
+
+**手填樂器**：「其他」族群裡有一個固定的樂器「其他（手填）」（`CUSTOM_INSTRUMENT_NAME`）。譜務選它時
+填 `custom_instrument_name`（例如「手搖鈴」），畫面一律用 `instrument_label`（手填名優先）。因為分譜本來就要有樂器，
+這樣不用破例放寬「分譜必須指定樂器」，下載篩選（依樂器族群）也照常運作——特殊樂器歸在「其他」族群。
 
 #### 總譜與分譜的關聯
 
@@ -1104,42 +1119,41 @@ def clean(self):
 
 ```
 Score（天空之城，total）
-    ├── Score（天空之城，Bb 豎笛，第一部）→ PDF
-    ├── Score（天空之城，Bb 豎笛，第二部）→ PDF
-    └── Score（天空之城，長笛）→ PDF
+    ├── Score（天空之城，Bb 豎笛）→ Drive 連結
+    ├── Score（天空之城，長笛）→ Drive 連結
+    └── Score（天空之城，手搖鈴〔其他（手填）〕）→ Drive 連結
 ```
 
 `full_score` 使用 `CASCADE`，刪掉總譜時所有分譜一併刪除。
 透過 `score.parts.all()` 可取得該曲目的所有分譜。
 
-#### 分譜上傳 UI（score_parts_manage）
+#### 分譜連結管理（score_parts_manage）
 
-路由：`/scores/<pk>/parts/`，幹部限定。
+路由：`/scores/<pk>/parts/`，幹部限定。樂譜檔案由譜務放進樂團 Google Drive，這裡只貼連結。
 
-UI 為四層式結構：
-- 第一層：樂器大分類（木管／銅管／打擊／其他）為主標題 `<h4>`
-- 第二層：樂器族群（InstrumentFamily）為次標題 `<h5>`
-- 第三層：若族群只有一種樂器，直接列聲部（不重複顯示樂器名）；若有多種則再加一層樂器名
-- 第四層：每個樂器下方列出所有聲部（第一部、第二部、第三部、Solo）checkbox
-- 勾選後顯示 PDF 上傳欄位
-- 已上傳的分譜顯示「已上傳」標示與下載連結，再次上傳可替換
+- 結構：樂器大分類（木管／銅管／打擊／其他）› 族群（InstrumentFamily）› 樂器，**每種樂器一格連結輸入框**
+  （欄位名 `url_<樂器id>`）。**全部選填**（一首曲子用不到全部樂器，空白＝這首沒有這個樂器），**至少填一個**。
+- 「其他（手填）」不在固定清單，另開「其他樂器（手填）」區：可新增多列，每列「名稱＋連結」
+  （`custom_name`／`custom_url` 成對），已存在的會回填。
+- **以送出內容為準**：再次送出時，清空的格子或沒帶上的手填列，其分譜會被移除（被其他資料引用而刪不掉的保留並提示）。
+  同一首、同一樂器已有分譜就更新連結（不重複建立）。
+- 驗證：每個連結過 `validate_drive_url`；手填列名稱與連結缺一不可、名稱不可重複；任何錯誤都整批不存，
+  並把使用者剛填的值帶回表單（`values=request.POST`）。
+- **批次貼上**（純前端）：大文字框一行一筆「名稱 連結」（可從 Google 試算表整欄複製），按「帶入下方欄位」依名稱填進對應格子；
+  配不到固定樂器的放進手填區讓譜務確認名稱，沒有連結的行略過並提示。按「儲存」才真的送出。
+  名稱配對：樂器取「全名出現在名稱中」的最長者（避免「低音豎笛」被「豎笛」搶走）；沒有全名命中時去掉英文前綴
+  （`Bb 豎笛`→`豎笛`）只在**唯一對應**時採用，有歧義寧可不猜。
 
-view 在 GET 時預先建立巢狀資料結構（`categories_data`）供 template 直接迭代，
-避免 template 內複雜的 dict 查找邏輯。`categories_data` 結構為：
-`[{category_label, families: [{family, instruments: [{instrument, sections: [{section, key, existing_part}]}], single}]}]`
+#### 改版歷程：聲部移除與資料搬移（migration 0003／0004）
 
-**批次選檔**（2026-10 譜務回饋：「以為可以批次上傳，結果還是要一個一個選」）：頁面最上方多一個
-`<input type="file" name="batch_files" multiple>`。選好後前端為每個檔案列一列，依**檔名**預填一個槽位
-`<select name="batch_slot">`（值為 `{樂器id}_{聲部id}`，空字串＝略過），使用者可逐列修改後一起送出。
-
-- 檔名配對（純前端，`score_parts_manage.html` 內的 JS）：樂器取「全名出現在檔名中」的最長者
-  （避免「低音豎笛」被「豎笛」搶走）；沒有全名命中時，去掉英文前綴（`Bb 豎笛`→`豎笛`）只在**唯一對應**時採用，
-  有歧義（如單寫「豎笛」，Eb／Bb 都符合）寧可留空讓人選，不亂猜。聲部比全名（第一部／Solo），再比 1／2／3，預設第一部。
-  配不出來的列標黃底、預設「略過」。
-- 後端 `score_parts_manage` 把 `batch_files` 與 `batch_slot` 依順序一對一處理，**不信任前端的配對結果**：
-  槽位格式錯誤、樂器不存在、副檔名非 `.pdf`、同一次內重複的槽位（只收第一份）一律算「略過」，最後彙總提示略過數。
-  存檔邏輯與原本逐格上傳共用 `_save_part()`（`get_or_create` → 已有就替換檔案）。
-- 原本逐格勾選上傳的流程保留不變。
+- `0003`：新增 `drive_url`、`custom_instrument_name`；補上新樂器（吉他族群：吉他／電吉他／Bass 吉他，及「其他（手填）」）；
+  **清掉既有的分譜紀錄**（總譜保留）：舊分譜是「樂器＋聲部＋上傳檔案」，檔案早已在 Render 重新部署時遺失，結構也與新的
+  「每種樂器一個 Drive 連結」不同，owner 決定清掉重來，等譜務把連結貼上（被其他資料引用而刪不掉的保留）。
+  **只在已有樂器資料的資料庫做**（Render）：全新資料庫的樂器由 `fixtures/instruments.json` 載入（已含同樣資料、主鍵一致），
+  migration 先塞會跟 fixture 主鍵衝突。
+- `0004`：移除 `section`、`file`。**刻意與 0003 分開**——0003 會刪列（有待處理的外鍵觸發事件），Postgres 不允許同一交易再
+  `ALTER TABLE`（`cannot ALTER TABLE ... because it has pending trigger events`），合併會在有資料的資料庫上失敗
+  （2026-10 實測發現）。
 
 #### 樂器族群（InstrumentFamily）
 
@@ -1161,8 +1175,12 @@ view 在 GET 時預先建立巢狀資料結構（`categories_data`）供 templat
   └── ...
 ```
 
-預設資料儲存在 `fixtures/instruments.json`（12 族群、24 種樂器）
-與 `fixtures/sections.json`（第一部〜第四部、Solo）。
+預設資料儲存在 `fixtures/instruments.json`（13 族群、28 種樂器）
+與 `fixtures/sections.json`（第一部〜第四部、Solo，給團員／入團申請用）。
+
+2026-10 在「其他」大分類新增 **吉他族群**（吉他、電吉他、Bass 吉他），並在「其他」族群放固定樂器
+**「其他（手填）」**（特殊樂器由譜務手填名稱，見上方 Score 說明）。已部署的資料庫由 migration `0003` 依名稱補上，
+新樂器的主鍵（族群 13、樂器 25～28）與 fixture 一致，之後再 `loaddata` 也不衝突。
 
 #### 新增／編輯樂譜（score_create / score_edit）
 
@@ -1422,6 +1440,11 @@ QuerySet 只查一次、在 Python 端分組（公告量小，`select_related('c
 
 ### 4.11 首頁 Dashboard（public）
 
+> **2026-10 版面調整**：首頁把「下次排練」「我的請假（待審核）」與新增的「下載音樂會譜」三張卡片包進一個
+> 「演出活動」區塊（都是為了準備演出）。「下載音樂會譜」列近期演出，每場一顆「下載我的樂譜」連到
+> `scores:performance_parts`（只列自己樂器族群的分譜）。同時「演出活動」列表每場即將到來的演出旁也直接放
+> 「下載我的樂譜」，不必先點進詳情頁——入口放在使用者本來就在看的地方，比加提醒文字有效。
+
 **檔案**：`apps/public/views.py`（`index`）
 
 首頁對**未登入者**顯示靜態內容；對**已登入者**額外查詢資料，組成個人化 Dashboard：
@@ -1431,6 +1454,9 @@ QuerySet 只查一次、在 Python 端分組（公告量小，`select_related('c
 rehearsal, started = _dashboard_rehearsal(timezone.now())
 context['next_rehearsal'] = rehearsal
 context['next_rehearsal_started'] = started
+
+# 下載音樂會譜：未結束、未取消的演出（最近 3 場），各連到 performance_parts（依樂器族群篩選）
+context['download_events'] = list(PerformanceEvent.objects.exclude(status__in=[FINISHED, CANCELLED]).order_by('performance_date')[:3])
 
 # 我的待審請假（提醒團員有哪些申請尚未被幹部處理）
 context['pending_leaves'] = (
@@ -1566,7 +1592,7 @@ available_scores = Score.objects.filter(score_type=Score.ScoreType.FULL)
 
 ### 4.13 樂譜瀏覽與下載（scores）
 
-**檔案**：`apps/scores/views.py`（`score_list`、`score_detail`、`score_download`）
+**檔案**：`apps/scores/views.py`（`score_list`、`score_detail`；下載＝直接連 Google Drive）
 
 **登入者可用**，一般團員與幹部皆可瀏覽。
 
@@ -1662,17 +1688,10 @@ versions = score.versions.select_related('instrument')
 `versions` 是 `parent_score` ForeignKey 的 `related_name`，
 顯示從這個版本衍生出去的所有改版，讓使用者沿著版本鏈上下追溯。
 
-#### score_download：直接下載 PDF
+#### 下載：直接連 Google Drive
 
-```python
-return FileResponse(score.file.open('rb'), as_attachment=True, filename=...)
-```
-
-沒有上傳 PDF 的樂譜，`score.file` 為空，直接回傳 404。
-用 `as_attachment=True` 讓瀏覽器觸發下載而非在 tab 內開啟。
-
-DB 有紀錄但磁碟上檔案不存在（`FileNotFoundError`，例如雲端免費方案重新部署後 `media/` 被清空）時，
-不回 500，改用 `messages.error` 提示「檔案已遺失，請聯絡譜務重新上傳」並導回所屬總譜詳情頁。
+`score_download` 與 `/scores/<pk>/download/` 已移除（檔案不再存在本系統）。有 `drive_url` 的樂譜在詳情頁顯示
+「在 Google Drive 開啟」、分譜顯示「下載」，連結 `target="_blank" rel="noopener noreferrer"`；沒有連結顯示「無數位版本」／「尚無連結」。
 
 ---
 
@@ -1872,7 +1891,7 @@ parts = Score.objects.filter(
     score_type=Score.ScoreType.PART,
     full_score__setlists__event=event,           # 分譜的總譜有被排進這場演出
     instrument__family=request.user.instrument,  # 依登入者的樂器族群
-).select_related('instrument', 'section', 'full_score').distinct()
+).select_related('instrument', 'full_score').distinct()
 ```
 
 關聯路徑是 **PerformanceEvent → Setlist.score（總譜）→ Score.parts（分譜）**，不是直接從分譜連到演出。
@@ -1888,8 +1907,8 @@ parts = Score.objects.filter(
 
 #### 顯示規則：族群內全列，讓團員自選
 
-同族群底下各具體樂器／聲部的分譜全部列出（例：薩克斯風族會同時出現中音、次中音…各聲部），
-有 PDF 的顯示下載按鈕，沒 PDF 的顯示「尚未上傳」。
+同族群底下各具體樂器的分譜全部列出（例：薩克斯風族會同時出現中音、次中音…各樂器），
+有 Drive 連結的顯示下載按鈕，沒連結的顯示「尚無連結」。
 
 #### 設計選擇：不強制指定聲部
 

@@ -34,8 +34,15 @@
 
 <div class="row g-4">
 
+  {% comment %} 「演出活動」區塊：下次排練、我的請假、下載音樂會譜都是為了「準備演出」，包在一起。
+     （2026-10 owner 想法：首頁用演出活動把這幾項包起來，並多一個下載音樂會譜入口。） {% endcomment %}
+  <div class="col-12">
+    <div class="border rounded p-3">
+      <h5 class="mb-3"><i class="bi bi-music-note-beamed me-1"></i> 演出活動</h5>
+      <div class="row g-3">
+
   <!-- 下次排練 -->
-  <div class="col-md-6">
+  <div class="col-md-4">
     <div class="card h-100">
       <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
         <span>
@@ -71,7 +78,7 @@
   </div>
 
   <!-- 我的請假狀態 -->
-  <div class="col-md-6">
+  <div class="col-md-4">
     <div class="card h-100">
       <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
         <span><i class="bi bi-calendar-x me-1"></i> 我的請假（待審核）</span>
@@ -96,6 +103,34 @@
         {% endif %}
       </div>
     </div>
+  </div>
+
+  <!-- 下載音樂會譜：依自己的樂器族群，直接進各場演出的分譜下載頁 -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header fw-semibold"><i class="bi bi-download me-1"></i> 下載音樂會譜</div>
+      <div class="card-body">
+        {% if download_events %}
+          <ul class="list-unstyled mb-2">
+            {% for ev in download_events %}
+            <li class="mb-2">
+              <div class="small fw-semibold">{{ ev.name }}</div>
+              <a href="{% url 'scores:performance_parts' ev.pk %}" class="btn btn-sm btn-success">
+                <i class="bi bi-download"></i> 下載我的樂譜
+              </a>
+            </li>
+            {% endfor %}
+          </ul>
+          <p class="text-muted small mb-0">只會列出你樂器的分譜。</p>
+        {% else %}
+          <p class="text-muted mb-0">近期沒有演出活動。</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+      </div>{# /row #}
+    </div>{# /border #}
   </div>
 
   {% if user.is_officer %}

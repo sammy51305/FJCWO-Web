@@ -8,7 +8,7 @@ manage.py seed_demo
 
 使用方式：
     python manage.py seed_demo
-    python manage.py seed_demo --no-files   # 不產生 QR 圖檔與樂譜 PDF
+    python manage.py seed_demo --no-files   # 不產生 QR 圖檔
 
 資料內容與 demo 動線見 _notes/DEMO.md。
 """
@@ -91,42 +91,6 @@ DEMO_REGISTRATION_EMAILS = [
 
 _PART_INSTRUMENTS = ['長笛', '雙簧管', 'Bb 豎笛', '中音薩克斯風',
                      '小號', '法國號', '長號', '打擊樂']
-
-
-def _minimal_pdf(title, subtitle):
-    """不依賴 reportlab，手工組一個單頁合法 PDF 當示意樂譜。"""
-    def esc(s):
-        return s.replace('\\', r'\\').replace('(', r'\(').replace(')', r'\)')
-
-    content = (
-        f"BT /F1 24 Tf 60 700 Td ({esc(title)}) Tj ET\n"
-        f"BT /F1 13 Tf 60 670 Td ({esc(subtitle)}) Tj ET\n"
-        f"BT /F1 10 Tf 60 640 Td (FJCWO demo file - not a real score) Tj ET\n"
-    )
-    for i in range(10):
-        y = 600 - i * 12
-        content += f"1 w 60 {y} m 540 {y} l S\n"
-
-    objs = [
-        "<< /Type /Catalog /Pages 2 0 R >>",
-        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
-        "/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
-        f"<< /Length {len(content)} >>\nstream\n{content}endstream",
-        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    ]
-    out = "%PDF-1.4\n"
-    offsets = []
-    for i, body in enumerate(objs, start=1):
-        offsets.append(len(out))
-        out += f"{i} 0 obj\n{body}\nendobj\n"
-    xref_at = len(out)
-    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n"
-    for off in offsets:
-        out += f"{off:010d} 00000 n \n"
-    out += (f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\n"
-            f"startxref\n{xref_at}\n%%EOF\n")
-    return out.encode('latin-1', errors='replace')
 
 
 class Command(BaseCommand):
@@ -353,6 +317,7 @@ class Command(BaseCommand):
                 defaults=dict(composer=comp, arranger=arr, copyright_status=cr,
                               difficulty=diff, physical_quantity=1,
                               source=Score.Source.PURCHASED,
+                              drive_url=f'https://drive.google.com/file/d/demo-full-{DEMO_SCORE_TITLES.index(title)}/view',
                               publisher='Hal Leonard' if cr == 'copyrighted' else ''),
             )
             full_scores.append(s)
@@ -362,7 +327,8 @@ class Command(BaseCommand):
                     title=f'{title} — {iname}分譜', score_type=Score.ScoreType.PART,
                     defaults=dict(composer=comp, arranger=arr, copyright_status=cr,
                                   instrument=self.itype[iname], full_score=s,
-                                  physical_quantity=4),
+                                  physical_quantity=4,
+                                  drive_url=f'https://drive.google.com/file/d/demo-{DEMO_SCORE_TITLES.index(title)}-{_PART_INSTRUMENTS.index(iname)}/view'),
                 )
                 n += pc
         self.log.append(f'樂譜新建 {n} 筆（{len(DEMO_SCORE_TITLES)} 首總譜 × '
@@ -547,18 +513,3 @@ class Command(BaseCommand):
             qrcode.make(payload).save(buf, format='PNG')
             pc.qrcode.save('fjcwo_payment_qr.png', ContentFile(buf.getvalue()), save=True)
             self.log.append('轉帳收款 QR 圖檔已產生')
-
-        n = 0
-        for s in Score.objects.filter(score_type=Score.ScoreType.FULL, file=''):
-            s.file.save(f'demo_full_{s.pk}.pdf',
-                        ContentFile(_minimal_pdf(s.title, f'Full Score / {s.composer}')),
-                        save=True)
-            n += 1
-        for s in Score.objects.filter(score_type=Score.ScoreType.PART, file='').select_related('instrument'):
-            inst = s.instrument.name if s.instrument else 'Part'
-            s.file.save(f'demo_part_{s.pk}.pdf',
-                        ContentFile(_minimal_pdf(s.title.split(' — ')[0], f'Part: {inst}')),
-                        save=True)
-            n += 1
-        if n:
-            self.log.append(f'樂譜示意 PDF 產生 {n} 份')

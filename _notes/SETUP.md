@@ -249,6 +249,29 @@ venv\Scripts\python.exe manage.py migrate
 > 在自己機器上 `makemigrations` 只會在「你改了 model」時才該做；沒改卻跑出新檔案，
 > 通常代表你的分支跟別人的 model 有分歧，要先確認而不是直接產生。
 
+#### 拉完直接看成果（pull → 載 demo 資料 → 啟動）
+
+想在本機親眼確認剛合併的功能，從專案根目錄一路貼到底（`seed_demo` 可重複執行、
+只新增不修改既有資料，已經載過也沒關係）：
+
+```bash
+cd C:\Workspace\github\FJCWO-Web
+git checkout main
+git pull
+venv\Scripts\python.exe -m pip install -r requirements.txt
+venv\Scripts\python.exe manage.py migrate
+venv\Scripts\python.exe manage.py seed_demo
+venv\Scripts\python.exe manage.py runserver
+```
+
+啟動後開 <http://127.0.0.1:8000>，用 `demo_officer`（幹部）或其他 `demo_*`（團員）登入；
+密碼是 `DEMO_PASSWORD` 環境變數的值，沒設就是 DEMO.md 裡的預設值。
+
+- 資料庫是全新的（還沒載過基礎資料）時，要先照步驟六載 fixtures，`seed_demo` 才有樂器／聲部／場地可用。
+- 開不了 `127.0.0.1:8000`？先確認 `runserver` 視窗沒有報錯、PostgreSQL 有在跑。
+  `runserver` 只在**執行它的那台機器**上連得到，雲端環境（如 Claude Code 的 cloud session）
+  跑的伺服器，你自己電腦的瀏覽器是打不開的。
+
 ---
 
 ### 情境 D：建立正式（production）環境
@@ -349,8 +372,9 @@ python manage.py createsuperuser    # 自己的管理員帳號
 #### E-5　免費方案的三個限制（測試可接受，正式上線前要解）
 
 1. **會休眠**：15 分鐘沒人用就睡著，下一個請求要等約 1 分鐘喚醒。第一次點會覺得很慢，是正常的。
-2. **磁碟是暫時的**：**重新部署會清空上傳的檔案**——樂譜 PDF、分譜、收據會不見（QR 圖可重新產生）。
-   測試階段接受即可；要持久保存得接 Cloudflare R2 之類的物件儲存（見 DESIGN #10 路線 A 的「媒體」）。
+2. **磁碟是暫時的**：**重新部署會清空上傳的檔案**——收據、QR 圖會不見（QR 圖可重新產生）。
+   **樂譜不受影響**：樂譜檔案改放樂團 Google Drive，系統只記連結（見 DESIGN §4.8）。
+   其他上傳要持久保存得接 Cloudflare R2 之類的物件儲存（見 DESIGN #10 路線 A 的「媒體」）。
 3. **Email 仍是 console backend**：沒填 `EMAIL_HOST_USER`／`PASSWORD` 的話，
    系統寄的臨時密碼信只會印在 Render 的 log 裡、收件人收不到。
    要測「入團申請 → 收密碼信」整條流程（#11）就得填真的 SMTP。
@@ -467,11 +491,11 @@ python manage.py loaddata fixtures/venues.json
 ```
 
 內含：
-- `instruments.json`：12 個樂器族群（豎笛、薩克斯風、長笛等）+ 24 種樂器（Eb 豎笛、Bb 豎笛、中音薩克斯風等）
+- `instruments.json`：13 個樂器族群（豎笛、薩克斯風、長笛、吉他等）+ 28 種樂器（含「其他（手填）」）（Eb 豎笛、Bb 豎笛、中音薩克斯風等）
 - `sections.json`：5 個聲部（第一部〜第四部、Solo）
 - `venues.json`：排練場地世韻藝術有限公司（含 3 個時段）、演出場地輔仁大學野聲堂等 4 處
 
-> `instruments.json` 和 `sections.json` 必須在 `score_parts_manage` 分譜上傳功能使用前載入，否則 UI 不會有任何樂器可選。
+> `instruments.json` 和 `sections.json` 必須在 `score_parts_manage` 分譜連結管理功能使用前載入，否則 UI 不會有任何樂器可選。
 
 ### 想要有東西可以點？再灌一份假資料
 

@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-10-15（共 576 個測試）
+> 最後更新：2026-10-15（共 593 個測試）
 
 ---
 
@@ -115,7 +115,7 @@ python manage.py test --noinput
 | `MemberDirectoryReportTest` | 通訊錄列印報表：存取控制（未登入/一般團員無權限含電話Email→導回通訊錄/幹部可看）、顯示姓名電話Email、依樂器族群分組、列印按鈕、status 篩選（預設在團排除退團、inactive、all）|
 | `GuestManageTest` | 客座團員（槍手）管理：存取控制、CRUD（新增設 role=guest／不可登入／空 email 存 NULL、姓名必填、email 重複擋、編輯、刪除）、轉正（改 member／補 email／開通登入／強制改密碼、缺 email 擋）、資安（guest 即使有密碼也被登入表單擋、通訊錄排除 guest、guest 列表顯示）|
 
-### `apps/events/tests.py`（148 個）
+### `apps/events/tests.py`（149 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -125,6 +125,7 @@ python manage.py test --noinput
 | `EventViewsTest` | 演出活動列表/詳情、排練詳情、摘要/備註顯示、申請請假按鈕（未來啟用/過去停用）、活動詳情頁請假捷徑連結（未來顯示/過去不顯示）|
 | `QRCodeTest` | QR 管理頁存取控制、產生 token、重新產生換 UUID、小時數邊界、停用/啟用 toggle、簽到頁顯示、已簽到提示、簽到確認建立出席紀錄、團員簽到入口（排練詳情頁／首頁在 QR 有效時顯示「我要簽到」，無 QR 或已停用時不顯示）|
 | `PracticeMenuTest` | 導覽列「團練」下拉含五個入口、團練日誌需登入、只列已開始排練並標示有無摘要、簽到入口有 QR 時導向簽到頁／沒有時導回首頁並說明 |
+| `EventListDownloadButtonTest` | 演出活動列表每場即將到來的演出旁有「下載我的樂譜」並連到該場分譜下載頁 |
 | `SetlistManageTest` | 曲目管理存取控制、新增總譜成功、新增分譜被擋（404）、重複順序被擋、移除曲目 |
 | `AttendanceReportTest` | 存取控制（未登入/一般團員/幹部）、404、出席/請假分類計數、**「無紀錄」只保留給未過截止的排練（已過截止無紀錄＝缺席，#13-7）**、個人出席率計算 |
 | `LeaveStatsTest` | 存取控制、預設最新活動、排練層計數（核准/待審）、個人層出現、按總次數遞減排序 |
@@ -133,18 +134,19 @@ python manage.py test --noinput
 | `EventDeleteTest` | 團員/幹部無法刪除、GET 不刪除、管理員 POST 刪除並導回列表、刪除 cascade 排練、刪除按鈕在列表頁與詳情頁皆出現（管理員可見/幹部不可見）|
 | `RehearsalManageTest` | 存取控制（未登入/團員/幹部）、新增排練成功、重複 sequence 被擋、空日期被擋、編輯排練更新 sequence |
 
-### `apps/scores/tests.py`（90 個）
+### `apps/scores/tests.py`（102 個）
 
 | Class | 測試內容 |
 |-------|---------|
-| `ScoreModelValidationTest` | `clean()` 驗證：總譜不可有樂器/聲部/full_score、分譜的 full_score 必須指向總譜；`__str__` 格式（含聲部/不含聲部/總譜） |
+| `ScoreModelValidationTest` | `clean()` 驗證：總譜不可有樂器／手填名稱／full_score、分譜的 full_score 必須指向總譜；「其他（手填）」必須填名稱、一般樂器不可手填；`__str__`／`instrument_label` 格式（一般、手填、總譜）；`drive_url` 只收 https 的 Google 網域（http、外站、偽裝網域一律拒絕）|
+| `NormalizeDriveUrlTest` | 連結整理：拿掉 `/u/數字/`（資料夾、文件、多位數帳號編號）、保留查詢參數、不誤刪檔案 id 裡的 u、去頭尾空白、非 Google 網址原樣留給驗證擋、`save()` 安全網 |
 | `ScoreListViewTest` | 存取控制、只列總譜（#13-4：分譜不出現、舊 `?type=part` 網址失效）、分譜份數欄、`instrument` 篩選改篩「有此樂器分譜的總譜」（含去重、排除、份數不受篩選影響）、關鍵字搜尋、無結果空狀態、未綁總譜分譜的幹部限定警告區、刪除按鈕限管理員可見 |
 | `ScoreDetailViewTest` | 存取控制、曲名/作曲顯示、404、無 PDF 顯示提示、麵包屑帶/不帶篩選條件連回列表、總譜詳情頁連到每份分譜（#13-4 後分譜的唯一入口）、管理員可刪單一分譜、刪分譜導回所屬總譜、刪總譜仍導回清單、幹部不可刪 |
 | `ScoreCreateViewTest` | 存取控制（未登入/一般團員/幹部）、POST 新增總譜成功並導向詳情頁、POST 新增分譜（含樂器）成功、空曲名不建立記錄、分譜缺樂器不建立記錄、新增分譜時指定 full_score 正確綁定、總譜忽略殘留的 full_score 值 |
-| `ScoreEditViewTest` | 存取控制（未登入/一般團員/幹部）、GET 既有資料預先帶入欄位、404、POST 更新成功、空曲名不更新、未上傳新檔案保留原檔、上傳新檔案取代原檔、編輯分譜可綁定/更新 full_score |
+| `ScoreEditViewTest` | 存取控制（未登入/一般團員/幹部）、GET 既有資料預先帶入欄位、404、POST 更新成功、空曲名不更新、沒送 drive_url 保留原連結、送新連結取代、非 Google 連結被擋下且原連結不變、貼帶 /u/1/ 的連結存成整理後的版本、編輯分譜綁定總譜 |
 | `ScoreDeleteViewTest` | 一般幹部無法刪除、管理員可刪除並導向列表、刪除總譜連帶刪除分譜（CASCADE）、被 Setlist 或 ScoreExchangeItem 引用（PROTECT）時即使管理員也無法刪除 |
-| `ScoreDownloadViewTest` | 存取控制、無 PDF 回 404、無效 pk 回 404、DB 有紀錄但磁碟檔案遺失時提示並導回詳情頁（不 500）|
-| `ScorePartsManageTest` | 存取控制（未登入/一般團員/幹部）、分譜 pk 回 404、無效 pk 回 404、POST 建立分譜記錄、重複上傳不重複建立（get_or_create）、POST 無檔案顯示警告、批次選檔（多檔各配槽位建立分譜、空槽位／非 PDF／無效槽位／同槽位重複一律略過並提示、團員不能批次上傳、頁面有批次輸入框與槽位選項）|
+| `ScoreDriveLinkDisplayTest` | 詳情頁有 Drive 連結就直接連過去（新分頁、`noopener noreferrer`）、沒連結顯示「無數位版本」、舊 `/download/` 路由已移除（404）|
+| `ScorePartsManageTest` | 存取控制（未登入／團員 GET 與 POST／幹部）、分譜／無效 pk 回 404、每種樂器一格輸入框且不含「其他（手填）」、只填的樂器建分譜（繼承曲名與版權）、再送出更新不重複、貼帶 /u/1/ 的連結存成整理後版本（樂器格與手填列）、清空格子移除分譜、全部留白被擋、非 Google 連結整批不存並帶回填的值、手填列（多列、名稱與連結缺一不可、沒帶上的手填列被移除、GET 回填）|
 | `PerformancePartsViewTest` | 演出分譜下載入口：存取控制（未登入/登入）、無效演出 pk 回 404、依登入者樂器族群篩選（列出同族群、排除他族群）、非本場曲目的分譜排除、未設族群顯示提示、無對應分譜顯示空狀態 |
 
 ### `apps/assets/tests.py`（9 個）
@@ -185,13 +187,14 @@ python manage.py test --noinput
 |-------|---------|
 | `PushLineMessageTest` | credentials 齊全時發出 API 請求、TOKEN 缺少時略過、GROUP_ID 缺少時略過、API 失敗時 silent fail |
 
-### `apps/public/tests.py`（64 個）
+### `apps/public/tests.py`（68 個）
 
 | Class | 測試內容 |
 |-------|---------|
 | `IndexDashboardLeaveResultTest` | 首頁顯示未讀的核准/拒絕請假結果、待審核不顯示為結果、看過一次後 result_seen 變 True、已讀結果不再顯示、不會看到其他團員的結果 |
 | `IndexOfficerPendingReviewTest` | 首頁幹部「待我處理的事項」（#12）：有待審排練請假時顯示並連到審核頁、團員看不到也無 count、無待審時不顯示、「我的請假」只含自己而待審筆數為全團 |
 | `IndexNextRehearsalTest` | 首頁「下次排練」卡片挑哪一場：排練開始時刻一過**仍留在卡片上**（不跳成下一場）、今天沒有已開始的排練時顯示未來最近一場、同一天多場取最近開始的、昨天的排練不再顯示、完全沒排練時不炸掉；卡片渲染出路徑標示與「今天的排練／進行中」 |
+| `IndexPerformanceBlockTest` | 首頁「演出活動」區塊含下次排練／我的請假／下載音樂會譜三張卡片；下載卡片列近期演出並連到分譜下載頁、略過已結束與已取消、最多 3 場 |
 | `PublicPagesTest` | 首頁、關於百韻、章程三頁面的 200 回應與不需登入；章程有內容時顯示、無內容時顯示佔位文字 |
 | `CharterEditTest` | 存取控制（未登入/一般團員/幹部）、POST 儲存章程並 redirect、二次更新不新增資料 |
 | `VenueManageTest` | 存取控制（未登入/一般團員/幹部）、依名稱搜尋、依類別篩選、新增/編輯場地、新增/刪除時段、刪除限管理員、被演出活動引用（PROTECT）時即使管理員也無法刪除；頁面寫出用途說明、列出被幾場演出／排練使用（`distinct=True` 防 JOIN 相乘）、未使用標「尚未使用」、一筆都沒有與搜尋不到給不同提示 |
@@ -322,7 +325,7 @@ def test_invalid_state_raises(self):
 | App | 功能 | 說明 |
 |-----|------|------|
 | `public` | `about_manage` / `about_create` / `about_edit` / `about_delete` | 關於百韻內容管理，尚無自動測試 |
-| `scores` | 上傳時的伺服器端 PDF 格式驗證 | 逐格上傳目前僅靠 HTML `accept=".pdf"` 限制；批次選檔路徑只檢查副檔名 `.pdf`，不驗內容 |
-| `scores` | 批次選檔的檔名→樂器／聲部自動配對（前端 JS） | Django 測試碰不到瀏覽器 JS；2026-10-15 以 node 對真實樂器清單手動驗證過，後端不信任前端配對結果（見 DESIGN §分譜上傳 UI） |
+| `scores` | 分譜管理頁「批次貼上」的名稱→樂器自動配對（前端 JS） | Django 測試碰不到瀏覽器 JS；2026-10-15 以 node 對真實樂器清單手動驗證過配對規則，後端不信任前端、只驗收最後送出的欄位（見 DESIGN §分譜連結管理）|
+| `scores` | 首頁／分譜管理頁在真實瀏覽器的版面 | 無瀏覽器自動化測試；雲端環境連不到 CDN、Bootstrap 沒載入，只能看結構 |
 | `meetings` | 所有功能 | Phase 3，尚未實作 |
 | `notifications` | Admin 觸發通知的整合測試 | 需要 mock Admin save_model，目前僅覆蓋 utils 層 |

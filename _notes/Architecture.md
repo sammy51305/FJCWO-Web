@@ -288,10 +288,10 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | arranger | 編曲者 |
 | score_type | 總譜（指揮用）/ 分譜（樂器用）|
 | instrument | 樂器（分譜才需填，關聯 InstrumentType）|
-| section | 聲部（分譜才需填，關聯 SectionType）|
+| custom_instrument_name | 手填樂器名稱（樂器選「其他（手填）」時必填，例如手搖鈴；其餘為空）|
 | copyright_status | 公版 / 有版權 / 已授權 |
 | physical_quantity | 實體紙本數量 |
-| file | 樂譜 PDF |
+| drive_url | Google Drive 連結（只收 https 的 drive.google.com／docs.google.com；系統不存檔，見 DESIGN §4.8）|
 | full_score | 所屬總譜（分譜才填，關聯 Score；刪總譜時分譜一併刪除）|
 | parent_score | 基於哪個版本修改（關聯 Score，原版為空）|
 | version_note | 改版說明 |
@@ -530,7 +530,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 ├── 演出出席意願統計（依聲部分組，含未表態的「待確認」名單）
 ├── 入團申請批次匯入（Google 表單 CSV → Registration；錯誤列逐筆報告、以 Email 冪等）
 ├── 入團申請批次核准（勾選多筆一次建帳號並寄臨時密碼信）
-├── 樂譜庫存管理（Model + Admin，瀏覽／新增／編輯（總譜／分譜，含綁定所屬總譜）有前端，分譜批次上傳；
+├── 樂譜庫存管理（Model + Admin，瀏覽／新增／編輯（總譜／分譜，含綁定所屬總譜）有前端；樂譜檔案放樂團 Google Drive，系統只記連結，分譜連結管理頁每種樂器一格、批次貼上、可手填特殊樂器；
 │   列表只列總譜、顯示分譜份數，樂器篩選改篩「有此樂器分譜的總譜」，未綁總譜的分譜列幹部警告區；
 │   分譜一律從總譜詳情頁進入（該頁每份分譜有「詳細」連結，是分譜的唯一入口）；
 │   刪除限管理員，刪分譜後導回所屬總譜）
@@ -663,8 +663,8 @@ FJCWO-Web/
 │   └── images/             # favicon、logo 等靜態圖檔
 ├── fixtures/               # 初始資料（loaddata 用）
 │   ├── venues.json         # 場地 + 場地時段
-│   ├── instruments.json    # 樂器族群（12）+ 樂器（24）
-│   └── sections.json       # 聲部（第一部〜第四部、Solo）
+│   ├── instruments.json    # 樂器族群（13）+ 樂器（28，含吉他族群與「其他（手填）」）
+│   └── sections.json       # 聲部（第一部〜第四部、Solo）——團員／入團申請用；樂譜已不使用聲部
 ├── _notes/                 # 開發文件（不進 production）
 │   ├── Architecture.md
 │   ├── BACKLOG.md
@@ -735,7 +735,7 @@ FJCWO-Web/
 | Web Server | Gunicorn（static 由 WhiteNoise 供應，PaaS 上沒有 Nginx）|
 | SSL | 由 Render 提供，Django 端以 `SECURE_PROXY_SSL_HEADER` 辨識 |
 | 資料 | 一律假資料（fixtures ＋ `seed_demo`），不放真團員個資 |
-| 限制 | 磁碟為暫時性，重新部署會清空上傳的樂譜 PDF／收據 |
+| 限制 | 磁碟為暫時性，重新部署會清空上傳的收據／QR 圖（樂譜不受影響：改存 Google Drive，只記連結）|
 
 ### 自架正式站（長期規劃）
 
