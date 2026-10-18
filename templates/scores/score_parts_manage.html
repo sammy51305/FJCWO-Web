@@ -21,6 +21,20 @@
 <form method="post" enctype="multipart/form-data">
   {% csrf_token %}
 
+  {% comment %} 批次選檔：一次選多份 PDF，依檔名預填樂器／聲部，確認後一起上傳。
+     （2026-09 譜務回饋：「以為可以批次上傳，結果還是要一個一個選」） {% endcomment %}
+  <div class="card mb-4">
+    <div class="card-header fw-semibold"><i class="bi bi-files"></i> 批次選檔</div>
+    <div class="card-body">
+      <p class="text-muted small mb-2">
+        一次選多份 PDF。系統會依檔名猜樂器與聲部（例如「長笛 第二部.pdf」、「Bb 豎笛 2.pdf」），
+        猜錯的可以在下方改，不要上傳的選「略過」。
+      </p>
+      <input type="file" id="batch-files" name="batch_files" accept=".pdf" multiple class="form-control">
+      <div id="batch-preview" class="mt-3"></div>
+    </div>
+  </div>
+
   {% for cdata in categories_data %}
   <h4 class="mt-4 mb-3 text-primary border-bottom pb-2">{{ cdata.category_label }}</h4>
 
@@ -114,7 +128,80 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ slot_options|json_script:"slot-options" }}
 <script>
+(function () {
+  var slots = JSON.parse(document.getElementById('slot-options').textContent);
+  var norm = function (t) { return t.toLowerCase().replace(/[\s_\-.()（）]/g, ''); };
+  var instNames = Array.from(new Set(slots.map(function (s) { return s.instrument; })));
+  var sectNames = Array.from(new Set(slots.map(function (s) { return s.section; })));
+
+  // 樂器：全名出現在檔名裡，取最長者（避免「低音豎笛」被「豎笛」搶走）；
+  // 沒有全名命中時，去掉英文前綴（Bb 豎笛 → 豎笛）只在「唯一對應」時才採用，不亂猜。
+  function guessInstrument(n) {
+    var hit = instNames.filter(function (i) { return n.indexOf(norm(i)) !== -1; })
+      .sort(function (a, b) { return b.length - a.length; })[0];
+    if (hit) return hit;
+    var loose = instNames.filter(function (i) {
+      var core = norm(i.replace(/^[A-Za-z]+\s*/, ''));
+      return core && n.indexOf(core) !== -1;
+    });
+    return loose.length === 1 ? loose[0] : '';
+  }
+  // 聲部：先比全名（第一部／Solo），再比 1／2／3 與「第N」。預設第一部。
+  function guessSection(n) {
+    var hit = sectNames.find(function (s) { return n.indexOf(norm(s)) !== -1; });
+    if (hit) return hit;
+    var m = n.match(/([123])(?!\d)/);
+    var byNum = { '1': '第一部', '2': '第二部', '3': '第三部' };
+    if (m && sectNames.indexOf(byNum[m[1]]) !== -1) return byNum[m[1]];
+    return sectNames.indexOf('第一部') !== -1 ? '第一部' : sectNames[0];
+  }
+  function guessKey(filename) {
+    var n = norm(filename.replace(/\.pdf$/i, ''));
+    var inst = guessInstrument(n);
+    if (!inst) return '';
+    var sect = guessSection(n);
+    var slot = slots.find(function (s) { return s.instrument === inst && s.section === sect; });
+    return slot ? slot.key : '';
+  }
+
+  var input = document.getElementById('batch-files');
+  var preview = document.getElementById('batch-preview');
+  input.addEventListener('change', function () {
+    preview.innerHTML = '';
+    if (!input.files.length) return;
+    var table = document.createElement('table');
+    table.className = 'table table-sm align-middle mb-0';
+    Array.from(input.files).forEach(function (f) {
+      var tr = document.createElement('tr');
+      var tdName = document.createElement('td');
+      tdName.textContent = f.name;
+      var tdSel = document.createElement('td');
+      var sel = document.createElement('select');
+      sel.name = 'batch_slot';
+      sel.className = 'form-select form-select-sm';
+      var skip = document.createElement('option');
+      skip.value = ''; skip.textContent = '— 略過 —';
+      sel.appendChild(skip);
+      slots.forEach(function (s) {
+        var o = document.createElement('option');
+        o.value = s.key; o.textContent = s.label;
+        sel.appendChild(o);
+      });
+      sel.value = guessKey(f.name);
+      if (!sel.value) tr.className = 'table-warning';
+      sel.addEventListener('change', function () {
+        tr.className = sel.value ? '' : 'table-warning';
+      });
+      tdSel.appendChild(sel);
+      tr.appendChild(tdName); tr.appendChild(tdSel);
+      table.appendChild(tr);
+    });
+    preview.appendChild(table);
+  });
+})();
+
 document.querySelectorAll('.part-check').forEach(function (cb) {
   cb.addEventListener('change', function () {
     document.getElementById(this.dataset.target).style.display = this.checked ? '' : 'none';

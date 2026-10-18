@@ -1069,6 +1069,79 @@ class ScorePartsManageTest(TestCase):
         r = self.client.post(self.url, follow=True)
         self.assertContains(r, '未偵測到上傳檔案')
 
+    # ── T03 批次選檔 ──────────────────────────────────────────
+    # 前端一次選多份 PDF（name="batch_files"），每份配一個槽位（name="batch_slot"，
+    # 值為 "{樂器id}_{聲部id}"，空字串 = 略過），後端依順序一對一處理。
+
+    def _pdf(self, name):
+        return SimpleUploadedFile(name, b'%PDF-1.4 fake', content_type='application/pdf')
+
+    def test_batch_upload_creates_parts_for_each_slot(self):
+        """一次上傳多份 PDF、各配不同槽位，應各建一筆分譜"""
+        section2 = SectionType.objects.create(name='第二部')
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'batch_files': [self._pdf('a.pdf'), self._pdf('b.pdf')],
+            'batch_slot': [
+                f'{self.instrument.pk}_{self.section.pk}',
+                f'{self.instrument.pk}_{section2.pk}',
+            ],
+        })
+        parts = Score.objects.filter(full_score=self.full_score)
+        self.assertEqual(parts.count(), 2)
+        self.assertEqual({p.section for p in parts}, {self.section, section2})
+
+    def test_batch_upload_skips_blank_slot_and_non_pdf(self):
+        """槽位留空（略過）或副檔名不是 .pdf 的檔案不建立分譜，並提示略過數"""
+        self.client.force_login(self.officer)
+        r = self.client.post(self.url, {
+            'batch_files': [self._pdf('skip.pdf'), self._pdf('bad.txt')],
+            'batch_slot': ['', f'{self.instrument.pk}_{self.section.pk}'],
+        }, follow=True)
+        self.assertEqual(Score.objects.filter(full_score=self.full_score).count(), 0)
+        self.assertContains(r, '有 2 個檔案已略過')
+
+    def test_batch_upload_same_slot_twice_keeps_first(self):
+        """兩份檔案配到同一槽位：只收第一份，另一份算略過，不覆蓋也不多建"""
+        self.client.force_login(self.officer)
+        slot = f'{self.instrument.pk}_{self.section.pk}'
+        r = self.client.post(self.url, {
+            'batch_files': [self._pdf('first.pdf'), self._pdf('second.pdf')],
+            'batch_slot': [slot, slot],
+        }, follow=True)
+        self.assertEqual(Score.objects.filter(full_score=self.full_score).count(), 1)
+        self.assertContains(r, '有 1 個檔案已略過')
+
+    def test_batch_upload_invalid_slot_is_skipped(self):
+        """槽位值亂填（格式錯誤、樂器不存在）不會 500，算略過"""
+        self.client.force_login(self.officer)
+        r = self.client.post(self.url, {
+            'batch_files': [self._pdf('x.pdf'), self._pdf('y.pdf')],
+            'batch_slot': ['garbage', f'99999_{self.section.pk}'],
+        }, follow=True)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(Score.objects.filter(full_score=self.full_score).count(), 0)
+        self.assertContains(r, '有 2 個檔案已略過')
+
+    def test_member_cannot_batch_upload(self):
+        """一般團員 POST 批次上傳會被擋下，資料庫不增加分譜"""
+        self.client.force_login(self.member)
+        self.client.post(self.url, {
+            'batch_files': [self._pdf('a.pdf')],
+            'batch_slot': [f'{self.instrument.pk}_{self.section.pk}'],
+        })
+        self.assertEqual(Score.objects.filter(full_score=self.full_score).count(), 0)
+
+    def test_page_has_batch_picker_and_slot_options(self):
+        """管理頁有批次選檔輸入框，並把所有「樂器 聲部」槽位交給前端配對"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertContains(r, 'name="batch_files"')
+        self.assertEqual(
+            [o['key'] for o in r.context['slot_options']],
+            [f'{self.instrument.pk}_{self.section.pk}'],
+        )
+
 
 @override_settings(MEDIA_ROOT=_TEMP_MEDIA)
 class PerformancePartsViewTest(TestCase):

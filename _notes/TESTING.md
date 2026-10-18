@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-10-14（共 570 個測試）
+> 最後更新：2026-10-15（共 576 個測試）
 
 ---
 
@@ -133,7 +133,7 @@ python manage.py test --noinput
 | `EventDeleteTest` | 團員/幹部無法刪除、GET 不刪除、管理員 POST 刪除並導回列表、刪除 cascade 排練、刪除按鈕在列表頁與詳情頁皆出現（管理員可見/幹部不可見）|
 | `RehearsalManageTest` | 存取控制（未登入/團員/幹部）、新增排練成功、重複 sequence 被擋、空日期被擋、編輯排練更新 sequence |
 
-### `apps/scores/tests.py`（84 個）
+### `apps/scores/tests.py`（90 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -144,7 +144,7 @@ python manage.py test --noinput
 | `ScoreEditViewTest` | 存取控制（未登入/一般團員/幹部）、GET 既有資料預先帶入欄位、404、POST 更新成功、空曲名不更新、未上傳新檔案保留原檔、上傳新檔案取代原檔、編輯分譜可綁定/更新 full_score |
 | `ScoreDeleteViewTest` | 一般幹部無法刪除、管理員可刪除並導向列表、刪除總譜連帶刪除分譜（CASCADE）、被 Setlist 或 ScoreExchangeItem 引用（PROTECT）時即使管理員也無法刪除 |
 | `ScoreDownloadViewTest` | 存取控制、無 PDF 回 404、無效 pk 回 404、DB 有紀錄但磁碟檔案遺失時提示並導回詳情頁（不 500）|
-| `ScorePartsManageTest` | 存取控制（未登入/一般團員/幹部）、分譜 pk 回 404、無效 pk 回 404、POST 建立分譜記錄、重複上傳不重複建立（get_or_create）、POST 無檔案顯示警告 |
+| `ScorePartsManageTest` | 存取控制（未登入/一般團員/幹部）、分譜 pk 回 404、無效 pk 回 404、POST 建立分譜記錄、重複上傳不重複建立（get_or_create）、POST 無檔案顯示警告、批次選檔（多檔各配槽位建立分譜、空槽位／非 PDF／無效槽位／同槽位重複一律略過並提示、團員不能批次上傳、頁面有批次輸入框與槽位選項）|
 | `PerformancePartsViewTest` | 演出分譜下載入口：存取控制（未登入/登入）、無效演出 pk 回 404、依登入者樂器族群篩選（列出同族群、排除他族群）、非本場曲目的分譜排除、未設族群顯示提示、無對應分譜顯示空狀態 |
 
 ### `apps/assets/tests.py`（9 個）
@@ -322,6 +322,7 @@ def test_invalid_state_raises(self):
 | App | 功能 | 說明 |
 |-----|------|------|
 | `public` | `about_manage` / `about_create` / `about_edit` / `about_delete` | 關於百韻內容管理，尚無自動測試 |
-| `scores` | 上傳時的伺服器端 PDF 格式驗證 | 目前僅靠 HTML `accept=".pdf"` 限制 |
+| `scores` | 上傳時的伺服器端 PDF 格式驗證 | 逐格上傳目前僅靠 HTML `accept=".pdf"` 限制；批次選檔路徑只檢查副檔名 `.pdf`，不驗內容 |
+| `scores` | 批次選檔的檔名→樂器／聲部自動配對（前端 JS） | Django 測試碰不到瀏覽器 JS；2026-10-15 以 node 對真實樂器清單手動驗證過，後端不信任前端配對結果（見 DESIGN §分譜上傳 UI） |
 | `meetings` | 所有功能 | Phase 3，尚未實作 |
 | `notifications` | Admin 觸發通知的整合測試 | 需要 mock Admin save_model，目前僅覆蓋 utils 層 |
