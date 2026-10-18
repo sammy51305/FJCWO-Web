@@ -1,4 +1,5 @@
-from urllib.parse import urlparse
+import re
+from urllib.parse import urlparse, urlunparse
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -9,6 +10,22 @@ DRIVE_HOSTS = {'drive.google.com', 'docs.google.com'}
 
 # 「其他」族群裡的固定樂器：選它代表「特殊樂器，由譜務在 custom_instrument_name 手填名稱」。
 CUSTOM_INSTRUMENT_NAME = '其他（手填）'
+
+
+def normalize_drive_url(value):
+    """
+    去頭尾空白，並拿掉網址裡的瀏覽器帳號編號 `/u/數字/`。
+
+    從瀏覽器複製的連結常帶 `/drive/u/1/folders/…`（`1` 是「這個瀏覽器裡的第二個 Google 帳號」），
+    別人點進去可能被帶去錯的帳號或要求選帳號。連結一律存成不帶帳號編號的版本。
+    只處理 Google Drive／Docs 網域；其他網址原樣回傳，交給 validate_drive_url 擋掉。
+    """
+    value = (value or '').strip()
+    parsed = urlparse(value)
+    if parsed.hostname not in DRIVE_HOSTS:
+        return value
+    path = re.sub(r'/u/\d+(?=/|$)', '', parsed.path)
+    return urlunparse(parsed._replace(path=path))
 
 
 def validate_drive_url(value):
@@ -84,6 +101,11 @@ class Score(models.Model):
         if self.is_custom_instrument and self.custom_instrument_name:
             return self.custom_instrument_name
         return self.instrument.name if self.instrument_id else ''
+
+    def save(self, *args, **kwargs):
+        # 不論從哪條路進來（表單、分譜管理頁、Admin、批次），存進去的連結都是整理過的版本
+        self.drive_url = normalize_drive_url(self.drive_url)
+        super().save(*args, **kwargs)
 
     def clean(self):
         if self.score_type == self.ScoreType.FULL:

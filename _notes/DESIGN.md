@@ -1103,7 +1103,10 @@ def clean(self):
         # 樂器選「其他（手填）」必填名稱；其餘樂器不可手填名稱
 ```
 
-**Google Drive 連結**（`drive_url`）：`validate_drive_url` 只收 `https` 且主機為 `drive.google.com`／`docs.google.com`，
+**Google Drive 連結**（`drive_url`）：存之前先過 `normalize_drive_url`——去頭尾空白，並拿掉網址裡的瀏覽器帳號編號
+`/u/數字/`（從瀏覽器複製常帶 `/drive/u/1/folders/…`，`1` 是「這個瀏覽器的第二個 Google 帳號」，別人點進去可能被帶去錯的帳號）。
+表單、分譜管理頁（樂器格與手填列）在驗證前整理，`Score.save()` 再整理一次當安全網（Admin 等入口也涵蓋）。
+只處理 Google 網域，其他網址原樣交給驗證擋掉；查詢參數保留。`validate_drive_url` 只收 `https` 且主機為 `drive.google.com`／`docs.google.com`，
 避免把團員導到任意外站。畫面上以 `target="_blank" rel="noopener noreferrer"` 連過去，系統不再提供 `/download/` 路由。
 
 **手填樂器**：「其他」族群裡有一個固定的樂器「其他（手填）」（`CUSTOM_INSTRUMENT_NAME`）。譜務選它時

@@ -4,7 +4,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import InstrumentFamily, InstrumentType, User
-from .models import CUSTOM_INSTRUMENT_NAME, Score
+from .models import CUSTOM_INSTRUMENT_NAME, Score, normalize_drive_url
 
 DRIVE = 'https://drive.google.com/file/d/abc123/view'
 
@@ -181,6 +181,58 @@ class ScoreModelValidationTest(TestCase):
         """
         score = Score(title='星空', score_type=Score.ScoreType.FULL)
         self.assertEqual(str(score), '星空')
+
+
+class NormalizeDriveUrlTest(TestCase):
+    """連結整理：拿掉瀏覽器帳號編號 `/u/數字/`，其餘原樣"""
+
+    FOLDER = 'https://drive.google.com/drive/folders/1NRe9zK0V9qRBe0OODwchLwySF88LX1JS'
+
+    def test_strips_account_index_from_folder_url(self):
+        self.assertEqual(
+            normalize_drive_url('https://drive.google.com/drive/u/1/folders/1NRe9zK0V9qRBe0OODwchLwySF88LX1JS'),
+            self.FOLDER,
+        )
+
+    def test_strips_any_account_number_and_other_paths(self):
+        self.assertEqual(
+            normalize_drive_url('https://docs.google.com/document/u/0/d/abc/edit'),
+            'https://docs.google.com/document/d/abc/edit',
+        )
+        self.assertEqual(
+            normalize_drive_url('https://drive.google.com/drive/u/12/folders/xyz'),
+            'https://drive.google.com/drive/folders/xyz',
+        )
+
+    def test_keeps_query_and_unrelated_u_segments(self):
+        """查詢參數保留；`/u/` 後面不是數字的路徑（例如檔案 id 剛好含 u）不誤刪"""
+        self.assertEqual(
+            normalize_drive_url('https://drive.google.com/drive/u/1/folders/abc?usp=sharing'),
+            'https://drive.google.com/drive/folders/abc?usp=sharing',
+        )
+        self.assertEqual(
+            normalize_drive_url('https://drive.google.com/file/d/uuu1/view'),
+            'https://drive.google.com/file/d/uuu1/view',
+        )
+
+    def test_already_clean_and_whitespace(self):
+        self.assertEqual(normalize_drive_url('  ' + self.FOLDER + '  '), self.FOLDER)
+        self.assertEqual(normalize_drive_url(self.FOLDER), self.FOLDER)
+        self.assertEqual(normalize_drive_url(''), '')
+
+    def test_non_google_url_is_left_alone_for_validator_to_reject(self):
+        """外站網址不動（含其中的 /u/1/），交給 validate_drive_url 擋掉"""
+        self.assertEqual(normalize_drive_url('https://evil.example.com/u/1/x'), 'https://evil.example.com/u/1/x')
+
+    def test_model_save_normalizes_any_entry_path(self):
+        """從 Admin 或程式直接 save 也會整理（安全網）"""
+        score = Score.objects.create(
+            title='星空', score_type=Score.ScoreType.FULL,
+            copyright_status='public_domain',
+            drive_url='https://drive.google.com/drive/u/1/folders/abc',
+        )
+        score.refresh_from_db()
+        self.assertEqual(score.drive_url, 'https://drive.google.com/drive/folders/abc')
 
 
 class ScoreListViewTest(TestCase):
@@ -749,6 +801,18 @@ class ScoreEditViewTest(TestCase):
         self.score.refresh_from_db()
         self.assertEqual(self.score.drive_url, new_url)
 
+    def test_post_strips_account_index_from_drive_url(self):
+        """編輯表單貼帶 /u/1/ 的連結，存進去的是不帶帳號編號的版本"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'title': '卡門組曲',
+            'score_type': Score.ScoreType.FULL,
+            'copyright_status': Score.CopyrightStatus.PUBLIC_DOMAIN,
+            'drive_url': 'https://drive.google.com/drive/u/1/folders/abc',
+        })
+        self.score.refresh_from_db()
+        self.assertEqual(self.score.drive_url, 'https://drive.google.com/drive/folders/abc')
+
     def test_post_with_non_google_url_is_rejected(self):
         """貼非 Google 網域的連結會被擋下，原連結不變"""
         self.score.drive_url = DRIVE
@@ -984,6 +1048,16 @@ class ScorePartsManageTest(TestCase):
         self.assertEqual(part.score_type, Score.ScoreType.PART)
         self.assertEqual(part.title, self.full_score.title)
         self.assertEqual(part.copyright_status, self.full_score.copyright_status)
+
+    def test_post_strips_account_index_in_parts_page(self):
+        """分譜管理頁貼帶 /u/1/ 的連結（樂器格與手填列），存的都是整理過的版本"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            f'url_{self.flute.pk}': 'https://drive.google.com/drive/u/1/folders/flute',
+            'custom_name': ['手搖鈴'], 'custom_url': ['https://drive.google.com/drive/u/2/folders/bell'],
+        })
+        urls = set(Score.objects.filter(full_score=self.full_score).values_list('drive_url', flat=True))
+        self.assertEqual(urls, {'https://drive.google.com/drive/folders/flute', 'https://drive.google.com/drive/folders/bell'})
 
     def test_post_again_updates_instead_of_duplicating(self):
         """同一樂器再送出是更新連結，不是多建一筆"""

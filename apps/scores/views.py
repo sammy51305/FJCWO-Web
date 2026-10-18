@@ -9,7 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from apps.accounts.models import InstrumentFamily, InstrumentType
 from apps.events.models import PerformanceEvent
 
-from .models import CUSTOM_INSTRUMENT_NAME, Score, validate_drive_url
+from .models import CUSTOM_INSTRUMENT_NAME, Score, normalize_drive_url, validate_drive_url
 
 
 @login_required
@@ -103,7 +103,7 @@ def _apply_score_form(request, score):
     score.version_note = request.POST.get('version_note', '').strip()
 
     if 'drive_url' in request.POST:  # 表單一定會送；沒送（舊呼叫端）就保留原值
-        score.drive_url = request.POST['drive_url'].strip()
+        score.drive_url = normalize_drive_url(request.POST['drive_url'])
     custom_name = request.POST.get('custom_instrument_name', '').strip()
     # 只有「其他（手填）」這個樂器才用得到手填名稱；其餘一律清空，避免殘留值
     score.custom_instrument_name = custom_name if (instrument and instrument.name == CUSTOM_INSTRUMENT_NAME) else ''
@@ -335,7 +335,10 @@ def _parse_parts_post(post):
     errors = []
     urls = {}
     for key, value in post.items():
-        if not key.startswith('url_') or not value.strip():
+        if not key.startswith('url_'):
+            continue
+        value = normalize_drive_url(value)
+        if not value:
             continue
         try:
             inst_id = int(key[len('url_'):])
@@ -345,16 +348,16 @@ def _parse_parts_post(post):
         if not instrument or instrument.name == CUSTOM_INSTRUMENT_NAME:
             continue
         try:
-            validate_drive_url(value.strip())
+            validate_drive_url(value)
         except ValidationError as e:
             errors.append(f'{instrument.name}：{e.messages[0]}')
             continue
-        urls[inst_id] = value.strip()
+        urls[inst_id] = value
 
     customs = []
     seen_names = set()
     for name, url in zip(post.getlist('custom_name'), post.getlist('custom_url')):
-        name, url = name.strip(), url.strip()
+        name, url = name.strip(), normalize_drive_url(url)
         if not name and not url:
             continue
         if not name or not url:
