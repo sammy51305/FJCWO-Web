@@ -4,13 +4,12 @@ from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db.models import Count
 from django.db.models.deletion import ProtectedError
-from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 
-from apps.accounts.models import InstrumentFamily, InstrumentType, SectionType
+from apps.accounts.models import InstrumentFamily, InstrumentType
 from apps.events.models import PerformanceEvent
 
-from .models import Score
+from .models import CUSTOM_INSTRUMENT_NAME, Score, validate_drive_url
 
 
 @login_required
@@ -51,7 +50,7 @@ def score_list(request):
     if request.user.is_officer:
         orphan_parts = list(
             Score.objects.filter(score_type=Score.ScoreType.PART, full_score__isnull=True)
-            .select_related('instrument', 'section')
+            .select_related('instrument')
             .order_by('title')
         )
 
@@ -69,7 +68,6 @@ def _apply_score_form(request, score):
     """把 POST 資料寫進 score 實例（新建或既有皆可），回傳 errors 清單。"""
     score_type = request.POST.get('score_type', '')
     instrument_id = request.POST.get('instrument', '')
-    section_id = request.POST.get('section', '')
     parent_score_id = request.POST.get('parent_score', '')
     full_score_id = request.POST.get('full_score', '')
     physical_quantity = request.POST.get('physical_quantity', '0').strip()
@@ -82,14 +80,12 @@ def _apply_score_form(request, score):
         physical_quantity = 0
 
     instrument = InstrumentType.objects.filter(pk=instrument_id).first() if instrument_id else None
-    section = SectionType.objects.filter(pk=section_id).first() if section_id else None
     parent_score = Score.objects.filter(pk=parent_score_id).first() if parent_score_id else None
     full_score = Score.objects.filter(pk=full_score_id, score_type=Score.ScoreType.FULL).first() if full_score_id else None
 
     if score_type == Score.ScoreType.FULL:
         # 總譜不應指定樂器/聲部/所屬總譜：表單依 score_type 隱藏欄位，這裡直接忽略殘留值
         instrument = None
-        section = None
         full_score = None
 
     score.title = request.POST.get('title', '').strip()
@@ -97,7 +93,6 @@ def _apply_score_form(request, score):
     score.arranger = request.POST.get('arranger', '').strip()
     score.score_type = score_type
     score.instrument = instrument
-    score.section = section
     score.copyright_status = request.POST.get('copyright_status', '')
     score.physical_quantity = physical_quantity
     score.source = request.POST.get('source', '')
@@ -107,9 +102,11 @@ def _apply_score_form(request, score):
     score.parent_score = parent_score
     score.version_note = request.POST.get('version_note', '').strip()
 
-    file = request.FILES.get('file')
-    if file:
-        score.file = file
+    if 'drive_url' in request.POST:  # 表單一定會送；沒送（舊呼叫端）就保留原值
+        score.drive_url = request.POST['drive_url'].strip()
+    custom_name = request.POST.get('custom_instrument_name', '').strip()
+    # 只有「其他（手填）」這個樂器才用得到手填名稱；其餘一律清空，避免殘留值
+    score.custom_instrument_name = custom_name if (instrument and instrument.name == CUSTOM_INSTRUMENT_NAME) else ''
 
     if not errors:
         try:
@@ -128,7 +125,7 @@ def _score_form_context(score=None):
     return {
         'instruments': InstrumentType.objects.select_related('family')
                        .order_by('family__category', 'family__name', 'name'),
-        'sections': SectionType.objects.all(),
+        'custom_instrument_id': InstrumentType.objects.filter(name=CUSTOM_INSTRUMENT_NAME).values_list('pk', flat=True).first(),
         'scores_for_parent': Score.objects.exclude(pk=score.pk).order_by('title') if score else Score.objects.order_by('title'),
         'full_scores': full_scores.order_by('title'),
         'score_type_choices': Score.ScoreType.choices,
@@ -146,7 +143,6 @@ def _initial_form_data(score):
         'arranger': score.arranger,
         'score_type': score.score_type,
         'instrument': str(score.instrument_id or ''),
-        'section': str(score.section_id or ''),
         'copyright_status': score.copyright_status,
         'physical_quantity': score.physical_quantity,
         'source': score.source,
@@ -155,6 +151,8 @@ def _initial_form_data(score):
         'full_score': str(score.full_score_id or ''),
         'parent_score': str(score.parent_score_id or ''),
         'version_note': score.version_note,
+        'drive_url': score.drive_url,
+        'custom_instrument_name': score.custom_instrument_name,
     }
 
 
@@ -259,8 +257,8 @@ def score_delete(request, pk):
 @login_required
 def score_detail(request, pk):
     score = get_object_or_404(
-        Score.objects.select_related('instrument', 'section', 'parent_score')
-                     .prefetch_related('parts__instrument', 'parts__section'),
+        Score.objects.select_related('instrument', 'parent_score')
+                     .prefetch_related('parts__instrument'),
         pk=pk,
     )
     versions = score.versions.select_related('instrument')
@@ -271,149 +269,166 @@ def score_detail(request, pk):
     })
 
 
-def _save_part(score, inst_id, sect_id, file):
-    """把一份檔案存成 score 的分譜（instrument+section 已有就替換檔案）；樂器不存在回 False。"""
-    instrument = InstrumentType.objects.filter(pk=inst_id).first()
-    if not instrument:
-        return False
-    section = SectionType.objects.filter(pk=sect_id).first() if sect_id else None
-    part, _ = Score.objects.get_or_create(
-        full_score=score,
-        instrument=instrument,
-        section=section,
-        defaults={
-            'title': score.title,
-            'score_type': Score.ScoreType.PART,
-            'copyright_status': score.copyright_status,
-        },
-    )
-    part.file = file
-    part.save()
-    return True
+def _parts_manage_context(score, values=None):
+    """
+    分譜管理頁的資料：大分類 → 族群 → 樂器，每種樂器一格 Google 連結。
+    「其他（手填）」不在固定清單裡，另外列成「手填樂器」區（可新增多列）。
+
+    values：POST 驗證失敗時，把使用者剛填的值帶回來（避免整頁填的連結白費）。
+    """
+    values = values or {}
+    existing = {}
+    custom_parts = []
+    for part in score.parts.select_related('instrument').order_by('pk'):
+        if part.is_custom_instrument:
+            custom_parts.append({'name': part.custom_instrument_name, 'url': part.drive_url})
+        else:
+            existing.setdefault(part.instrument_id, part)
+
+    categories_data = []
+    for cat_value, cat_label in InstrumentFamily.Category.choices:
+        families_in_cat = []
+        families = (
+            InstrumentFamily.objects.filter(category=cat_value)
+            .prefetch_related('instruments').order_by('name')
+        )
+        for family in families:
+            instruments_data = []
+            for instrument in family.instruments.order_by('name'):
+                if instrument.name == CUSTOM_INSTRUMENT_NAME:
+                    continue
+                part = existing.get(instrument.pk)
+                key = f'url_{instrument.pk}'
+                instruments_data.append({
+                    'instrument': instrument,
+                    'field': key,
+                    'url': values.get(key, part.drive_url if part else ''),
+                })
+            if instruments_data:
+                families_in_cat.append({'family': family, 'instruments': instruments_data})
+        if families_in_cat:
+            categories_data.append({'category_label': cat_label, 'families': families_in_cat})
+
+    if 'custom_name' in values:
+        custom_parts = [
+            {'name': n, 'url': u}
+            for n, u in zip(values.getlist('custom_name'), values.getlist('custom_url'))
+        ]
+
+    instrument_options = [
+        {'field': f'url_{i.pk}', 'name': i.name}
+        for i in InstrumentType.objects.exclude(name=CUSTOM_INSTRUMENT_NAME)
+    ]
+    return {
+        'score': score,
+        'categories_data': categories_data,
+        'custom_parts': custom_parts,
+        'instrument_options': instrument_options,
+    }
+
+
+def _parse_parts_post(post):
+    """
+    讀分譜管理頁的 POST，回傳 (樂器連結 {樂器pk: url}, 手填 [(名稱, url)], 錯誤清單)。
+    連結欄位全部選填：空白代表這首曲子沒有這個樂器。
+    """
+    errors = []
+    urls = {}
+    for key, value in post.items():
+        if not key.startswith('url_') or not value.strip():
+            continue
+        try:
+            inst_id = int(key[len('url_'):])
+        except ValueError:
+            continue
+        instrument = InstrumentType.objects.filter(pk=inst_id).first()
+        if not instrument or instrument.name == CUSTOM_INSTRUMENT_NAME:
+            continue
+        try:
+            validate_drive_url(value.strip())
+        except ValidationError as e:
+            errors.append(f'{instrument.name}：{e.messages[0]}')
+            continue
+        urls[inst_id] = value.strip()
+
+    customs = []
+    seen_names = set()
+    for name, url in zip(post.getlist('custom_name'), post.getlist('custom_url')):
+        name, url = name.strip(), url.strip()
+        if not name and not url:
+            continue
+        if not name or not url:
+            errors.append(f'手填樂器「{name or url}」：名稱與連結都要填。')
+            continue
+        if name in seen_names:
+            errors.append(f'手填樂器「{name}」重複了。')
+            continue
+        try:
+            validate_drive_url(url)
+        except ValidationError as e:
+            errors.append(f'{name}：{e.messages[0]}')
+            continue
+        seen_names.add(name)
+        customs.append((name, url))
+    return urls, customs, errors
 
 
 @login_required
 def score_parts_manage(request, pk):
+    """
+    分譜連結管理（幹部）。樂譜檔案放在樂團的 Google Drive，這裡只貼連結：
+    每種樂器一格、全部選填（空白 = 這首沒有這個樂器），至少要填一個。
+    再次送出時，以送出的內容為準——清空的格子會把原有分譜移除。
+    """
     score = get_object_or_404(Score, pk=pk, score_type=Score.ScoreType.FULL)
     if not request.user.is_officer:
         messages.error(request, '權限不足。')
         return redirect('scores:score_detail', pk=pk)
 
-    sections = list(SectionType.objects.all())
-
-    # 現有分譜 map：key = "{instrument_id}_{section_id}"
-    existing = {}
-    for part in score.parts.select_related('instrument', 'section'):
-        key = f'{part.instrument_id}_{part.section_id or 0}'
-        existing[key] = part
-
     if request.method == 'POST':
-        uploaded = 0
-        for field_name, file in request.FILES.items():
-            if not field_name.startswith('file_'):
-                continue
-            try:
-                _, inst_id_str, sect_id_str = field_name.split('_', 2)
-                inst_id = int(inst_id_str)
-                sect_id = int(sect_id_str)
-            except (ValueError, AttributeError):
-                continue
-            if _save_part(score, inst_id, sect_id, file):
-                uploaded += 1
+        urls, customs, errors = _parse_parts_post(request.POST)
+        if not errors and not urls and not customs:
+            errors.append('請至少填一個樂器的連結。')
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+            return render(request, 'scores/score_parts_manage.html',
+                          _parts_manage_context(score, values=request.POST))
 
-        # 批次選檔：一次選多份 PDF，每份配一個 "{樂器id}_{聲部id}" 槽位（空字串 = 略過）。
-        # 配對靠前端依檔名預填、使用者可改；後端只信 POST 回來的槽位值並逐筆驗證。
-        batch_files = request.FILES.getlist('batch_files')
-        batch_slots = request.POST.getlist('batch_slot')
-        skipped = 0
-        seen_slots = set()
-        for file, slot in zip(batch_files, batch_slots):
-            try:
-                inst_id_str, sect_id_str = slot.split('_', 1)
-                inst_id, sect_id = int(inst_id_str), int(sect_id_str)
-            except (ValueError, AttributeError):
-                skipped += 1
-                continue
-            if (inst_id, sect_id) in seen_slots or not file.name.lower().endswith('.pdf'):
-                skipped += 1
-                continue
-            if _save_part(score, inst_id, sect_id, file):
-                seen_slots.add((inst_id, sect_id))
-                uploaded += 1
-            else:
-                skipped += 1
+        custom_instrument = InstrumentType.objects.filter(name=CUSTOM_INSTRUMENT_NAME).first()
+        keep = set()
 
-        if uploaded:
-            messages.success(request, f'已上傳 {uploaded} 份分譜。')
-        else:
-            messages.warning(request, '未偵測到上傳檔案。')
-        if skipped:
-            messages.warning(request, f'有 {skipped} 個檔案已略過（未指定聲部、同一聲部重複，或不是 PDF）。')
+        def upsert(instrument, custom_name, url):
+            part = Score.objects.filter(
+                full_score=score, instrument=instrument, custom_instrument_name=custom_name,
+            ).order_by('pk').first()
+            if part is None:
+                part = Score(
+                    full_score=score, instrument=instrument, custom_instrument_name=custom_name,
+                    title=score.title, score_type=Score.ScoreType.PART,
+                    copyright_status=score.copyright_status,
+                )
+            part.drive_url = url
+            part.save()
+            keep.add(part.pk)
+
+        for inst_id, url in urls.items():
+            upsert(InstrumentType.objects.get(pk=inst_id), '', url)
+        if customs and custom_instrument:
+            for name, url in customs:
+                upsert(custom_instrument, name, url)
+
+        stale = score.parts.exclude(pk__in=keep)
+        removed = stale.count()
+        try:
+            stale.delete()
+        except ProtectedError:
+            removed = 0
+            messages.warning(request, '有些舊分譜已被其他資料引用，無法移除。')
+        messages.success(request, f'已儲存 {len(keep)} 份分譜連結' + (f'，移除 {removed} 份。' if removed else '。'))
         return redirect('scores:score_parts_manage', pk=pk)
 
-    # 依分類（木管/銅管/打擊/其他）→ 族群 → 樂器 三層建立巢狀結構
-    categories_data = []
-    for cat_value, cat_label in InstrumentFamily.Category.choices:
-        families_in_cat = []
-        for family in InstrumentFamily.objects.filter(category=cat_value).prefetch_related('instruments').order_by('name'):
-            instruments_data = []
-            for instrument in family.instruments.order_by('name'):
-                sections_data = []
-                for section in sections:
-                    key = f'{instrument.pk}_{section.pk}'
-                    sections_data.append({
-                        'section': section,
-                        'key': key,
-                        'existing_part': existing.get(key),
-                    })
-                instruments_data.append({
-                    'instrument': instrument,
-                    'sections': sections_data,
-                })
-            if instruments_data:
-                families_in_cat.append({
-                    'family': family,
-                    'instruments': instruments_data,
-                    'single': len(instruments_data) == 1,
-                })
-        if families_in_cat:
-            categories_data.append({
-                'category_label': cat_label,
-                'families': families_in_cat,
-            })
-
-    slot_options = [
-        {
-            'key': f'{inst.pk}_{section.pk}',
-            'label': f'{inst.name} {section.name}',
-            'instrument': inst.name,
-            'section': section.name,
-        }
-        for inst in InstrumentType.objects.order_by('family__category', 'family__name', 'name')
-        for section in sections
-    ]
-
-    return render(request, 'scores/score_parts_manage.html', {
-        'score': score,
-        'categories_data': categories_data,
-        'slot_options': slot_options,
-    })
-
-
-@login_required
-def score_download(request, pk):
-    score = get_object_or_404(Score, pk=pk)
-    if not score.file:
-        raise Http404
-    try:
-        fh = score.file.open('rb')
-    except FileNotFoundError:
-        # DB 有紀錄但磁碟上沒檔案（例如雲端免費方案重新部署後 media/ 被清空）：
-        # 與其讓使用者看到 500，不如明講檔案遺失、請譜務重新上傳。
-        messages.error(request, '這份樂譜的檔案已遺失，無法下載，請聯絡譜務重新上傳。')
-        owner = score.full_score or score
-        return redirect('scores:score_detail', pk=owner.pk)
-    return FileResponse(fh, as_attachment=True, filename=score.file.name.split('/')[-1])
+    return render(request, 'scores/score_parts_manage.html', _parts_manage_context(score))
 
 
 @login_required
@@ -424,7 +439,7 @@ def performance_parts(request, pk):
     關聯路徑：PerformanceEvent → Setlist.score（總譜）→ Score.parts（分譜）。
     篩選層級：User.instrument 指向「樂器族群」(InstrumentFamily)，Score.instrument 指向
     「具體樂器」(InstrumentType)，兩者差一層，因此用 instrument__family 比對族群——
-    同族群底下各具體樂器／聲部的分譜全部列出，由團員自行判斷要下載哪一份
+    同族群底下各具體樂器的分譜全部列出，由團員自行判斷要下載哪一份
     （呼應「不強制指定聲部」的設計）。
     """
     event = get_object_or_404(PerformanceEvent, pk=pk)
@@ -439,9 +454,9 @@ def performance_parts(request, pk):
                 full_score__setlists__event=event,
                 instrument__family=user_family,
             )
-            .select_related('instrument', 'section', 'full_score')
+            .select_related('instrument', 'full_score')
             .distinct()
-            .order_by('full_score__title', 'instrument__name', 'section__name')
+            .order_by('full_score__title', 'instrument__name', 'custom_instrument_name')
         )
         # 依所屬總譜（曲目）分組，方便前端一首一首列；parts 已依 full_score__title 排序，
         # dict 保留插入順序，group 自然照曲名排列

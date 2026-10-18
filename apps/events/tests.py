@@ -1771,3 +1771,23 @@ class PracticeMenuTest(TestCase):
         r = self.client.get(reverse('events:checkin_entry'), follow=True)
         self.assertRedirects(r, reverse('public:index'))
         self.assertContains(r, '目前沒有開放簽到的排練')
+
+
+class EventListDownloadButtonTest(TestCase):
+    """演出活動列表：每場「即將到來」的演出旁直接有「下載我的樂譜」，不必先點進詳情"""
+
+    def test_upcoming_event_card_has_download_button(self):
+        member = User.objects.create_user(
+            username='el_member', email='el@test.local', password='testpass123',
+            name='列表測試團員', role=User.Role.MEMBER,
+        )
+        venue = Venue.objects.create(name='列表測試場地', type='performance')
+        event = PerformanceEvent.objects.create(
+            name='列表測試音樂會', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + timedelta(days=20),
+            performance_venue=venue,
+        )
+        self.client.force_login(member)
+        r = self.client.get(reverse('events:event_list'))
+        self.assertContains(r, '下載我的樂譜')
+        self.assertContains(r, reverse('scores:performance_parts', args=[event.pk]))

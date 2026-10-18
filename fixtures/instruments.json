@@ -11,6 +11,7 @@
   {"model": "accounts.instrumentfamily", "pk": 10, "fields": {"name": "低音號",     "category": "brass"}},
   {"model": "accounts.instrumentfamily", "pk": 11, "fields": {"name": "打擊樂",     "category": "percussion"}},
   {"model": "accounts.instrumentfamily", "pk": 12, "fields": {"name": "其他",       "category": "other"}},
+  {"model": "accounts.instrumentfamily", "pk": 13, "fields": {"name": "吉他",       "category": "other"}},
 
   {"model": "accounts.instrumenttype", "pk": 1,  "fields": {"name": "短笛",           "family": 1}},
   {"model": "accounts.instrumenttype", "pk": 2,  "fields": {"name": "長笛",           "family": 1}},
@@ -35,5 +36,9 @@
   {"model": "accounts.instrumenttype", "pk": 21, "fields": {"name": "打擊樂",         "family": 11}},
   {"model": "accounts.instrumenttype", "pk": 22, "fields": {"name": "低音提琴",       "family": 12}},
   {"model": "accounts.instrumenttype", "pk": 23, "fields": {"name": "豎琴",           "family": 12}},
-  {"model": "accounts.instrumenttype", "pk": 24, "fields": {"name": "鋼琴",           "family": 12}}
+  {"model": "accounts.instrumenttype", "pk": 24, "fields": {"name": "鋼琴",           "family": 12}},
+  {"model": "accounts.instrumenttype", "pk": 25, "fields": {"name": "吉他",           "family": 13}},
+  {"model": "accounts.instrumenttype", "pk": 26, "fields": {"name": "電吉他",         "family": 13}},
+  {"model": "accounts.instrumenttype", "pk": 27, "fields": {"name": "Bass 吉他",      "family": 13}},
+  {"model": "accounts.instrumenttype", "pk": 28, "fields": {"name": "其他（手填）",   "family": 12}}
 ]

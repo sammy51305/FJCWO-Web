@@ -125,7 +125,7 @@
       <li class="small mb-1">
         <a href="{% url 'scores:score_detail' part.pk %}">{{ part.title }}</a>
         {% if part.instrument %}
-        <span class="text-muted">（{{ part.instrument.name }}{% if part.section %}・{{ part.section.name }}{% endif %}）</span>
+        <span class="text-muted">（{{ part.instrument_label }}）</span>
         {% endif %}
       </li>
       {% endfor %}

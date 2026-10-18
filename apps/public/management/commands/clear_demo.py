@@ -135,27 +135,14 @@ class Command(BaseCommand):
                 self._say('已取消，未刪除任何資料。', self.style.WARNING)
                 return
 
-        # 先收集要一併刪掉的實體檔案（FileField 刪 model 不會刪檔案）
-        files = [s.file for s in Score.objects.filter(
-            pk__in=list(part_scores.values_list('pk', flat=True))
-                   + list(full_scores.values_list('pk', flat=True))) if s.file]
-
         with transaction.atomic():
             for label, qs in plan:
                 n, _ = qs.delete()
                 if n:
                     self._say(f'  已刪除 {label}')
 
-        removed = 0
-        for f in files:
-            try:
-                f.delete(save=False)
-                removed += 1
-            except Exception as e:  # 檔案不存在或被佔用，不影響資料庫已完成的刪除
-                self.stderr.write(self.style.WARNING(f'  樂譜檔案刪除失敗（{f.name}）：{e}'))
-
         self._say('')
-        self._say(f'demo 資料已清除，另刪除 {removed} 個樂譜檔案。', self.style.SUCCESS)
+        self._say('demo 資料已清除。', self.style.SUCCESS)
 
         pc = PaymentConfig.objects.filter(pk=1).first()
         if pc and pc.bank_code == '822' and pc.account_number == '1234567890123':

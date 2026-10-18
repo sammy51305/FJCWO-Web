@@ -1,17 +1,12 @@
-import shutil
-import tempfile
-
 from django.core.exceptions import ValidationError
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.accounts.models import InstrumentFamily, InstrumentType, SectionType, User
-from .models import Score
+from apps.accounts.models import InstrumentFamily, InstrumentType, User
+from .models import CUSTOM_INSTRUMENT_NAME, Score
 
-# 測試中上傳的 PDF 存到這個暫存目錄，結束後整個目錄刪除，不會污染正式 MEDIA_ROOT
-_TEMP_MEDIA = tempfile.mkdtemp()
+DRIVE = 'https://drive.google.com/file/d/abc123/view'
 
 
 class ScoreModelValidationTest(TestCase):
@@ -24,7 +19,6 @@ class ScoreModelValidationTest(TestCase):
         self.instrument = InstrumentType.objects.create(
             name='長笛', family=self.family
         )
-        self.section = SectionType.objects.create(name='第一聲部')
 
     # ── T01 總譜驗證 ─────────────────────────────────────────
 
@@ -38,12 +32,12 @@ class ScoreModelValidationTest(TestCase):
         with self.assertRaises(ValidationError):
             score.clean()
 
-    def test_full_score_with_section_raises(self):
-        """總譜指定聲部應拋出 ValidationError"""
+    def test_full_score_with_custom_instrument_name_raises(self):
+        """總譜填了手填樂器名稱應拋出 ValidationError"""
         score = Score(
             title='測試總譜',
             score_type=Score.ScoreType.FULL,
-            section=self.section,
+            custom_instrument_name='手搖鈴',
         )
         with self.assertRaises(ValidationError):
             score.clean()
@@ -143,19 +137,42 @@ class ScoreModelValidationTest(TestCase):
         )
         self.assertEqual(str(score), '星空（長笛）')
 
-    def test_str_part_with_instrument_and_section(self):
-        """
-        分譜同時有樂器與聲部時，__str__ 格式為「曲名（樂器名 聲部名）」。
-        例：「星空（長笛 第一聲部）」
-        聲部名之間用空格分隔，方便在列表和下拉選單中一眼辨識。
-        """
+    def test_custom_instrument_requires_name(self):
+        """樂器選「其他（手填）」卻沒填名稱，應拋出 ValidationError"""
+        custom = InstrumentType.objects.create(name=CUSTOM_INSTRUMENT_NAME, family=self.family)
+        score = Score(title='星空', score_type=Score.ScoreType.PART, instrument=custom)
+        with self.assertRaises(ValidationError):
+            score.clean()
+
+    def test_custom_name_only_allowed_for_custom_instrument(self):
+        """一般樂器不能手填名稱（避免畫面顯示與樂器主檔不一致）"""
         score = Score(
-            title='星空',
-            score_type=Score.ScoreType.PART,
-            instrument=self.instrument,
-            section=self.section,
+            title='星空', score_type=Score.ScoreType.PART,
+            instrument=self.instrument, custom_instrument_name='手搖鈴',
         )
-        self.assertEqual(str(score), '星空（長笛 第一聲部）')
+        with self.assertRaises(ValidationError):
+            score.clean()
+
+    def test_str_custom_instrument_uses_typed_name(self):
+        """手填樂器的 __str__ 與 instrument_label 顯示手填名稱，不是「其他（手填）」"""
+        custom = InstrumentType.objects.create(name=CUSTOM_INSTRUMENT_NAME, family=self.family)
+        score = Score(
+            title='星空', score_type=Score.ScoreType.PART,
+            instrument=custom, custom_instrument_name='手搖鈴',
+        )
+        score.clean()
+        self.assertEqual(str(score), '星空（手搖鈴）')
+        self.assertEqual(score.instrument_label, '手搖鈴')
+
+    def test_drive_url_only_accepts_google_https(self):
+        """Google Drive 連結只收 https 的 drive.google.com／docs.google.com，其餘（含 http、外站）拒絕"""
+        for bad in ('http://drive.google.com/x', 'https://evil.example.com/x', 'https://drive.google.com.evil.com/x'):
+            score = Score(title='星空', score_type=Score.ScoreType.FULL, copyright_status='public_domain', drive_url=bad)
+            with self.assertRaises(ValidationError, msg=bad):
+                score.full_clean()
+        for good in (DRIVE, 'https://docs.google.com/document/d/abc/edit', 'https://drive.google.com/drive/folders/xyz'):
+            score = Score(title='星空', score_type=Score.ScoreType.FULL, copyright_status='public_domain', drive_url=good)
+            score.full_clean()
 
     def test_str_full_score(self):
         """
@@ -272,15 +289,13 @@ class ScoreListViewTest(TestCase):
 
     def test_filter_by_instrument_does_not_duplicate_rows(self):
         """
-        同一總譜底下同一樂器有多個聲部時，join 會產生重複列，
+        同一總譜底下同一樂器有多份分譜時（舊資料併聲部後可能殘留），join 會產生重複列，
         view 用 distinct() 去重，總譜只應出現一次。
         """
-        section2 = SectionType.objects.create(name='第二部')
         Score.objects.create(
             title='天空之城（單簧管二）',
             score_type=Score.ScoreType.PART,
             instrument=self.instrument,
-            section=section2,
             full_score=self.full_score,
         )
         self.client.force_login(self.member)
@@ -619,14 +634,8 @@ class ScoreCreateViewTest(TestCase):
         self.assertIsNone(score.full_score)
 
 
-@override_settings(MEDIA_ROOT=_TEMP_MEDIA)
 class ScoreEditViewTest(TestCase):
     """編輯樂譜頁面（/scores/<pk>/edit/）"""
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(_TEMP_MEDIA, ignore_errors=True)
-        super().tearDownClass()
 
     def setUp(self):
         self.member = User.objects.create_user(
@@ -712,11 +721,10 @@ class ScoreEditViewTest(TestCase):
         self.score.refresh_from_db()
         self.assertEqual(self.score.title, '卡門組曲')
 
-    def test_post_without_file_keeps_existing_file(self):
-        """編輯時沒有重新上傳檔案，應保留原本的 PDF，不會被清空"""
-        self.score.file = SimpleUploadedFile('original.pdf', b'%PDF-1.4 original', content_type='application/pdf')
+    def test_post_without_drive_url_keeps_existing_link(self):
+        """沒送 drive_url 欄位時，保留原本的連結，不會被清空"""
+        self.score.drive_url = DRIVE
         self.score.save()
-
         self.client.force_login(self.officer)
         self.client.post(self.url, {
             'title': '卡門組曲',
@@ -724,24 +732,37 @@ class ScoreEditViewTest(TestCase):
             'copyright_status': Score.CopyrightStatus.PUBLIC_DOMAIN,
         })
         self.score.refresh_from_db()
-        self.assertTrue(self.score.file)
+        self.assertEqual(self.score.drive_url, DRIVE)
 
-    def test_post_with_new_file_replaces_existing(self):
-        """上傳新檔案應取代原本的 PDF"""
-        self.score.file = SimpleUploadedFile('original.pdf', b'%PDF-1.4 original', content_type='application/pdf')
+    def test_post_with_new_drive_url_replaces_existing(self):
+        """送出新連結應取代原本的連結"""
+        self.score.drive_url = DRIVE
         self.score.save()
-        old_name = self.score.file.name
-
         self.client.force_login(self.officer)
-        new_pdf = SimpleUploadedFile('replacement.pdf', b'%PDF-1.4 replacement', content_type='application/pdf')
+        new_url = 'https://drive.google.com/file/d/new999/view'
         self.client.post(self.url, {
             'title': '卡門組曲',
             'score_type': Score.ScoreType.FULL,
             'copyright_status': Score.CopyrightStatus.PUBLIC_DOMAIN,
-            'file': new_pdf,
+            'drive_url': new_url,
         })
         self.score.refresh_from_db()
-        self.assertNotEqual(self.score.file.name, old_name)
+        self.assertEqual(self.score.drive_url, new_url)
+
+    def test_post_with_non_google_url_is_rejected(self):
+        """貼非 Google 網域的連結會被擋下，原連結不變"""
+        self.score.drive_url = DRIVE
+        self.score.save()
+        self.client.force_login(self.officer)
+        r = self.client.post(self.url, {
+            'title': '卡門組曲',
+            'score_type': Score.ScoreType.FULL,
+            'copyright_status': Score.CopyrightStatus.PUBLIC_DOMAIN,
+            'drive_url': 'https://evil.example.com/x.pdf',
+        })
+        self.assertContains(r, 'Google Drive')
+        self.score.refresh_from_db()
+        self.assertEqual(self.score.drive_url, DRIVE)
 
     def test_edit_part_score_binds_to_full_score(self):
         """編輯既有分譜時指定 full_score，應正確更新綁定關係"""
@@ -842,308 +863,207 @@ class ScoreDeleteViewTest(TestCase):
         self.assertContains(r, '已被演出曲目單或對外交換紀錄引用')
 
 
-class ScoreDownloadViewTest(TestCase):
-    """樂譜 PDF 下載保護"""
+class ScoreDriveLinkDisplayTest(TestCase):
+    """樂譜詳情頁：有 Google Drive 連結就直接連過去（新分頁、不帶 referrer），沒有就顯示「無數位版本」"""
 
     def setUp(self):
         self.member = User.objects.create_user(
-            username='dl_member',
-            email='dl@test.local',
-            password='testpass123',
-            name='下載測試員',
-            role=User.Role.MEMBER,
+            username='dl_member', email='dl@test.local', password='testpass123',
+            name='下載測試員', role=User.Role.MEMBER,
         )
-        self.score_no_file = Score.objects.create(
-            title='無檔案總譜', score_type=Score.ScoreType.FULL
-        )
-        self.download_url = reverse('scores:score_download', args=[self.score_no_file.pk])
 
-    def test_unauthenticated_redirects(self):
-        """未登入應導向登入頁"""
-        r = self.client.get(self.download_url)
-        self.assertEqual(r.status_code, 302)
-        self.assertIn('/accounts/login/', r['Location'])
-
-    def test_no_file_returns_404(self):
-        """無 PDF 的樂譜應回 404"""
+    def test_detail_links_to_drive(self):
+        score = Score.objects.create(title='有連結總譜', score_type=Score.ScoreType.FULL, drive_url=DRIVE)
         self.client.force_login(self.member)
-        r = self.client.get(self.download_url)
-        self.assertEqual(r.status_code, 404)
+        r = self.client.get(reverse('scores:score_detail', args=[score.pk]))
+        self.assertContains(r, f'href="{DRIVE}"')
+        self.assertContains(r, 'rel="noopener noreferrer"')
 
-    def test_invalid_pk_returns_404(self):
-        """不存在的樂譜 pk 應回 404"""
+    def test_detail_without_link_shows_no_digital_copy(self):
+        score = Score.objects.create(title='無連結總譜', score_type=Score.ScoreType.FULL)
         self.client.force_login(self.member)
-        r = self.client.get(reverse('scores:score_download', args=[99999]))
-        self.assertEqual(r.status_code, 404)
+        r = self.client.get(reverse('scores:score_detail', args=[score.pk]))
+        self.assertContains(r, '無數位版本')
 
-    def test_missing_file_on_disk_shows_message_not_500(self):
-        """DB 有檔案紀錄但磁碟上檔案不見（如雲端重新部署清空 media/）：導回詳情頁並提示，不是 500"""
-        score = Score.objects.create(
-            title='檔案遺失總譜', score_type=Score.ScoreType.FULL, file='scores/not_exist.pdf'
-        )
+    def test_old_download_route_is_gone(self):
+        """舊的 /scores/<pk>/download/ 已移除（檔案不再存在本系統）"""
+        score = Score.objects.create(title='舊路徑', score_type=Score.ScoreType.FULL, drive_url=DRIVE)
         self.client.force_login(self.member)
-        r = self.client.get(reverse('scores:score_download', args=[score.pk]), follow=True)
-        self.assertRedirects(r, reverse('scores:score_detail', args=[score.pk]))
-        self.assertContains(r, '檔案已遺失')
+        self.assertEqual(self.client.get(f'/scores/{score.pk}/download/').status_code, 404)
 
 
-@override_settings(MEDIA_ROOT=_TEMP_MEDIA)
 class ScorePartsManageTest(TestCase):
     """
-    分譜管理頁面（/scores/<pk>/parts/）
+    分譜連結管理頁（/scores/<pk>/parts/）
 
-    這個視圖讓幹部為一份總譜批次上傳各樂器的分譜 PDF。
-    - GET：顯示所有樂器族群 → 樂器 → 聲部的 checkbox 清單，已上傳的顯示下載連結
-    - POST：依勾選的 checkbox 儲存對應 PDF，用 get_or_create 避免重複建立記錄
-
-    @override_settings(MEDIA_ROOT=_TEMP_MEDIA) 讓測試時上傳的檔案存到暫存目錄，
-    測試完由 tearDownClass 統一清除，不影響正式環境的 MEDIA_ROOT。
+    樂譜檔案放在 Google Drive，幹部在這裡替一首總譜貼各樂器的連結：
+    - 每種樂器一格（欄位名 url_<樂器id>），全部選填、至少填一個
+    - 「其他（手填）」另列多列（custom_name / custom_url 成對）
+    - 以送出內容為準：清空的格子會把原有分譜移除
     """
 
-    @classmethod
-    def tearDownClass(cls):
-        # 清除測試過程中上傳到暫存目錄的所有檔案
-        shutil.rmtree(_TEMP_MEDIA, ignore_errors=True)
-        super().tearDownClass()
-
     def setUp(self):
-        # 幹部帳號（role=OFFICER → is_officer 屬性為 True，有權限進入此頁）
         self.officer = User.objects.create_user(
-            username='parts_officer',
-            email='parts_officer@test.local',
-            password='testpass123',
-            name='分譜管理幹部',
-            role=User.Role.OFFICER,
+            username='parts_officer', email='parts_officer@test.local', password='testpass123',
+            name='分譜管理幹部', role=User.Role.OFFICER,
         )
-        # 一般團員帳號（role=MEMBER → is_officer 為 False，無權限）
         self.member = User.objects.create_user(
-            username='parts_member',
-            email='parts_member@test.local',
-            password='testpass123',
-            name='一般團員',
-            role=User.Role.MEMBER,
+            username='parts_member', email='parts_member@test.local', password='testpass123',
+            name='一般團員', role=User.Role.MEMBER,
         )
-        # 樂器階層：木管（category） → 長笛族（family） → 長笛（instrument）
         self.family = InstrumentFamily.objects.create(
             name='長笛族', category=InstrumentFamily.Category.WOODWIND
         )
-        self.instrument = InstrumentType.objects.create(
-            name='長笛', family=self.family
+        self.other_family = InstrumentFamily.objects.create(
+            name='其他', category=InstrumentFamily.Category.OTHER
         )
-        # 聲部（用於區分「第一部長笛」和「第二部長笛」等）
-        self.section = SectionType.objects.create(name='第一部')
-        # 總譜：管理分譜的入口，score_type=FULL
+        self.flute = InstrumentType.objects.create(name='長笛', family=self.family)
+        self.piccolo = InstrumentType.objects.create(name='短笛', family=self.family)
+        self.custom = InstrumentType.objects.create(name=CUSTOM_INSTRUMENT_NAME, family=self.other_family)
         self.full_score = Score.objects.create(
-            title='星空', score_type=Score.ScoreType.FULL
+            title='星空', score_type=Score.ScoreType.FULL,
+            copyright_status=Score.CopyrightStatus.PUBLIC_DOMAIN,
         )
-        # 分譜：用來驗證「分譜的 pk」不能進入管理頁（只有總譜才能管理分譜）
         self.part_score = Score.objects.create(
-            title='星空（長笛）',
-            score_type=Score.ScoreType.PART,
-            instrument=self.instrument,
+            title='星空（長笛）', score_type=Score.ScoreType.PART, instrument=self.flute,
         )
         self.url = reverse('scores:score_parts_manage', args=[self.full_score.pk])
 
     # ── T01 存取控制 ────────────────────────────────────────
-    # 這個頁面涉及檔案上傳，必須嚴格限制只有登入的幹部才能使用。
 
     def test_unauthenticated_get_redirects_to_login(self):
-        """
-        未登入的訪客 GET 此頁應被導向登入頁（302）。
-        @login_required decorator 負責處理，這裡確認它有正確套用。
-        """
         r = self.client.get(self.url)
         self.assertEqual(r.status_code, 302)
         self.assertIn('/accounts/login/', r['Location'])
 
     def test_member_get_redirects_with_error_message(self):
-        """
-        已登入但角色是一般團員時，GET 應被重新導向到該總譜的詳情頁，
-        並顯示「權限不足」的錯誤訊息。
-        （幹部才能管理分譜，一般團員只能下載）
-        """
+        """一般團員 GET 導回總譜詳情頁並顯示「權限不足」"""
         self.client.force_login(self.member)
         r = self.client.get(self.url, follow=True)
-        # 應被導向該總譜的詳情頁
         self.assertRedirects(r, reverse('scores:score_detail', args=[self.full_score.pk]))
-        # 頁面上應出現錯誤提示
         self.assertContains(r, '權限不足')
 
-    def test_officer_get_full_score_returns_200_with_categories_data(self):
-        """
-        幹部 GET 總譜的管理頁，應正常顯示（200），
-        且 context 中包含 categories_data（用於渲染 木管/銅管/打擊/其他 → 族群 → 樂器 → 聲部的四層清單）。
-        """
+    def test_member_cannot_post(self):
+        """一般團員 POST 被擋下，資料庫不增加分譜"""
+        self.client.force_login(self.member)
+        self.client.post(self.url, {f'url_{self.flute.pk}': DRIVE})
+        self.assertEqual(Score.objects.filter(full_score=self.full_score).count(), 0)
+
+    def test_officer_get_shows_one_input_per_instrument(self):
+        """幹部看到每種樂器一個連結輸入框；「其他（手填）」不在固定清單裡"""
         self.client.force_login(self.officer)
         r = self.client.get(self.url)
         self.assertEqual(r.status_code, 200)
-        self.assertIn('categories_data', r.context)
-        # categories_data 至少要有一個分類（setUp 中建立了木管的長笛族）
-        self.assertGreaterEqual(len(r.context['categories_data']), 1)
+        self.assertContains(r, f'name="url_{self.flute.pk}"')
+        self.assertContains(r, f'name="url_{self.piccolo.pk}"')
+        self.assertNotContains(r, f'name="url_{self.custom.pk}"')
+        self.assertContains(r, 'id="batch-text"')
 
     def test_officer_get_part_score_returns_404(self):
-        """
-        幹部試圖對「分譜」的 pk 開啟管理頁，應回 404。
-        視圖用 get_object_or_404(Score, pk=pk, score_type=FULL) 限制只能操作總譜。
-        這條測試確保分譜不會意外進入管理流程。
-        """
+        """分譜的 pk 不能進管理頁（只有總譜可以）"""
         self.client.force_login(self.officer)
-        url = reverse('scores:score_parts_manage', args=[self.part_score.pk])
-        r = self.client.get(url)
+        r = self.client.get(reverse('scores:score_parts_manage', args=[self.part_score.pk]))
         self.assertEqual(r.status_code, 404)
 
     def test_officer_get_invalid_pk_returns_404(self):
-        """
-        不存在的 pk → 404，和其他視圖行為一致。
-        """
         self.client.force_login(self.officer)
         r = self.client.get(reverse('scores:score_parts_manage', args=[99999]))
         self.assertEqual(r.status_code, 404)
 
-    # ── T02 POST 上傳 ─────────────────────────────────────────
-    # 上傳欄位名稱格式為 file_{instrument_id}_{section_id}，
-    # 視圖解析這個名稱來決定要建立哪個樂器 × 聲部的分譜記錄。
+    # ── T02 儲存連結 ─────────────────────────────────────────
 
-    def test_post_upload_creates_part_record(self):
-        """
-        幹部 POST 一個有效的 PDF 檔案後，應在資料庫中建立對應的分譜記錄，
-        且記錄的 full_score、instrument、section、score_type 都要正確。
-
-        欄位名稱 file_{instrument_pk}_{section_pk} 是視圖與 template 約定的格式：
-        視圖用 split('_', 2) 分解出樂器 id 和聲部 id。
-        """
+    def test_post_creates_parts_only_for_filled_instruments(self):
+        """只填長笛一格：只建長笛分譜，短笛（空白）不建；分譜繼承總譜的曲名與版權"""
         self.client.force_login(self.officer)
-        fake_pdf = SimpleUploadedFile(
-            'flute_p1.pdf', b'%PDF-1.4 fake', content_type='application/pdf'
-        )
-        field_name = f'file_{self.instrument.pk}_{self.section.pk}'
-        self.client.post(self.url, {field_name: fake_pdf})
-
-        # 資料庫中應出現 1 筆分譜，掛在 full_score 底下
-        self.assertEqual(Score.objects.filter(full_score=self.full_score).count(), 1)
-        part = Score.objects.get(full_score=self.full_score)
-        self.assertEqual(part.score_type, Score.ScoreType.PART)
-        self.assertEqual(part.instrument, self.instrument)
-        self.assertEqual(part.section, self.section)
-        # 分譜的曲名繼承自總譜
-        self.assertEqual(part.title, self.full_score.title)
-
-    def test_post_upload_does_not_duplicate_existing_part(self):
-        """
-        同一組（total_score × instrument × section）已有分譜記錄時，
-        再次 POST 上傳應更新檔案，而不是建立第二筆記錄。
-
-        視圖使用 get_or_create 達成此目的：如果記錄已存在就取出後更新 file 欄位，
-        所以不管上傳幾次，資料庫中都只會有 1 筆。
-        """
-        self.client.force_login(self.officer)
-        # 先建立一筆現有的分譜記錄（模擬之前已上傳過）
-        Score.objects.create(
-            title=self.full_score.title,
-            score_type=Score.ScoreType.PART,
-            instrument=self.instrument,
-            section=self.section,
-            full_score=self.full_score,
-        )
-        self.assertEqual(Score.objects.filter(full_score=self.full_score).count(), 1)
-
-        # 再次 POST 上傳同一個樂器 × 聲部
-        fake_pdf = SimpleUploadedFile(
-            'flute_p1_v2.pdf', b'%PDF-1.4 updated', content_type='application/pdf'
-        )
-        field_name = f'file_{self.instrument.pk}_{self.section.pk}'
-        self.client.post(self.url, {field_name: fake_pdf})
-
-        # 記錄數量仍應只有 1 筆（get_or_create 沒有多建）
-        self.assertEqual(Score.objects.filter(full_score=self.full_score).count(), 1)
-
-    def test_post_with_no_files_shows_warning_message(self):
-        """
-        POST 表單但沒有附上任何檔案時，應顯示「未偵測到上傳檔案」的警告訊息，
-        並留在同一頁（重新導向回管理頁）。
-
-        這對應到視圖中 `uploaded == 0` 的分支：
-        使用者可能只勾了 checkbox 但忘記選擇 PDF 檔案。
-        """
-        self.client.force_login(self.officer)
-        r = self.client.post(self.url, follow=True)
-        self.assertContains(r, '未偵測到上傳檔案')
-
-    # ── T03 批次選檔 ──────────────────────────────────────────
-    # 前端一次選多份 PDF（name="batch_files"），每份配一個槽位（name="batch_slot"，
-    # 值為 "{樂器id}_{聲部id}"，空字串 = 略過），後端依順序一對一處理。
-
-    def _pdf(self, name):
-        return SimpleUploadedFile(name, b'%PDF-1.4 fake', content_type='application/pdf')
-
-    def test_batch_upload_creates_parts_for_each_slot(self):
-        """一次上傳多份 PDF、各配不同槽位，應各建一筆分譜"""
-        section2 = SectionType.objects.create(name='第二部')
-        self.client.force_login(self.officer)
-        self.client.post(self.url, {
-            'batch_files': [self._pdf('a.pdf'), self._pdf('b.pdf')],
-            'batch_slot': [
-                f'{self.instrument.pk}_{self.section.pk}',
-                f'{self.instrument.pk}_{section2.pk}',
-            ],
-        })
+        self.client.post(self.url, {f'url_{self.flute.pk}': DRIVE, f'url_{self.piccolo.pk}': ''})
         parts = Score.objects.filter(full_score=self.full_score)
-        self.assertEqual(parts.count(), 2)
-        self.assertEqual({p.section for p in parts}, {self.section, section2})
+        self.assertEqual(parts.count(), 1)
+        part = parts.get()
+        self.assertEqual(part.instrument, self.flute)
+        self.assertEqual(part.drive_url, DRIVE)
+        self.assertEqual(part.score_type, Score.ScoreType.PART)
+        self.assertEqual(part.title, self.full_score.title)
+        self.assertEqual(part.copyright_status, self.full_score.copyright_status)
 
-    def test_batch_upload_skips_blank_slot_and_non_pdf(self):
-        """槽位留空（略過）或副檔名不是 .pdf 的檔案不建立分譜，並提示略過數"""
+    def test_post_again_updates_instead_of_duplicating(self):
+        """同一樂器再送出是更新連結，不是多建一筆"""
         self.client.force_login(self.officer)
-        r = self.client.post(self.url, {
-            'batch_files': [self._pdf('skip.pdf'), self._pdf('bad.txt')],
-            'batch_slot': ['', f'{self.instrument.pk}_{self.section.pk}'],
-        }, follow=True)
+        self.client.post(self.url, {f'url_{self.flute.pk}': DRIVE})
+        new_url = 'https://drive.google.com/file/d/new/view'
+        self.client.post(self.url, {f'url_{self.flute.pk}': new_url})
+        part = Score.objects.get(full_score=self.full_score)
+        self.assertEqual(part.drive_url, new_url)
+
+    def test_clearing_a_field_removes_that_part(self):
+        """以送出內容為準：清空某樂器的格子，原有分譜移除"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {f'url_{self.flute.pk}': DRIVE, f'url_{self.piccolo.pk}': DRIVE})
+        self.assertEqual(Score.objects.filter(full_score=self.full_score).count(), 2)
+        self.client.post(self.url, {f'url_{self.flute.pk}': DRIVE, f'url_{self.piccolo.pk}': ''})
+        self.assertEqual(
+            list(Score.objects.filter(full_score=self.full_score).values_list('instrument__name', flat=True)),
+            ['長笛'],
+        )
+
+    def test_all_blank_is_rejected(self):
+        """全部留白不能送出，並提示至少填一個"""
+        self.client.force_login(self.officer)
+        r = self.client.post(self.url, {f'url_{self.flute.pk}': ''}, follow=True)
+        self.assertContains(r, '請至少填一個')
         self.assertEqual(Score.objects.filter(full_score=self.full_score).count(), 0)
-        self.assertContains(r, '有 2 個檔案已略過')
 
-    def test_batch_upload_same_slot_twice_keeps_first(self):
-        """兩份檔案配到同一槽位：只收第一份，另一份算略過，不覆蓋也不多建"""
-        self.client.force_login(self.officer)
-        slot = f'{self.instrument.pk}_{self.section.pk}'
-        r = self.client.post(self.url, {
-            'batch_files': [self._pdf('first.pdf'), self._pdf('second.pdf')],
-            'batch_slot': [slot, slot],
-        }, follow=True)
-        self.assertEqual(Score.objects.filter(full_score=self.full_score).count(), 1)
-        self.assertContains(r, '有 1 個檔案已略過')
-
-    def test_batch_upload_invalid_slot_is_skipped(self):
-        """槽位值亂填（格式錯誤、樂器不存在）不會 500，算略過"""
+    def test_non_google_url_is_rejected_and_nothing_saved(self):
+        """任何一格不是 Google 連結：整批不存，並把填的值帶回表單"""
         self.client.force_login(self.officer)
         r = self.client.post(self.url, {
-            'batch_files': [self._pdf('x.pdf'), self._pdf('y.pdf')],
-            'batch_slot': ['garbage', f'99999_{self.section.pk}'],
-        }, follow=True)
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(Score.objects.filter(full_score=self.full_score).count(), 0)
-        self.assertContains(r, '有 2 個檔案已略過')
-
-    def test_member_cannot_batch_upload(self):
-        """一般團員 POST 批次上傳會被擋下，資料庫不增加分譜"""
-        self.client.force_login(self.member)
-        self.client.post(self.url, {
-            'batch_files': [self._pdf('a.pdf')],
-            'batch_slot': [f'{self.instrument.pk}_{self.section.pk}'],
+            f'url_{self.flute.pk}': DRIVE,
+            f'url_{self.piccolo.pk}': 'https://evil.example.com/x',
         })
+        self.assertContains(r, '短笛')
+        self.assertContains(r, 'Google Drive')
+        self.assertContains(r, f'value="{DRIVE}"')
         self.assertEqual(Score.objects.filter(full_score=self.full_score).count(), 0)
 
-    def test_page_has_batch_picker_and_slot_options(self):
-        """管理頁有批次選檔輸入框，並把所有「樂器 聲部」槽位交給前端配對"""
+    # ── T03 手填樂器 ─────────────────────────────────────────
+
+    def test_custom_instrument_rows_create_parts_with_typed_names(self):
+        """「其他（手填）」可新增多列，各自存成分譜並顯示手填名稱"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'custom_name': ['手搖鈴', '鈴鼓'],
+            'custom_url': [DRIVE, 'https://drive.google.com/file/d/b/view'],
+        })
+        parts = Score.objects.filter(full_score=self.full_score, instrument=self.custom)
+        self.assertEqual({p.custom_instrument_name for p in parts}, {'手搖鈴', '鈴鼓'})
+        self.assertEqual({p.instrument_label for p in parts}, {'手搖鈴', '鈴鼓'})
+
+    def test_custom_row_needs_both_name_and_url(self):
+        """手填列只填名稱或只填連結：不存，並提示"""
+        self.client.force_login(self.officer)
+        r = self.client.post(self.url, {
+            f'url_{self.flute.pk}': DRIVE, 'custom_name': ['手搖鈴'], 'custom_url': [''],
+        }, follow=True)
+        self.assertContains(r, '名稱與連結都要填')
+        self.assertEqual(Score.objects.filter(full_score=self.full_score).count(), 0)
+
+    def test_custom_row_removed_when_not_resubmitted(self):
+        """再次送出時沒有帶上的手填列，原有的手填分譜會被移除"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {'custom_name': ['手搖鈴'], 'custom_url': [DRIVE]})
+        self.client.post(self.url, {f'url_{self.flute.pk}': DRIVE})
+        self.assertFalse(Score.objects.filter(full_score=self.full_score, instrument=self.custom).exists())
+
+    def test_existing_custom_parts_are_listed_on_get(self):
+        """GET 時已存在的手填分譜會回填到手填區"""
+        Score.objects.create(
+            title='星空', score_type=Score.ScoreType.PART, full_score=self.full_score,
+            instrument=self.custom, custom_instrument_name='手搖鈴', drive_url=DRIVE,
+        )
         self.client.force_login(self.officer)
         r = self.client.get(self.url)
-        self.assertContains(r, 'name="batch_files"')
-        self.assertEqual(
-            [o['key'] for o in r.context['slot_options']],
-            [f'{self.instrument.pk}_{self.section.pk}'],
-        )
+        self.assertContains(r, 'value="手搖鈴"')
 
 
-@override_settings(MEDIA_ROOT=_TEMP_MEDIA)
 class PerformancePartsViewTest(TestCase):
     """
     演出分譜下載入口（/scores/performance/<pk>/parts/）
@@ -1152,11 +1072,6 @@ class PerformancePartsViewTest(TestCase):
     關聯路徑：PerformanceEvent → Setlist.score（總譜）→ Score.parts（分譜）；
     篩選用 instrument__family（因 User.instrument 是族群、Score.instrument 是具體樂器，差一層）。
     """
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(_TEMP_MEDIA, ignore_errors=True)
-        super().tearDownClass()
 
     def setUp(self):
         from apps.events.models import PerformanceEvent, Setlist
@@ -1171,7 +1086,6 @@ class PerformancePartsViewTest(TestCase):
         )
         self.flute = InstrumentType.objects.create(name='長笛', family=self.flute_family)
         self.trumpet = InstrumentType.objects.create(name='小號', family=self.trumpet_family)
-        self.section = SectionType.objects.create(name='第一部')
 
         # 登入者：樂器族群設為長笛族
         self.member = User.objects.create_user(
@@ -1191,12 +1105,12 @@ class PerformancePartsViewTest(TestCase):
         # 分譜：長笛（有檔案，登入者族群）、小號（別族群，應被濾掉）
         self.flute_part = Score.objects.create(
             title='星空', score_type=Score.ScoreType.PART,
-            instrument=self.flute, section=self.section, full_score=self.full_score,
-            file=SimpleUploadedFile('flute.pdf', b'%PDF-1.4 flute', content_type='application/pdf'),
+            instrument=self.flute, full_score=self.full_score, drive_url=DRIVE,
         )
         self.trumpet_part = Score.objects.create(
             title='星空', score_type=Score.ScoreType.PART,
             instrument=self.trumpet, full_score=self.full_score,
+            drive_url='https://drive.google.com/file/d/trumpet/view',
         )
         self.url = reverse('scores:performance_parts', args=[self.event.pk])
 
@@ -1227,14 +1141,14 @@ class PerformancePartsViewTest(TestCase):
         self.client.force_login(self.member)
         r = self.client.get(self.url)
         self.assertContains(r, '長笛')
-        self.assertContains(r, reverse('scores:score_download', args=[self.flute_part.pk]))
+        self.assertContains(r, f'href="{DRIVE}"')
 
     def test_hides_part_of_other_family(self):
         """不列出其他族群（小號族）的分譜"""
         self.client.force_login(self.member)
         r = self.client.get(self.url)
         self.assertNotContains(r, '小號')
-        self.assertNotContains(r, reverse('scores:score_download', args=[self.trumpet_part.pk]))
+        self.assertNotContains(r, 'trumpet/view')
 
     def test_part_not_in_this_event_excluded(self):
         """分譜的總譜沒被排進這場演出時，不應出現"""

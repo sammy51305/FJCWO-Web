@@ -19,7 +19,7 @@
   <div class="col-lg-7">
     <h2 class="mb-4">{% if action == 'edit' %}編輯樂譜{% else %}新增樂譜{% endif %}</h2>
 
-    <form method="post" enctype="multipart/form-data">
+    <form method="post">
       {% csrf_token %}
 
       <div class="mb-3">
@@ -51,7 +51,7 @@
       <div id="part-fields" class="row" style="display:none">
         <div class="col-sm-6 mb-3">
           <label class="form-label fw-semibold">樂器 <span class="text-danger">*</span></label>
-          <select name="instrument" class="form-select">
+          <select name="instrument" id="id_instrument" class="form-select">
             <option value="">請選擇</option>
             {% for inst in instruments %}
             <option value="{{ inst.pk }}" {% if form_data.instrument == inst.pk|stringformat:"s" %}selected{% endif %}>
@@ -60,16 +60,10 @@
             {% endfor %}
           </select>
         </div>
-        <div class="col-sm-6 mb-3">
-          <label class="form-label fw-semibold">聲部 <span class="text-muted small">（選填）</span></label>
-          <select name="section" class="form-select">
-            <option value="">不指定</option>
-            {% for sec in sections %}
-            <option value="{{ sec.pk }}" {% if form_data.section == sec.pk|stringformat:"s" %}selected{% endif %}>
-              {{ sec.name }}
-            </option>
-            {% endfor %}
-          </select>
+        <div class="col-sm-6 mb-3" id="custom-instrument-field" style="display:none">
+          <label class="form-label fw-semibold">樂器名稱（手填） <span class="text-danger">*</span></label>
+          <input type="text" name="custom_instrument_name" class="form-control" maxlength="100"
+                 value="{{ form_data.custom_instrument_name }}" placeholder="例如：手搖鈴">
         </div>
         <div class="col-sm-12 mb-3">
           <label class="form-label fw-semibold">所屬總譜 <span class="text-muted small">（選填，讓這份分譜出現在該總譜的分譜清單裡）</span></label>
@@ -81,7 +75,7 @@
             </option>
             {% endfor %}
           </select>
-          <div class="form-text">若總譜已存在，也可以改用該總譜詳情頁的「管理分譜」批次上傳。</div>
+          <div class="form-text">若總譜已存在，也可以改用該總譜詳情頁的「管理分譜」一次貼上各樂器的連結。</div>
         </div>
       </div>
 
@@ -144,18 +138,10 @@
       </div>
 
       <div class="mb-4">
-        <label class="form-label fw-semibold">樂譜 PDF <span class="text-muted small">（選填，之後也可補上傳）</span></label>
-        {% if action == 'edit' and score.file %}
-        <div class="mb-1">
-          <a href="{% url 'scores:score_download' score.pk %}" class="text-success small">
-            <i class="bi bi-check-circle-fill"></i> 已上傳
-          </a>
-        </div>
-        {% endif %}
-        <input type="file" name="file" accept=".pdf" class="form-control">
-        {% if action == 'edit' and score.file %}
-        <div class="form-text">上傳新檔案以替換，留空則保留原檔案。</div>
-        {% endif %}
+        <label class="form-label fw-semibold">Google Drive 連結 <span class="text-muted small">（選填）</span></label>
+        <input type="url" name="drive_url" class="form-control" maxlength="500"
+               value="{{ form_data.drive_url }}" placeholder="https://drive.google.com/…">
+        <div class="form-text">樂譜檔案放在樂團的 Google Drive，這裡貼分享連結，團員由此下載。系統不再自己存檔。</div>
       </div>
 
       <div class="d-flex gap-2">
@@ -176,12 +162,18 @@
 (function () {
   var typeSelect = document.getElementById('id_score_type');
   var partFields = document.getElementById('part-fields');
+  var instrumentSelect = document.getElementById('id_instrument');
+  var customField = document.getElementById('custom-instrument-field');
+  var customId = '{{ custom_instrument_id|default_if_none:"" }}';
 
   function syncPartFields() {
     partFields.style.display = typeSelect.value === 'part' ? '' : 'none';
+    // 選到「其他（手填）」才出現名稱欄位
+    customField.style.display = (customId && instrumentSelect.value === customId) ? '' : 'none';
   }
 
   typeSelect.addEventListener('change', syncPartFields);
+  instrumentSelect.addEventListener('change', syncPartFields);
   syncPartFields();
 })();
 </script>

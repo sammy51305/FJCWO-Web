@@ -23,11 +23,11 @@
 </div>
 {% elif not groups %}
 <div class="alert alert-info">
-  這場演出的曲目目前沒有「{{ user_family.name }}」的分譜。可能是幹部尚未上傳，或曲目尚未排定。
+  這場演出的曲目目前沒有「{{ user_family.name }}」的分譜。可能是幹部尚未貼上連結，或曲目尚未排定。
 </div>
 {% else %}
 <p class="text-muted small mb-3">
-  同族群的各樂器／聲部分譜都會列出，請依你實際擔任的聲部自行選擇下載。
+  同族群的各樂器分譜都會列出，請依你實際演奏的樂器自行選擇下載。
 </p>
 {% for group in groups %}
 <div class="card mb-3">
@@ -36,14 +36,13 @@
     <div class="d-flex flex-wrap gap-2">
       {% for part in group.parts %}
       <div class="border rounded px-3 py-2 small">
-        <div class="fw-medium">{{ part.instrument.name }}</div>
-        {% if part.section %}<div class="text-muted">{{ part.section.name }}</div>{% endif %}
-        {% if part.file %}
-        <a href="{% url 'scores:score_download' part.pk %}" class="text-success">
+        <div class="fw-medium">{{ part.instrument_label }}</div>
+        {% if part.drive_url %}
+        <a href="{{ part.drive_url }}" target="_blank" rel="noopener noreferrer" class="text-success">
           <i class="bi bi-download"></i> 下載
         </a>
         {% else %}
-        <span class="text-muted">尚未上傳</span>
+        <span class="text-muted">尚無連結</span>
         {% endif %}
       </div>
       {% endfor %}

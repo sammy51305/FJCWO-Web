@@ -86,6 +86,13 @@ def index(request):
         # （2026-09-19 回饋：「找不到簽到按鈕或 QR code」）。
         qr_token = getattr(rehearsal, 'qr_token', None) if rehearsal else None
         context['checkin_token'] = qr_token.token if qr_token and qr_token.is_valid() else None
+        # 下載音樂會譜：尚未結束、未取消的演出（最近的 3 場），各連到依樂器篩選的分譜下載頁
+        from apps.events.models import PerformanceEvent
+        context['download_events'] = list(
+            PerformanceEvent.objects
+            .exclude(status__in=[PerformanceEvent.Status.FINISHED, PerformanceEvent.Status.CANCELLED])
+            .order_by('performance_date')[:3]
+        )
         # 我的待審請假
         context['pending_leaves'] = (
             LeaveRequest.objects

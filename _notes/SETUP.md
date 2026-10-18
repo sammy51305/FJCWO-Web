@@ -349,8 +349,9 @@ python manage.py createsuperuser    # 自己的管理員帳號
 #### E-5　免費方案的三個限制（測試可接受，正式上線前要解）
 
 1. **會休眠**：15 分鐘沒人用就睡著，下一個請求要等約 1 分鐘喚醒。第一次點會覺得很慢，是正常的。
-2. **磁碟是暫時的**：**重新部署會清空上傳的檔案**——樂譜 PDF、分譜、收據會不見（QR 圖可重新產生）。
-   測試階段接受即可；要持久保存得接 Cloudflare R2 之類的物件儲存（見 DESIGN #10 路線 A 的「媒體」）。
+2. **磁碟是暫時的**：**重新部署會清空上傳的檔案**——收據、QR 圖會不見（QR 圖可重新產生）。
+   **樂譜不受影響**：樂譜檔案改放樂團 Google Drive，系統只記連結（見 DESIGN §4.8）。
+   其他上傳要持久保存得接 Cloudflare R2 之類的物件儲存（見 DESIGN #10 路線 A 的「媒體」）。
 3. **Email 仍是 console backend**：沒填 `EMAIL_HOST_USER`／`PASSWORD` 的話，
    系統寄的臨時密碼信只會印在 Render 的 log 裡、收件人收不到。
    要測「入團申請 → 收密碼信」整條流程（#11）就得填真的 SMTP。
@@ -467,11 +468,11 @@ python manage.py loaddata fixtures/venues.json
 ```
 
 內含：
-- `instruments.json`：12 個樂器族群（豎笛、薩克斯風、長笛等）+ 24 種樂器（Eb 豎笛、Bb 豎笛、中音薩克斯風等）
+- `instruments.json`：13 個樂器族群（豎笛、薩克斯風、長笛、吉他等）+ 28 種樂器（含「其他（手填）」）（Eb 豎笛、Bb 豎笛、中音薩克斯風等）
 - `sections.json`：5 個聲部（第一部〜第四部、Solo）
 - `venues.json`：排練場地世韻藝術有限公司（含 3 個時段）、演出場地輔仁大學野聲堂等 4 處
 
-> `instruments.json` 和 `sections.json` 必須在 `score_parts_manage` 分譜上傳功能使用前載入，否則 UI 不會有任何樂器可選。
+> `instruments.json` 和 `sections.json` 必須在 `score_parts_manage` 分譜連結管理功能使用前載入，否則 UI 不會有任何樂器可選。
 
 ### 想要有東西可以點？再灌一份假資料
 
