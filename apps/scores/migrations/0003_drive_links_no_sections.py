@@ -4,13 +4,14 @@ from django.db.models import ProtectedError
 import apps.scores.models
 
 
-def seed_instruments_and_merge_parts(apps, schema_editor):
+def seed_instruments_and_reset_parts(apps, schema_editor):
     """
     1. 補上新的樂器：吉他族群（吉他／電吉他／Bass 吉他）與「其他（手填）」。
        只在**已有樂器資料**的資料庫做（Render 上）；全新資料庫是空的，樂器由
        fixtures/instruments.json 載入（已含同樣的資料，且主鍵一致），這裡不能先塞，否則會與 fixture 主鍵衝突。
-    2. 聲部從樂譜移除後，同一首曲子、同一樂器的多個聲部分譜併成一筆（留最早建立的）。
-       被曲目單等地方引用而刪不掉的，保留不動。
+    2. 清掉既有的分譜紀錄（總譜保留）。舊分譜是「樂器＋聲部＋上傳檔案」，檔案在 Render 重新部署時
+       早已遺失，結構也和新的「每種樂器一個 Drive 連結」不同——owner 決定清掉重來，等譜務把連結貼上。
+       被其他資料引用而刪不掉的（ProtectedError）保留不動。
     """
     Family = apps.get_model('accounts', 'InstrumentFamily')
     Type = apps.get_model('accounts', 'InstrumentType')
@@ -23,18 +24,11 @@ def seed_instruments_and_merge_parts(apps, schema_editor):
         other, _ = Family.objects.get_or_create(name='其他', defaults={'category': 'other'})
         Type.objects.get_or_create(name='其他（手填）', defaults={'family': other})
 
-    seen = set()
-    for part in Score.objects.filter(score_type='part').order_by('pk'):
-        key = (part.full_score_id, part.instrument_id)
-        if part.full_score_id is None or part.instrument_id is None:
-            continue
-        if key in seen:
-            try:
-                part.delete()
-            except ProtectedError:
-                pass
-        else:
-            seen.add(key)
+    for part in Score.objects.filter(score_type='part'):
+        try:
+            part.delete()
+        except ProtectedError:
+            pass
 
 
 class Migration(migrations.Migration):
@@ -62,5 +56,5 @@ class Migration(migrations.Migration):
                 help_text='樂器選「其他（手填）」時必填，例如：手搖鈴。',
             ),
         ),
-        migrations.RunPython(seed_instruments_and_merge_parts, migrations.RunPython.noop),
+        migrations.RunPython(seed_instruments_and_reset_parts, migrations.RunPython.noop),
     ]
