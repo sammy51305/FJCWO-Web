@@ -271,6 +271,27 @@ def score_detail(request, pk):
     })
 
 
+def _save_part(score, inst_id, sect_id, file):
+    """把一份檔案存成 score 的分譜（instrument+section 已有就替換檔案）；樂器不存在回 False。"""
+    instrument = InstrumentType.objects.filter(pk=inst_id).first()
+    if not instrument:
+        return False
+    section = SectionType.objects.filter(pk=sect_id).first() if sect_id else None
+    part, _ = Score.objects.get_or_create(
+        full_score=score,
+        instrument=instrument,
+        section=section,
+        defaults={
+            'title': score.title,
+            'score_type': Score.ScoreType.PART,
+            'copyright_status': score.copyright_status,
+        },
+    )
+    part.file = file
+    part.save()
+    return True
+
+
 @login_required
 def score_parts_manage(request, pk):
     score = get_object_or_404(Score, pk=pk, score_type=Score.ScoreType.FULL)
@@ -297,30 +318,37 @@ def score_parts_manage(request, pk):
                 sect_id = int(sect_id_str)
             except (ValueError, AttributeError):
                 continue
+            if _save_part(score, inst_id, sect_id, file):
+                uploaded += 1
 
-            instrument = InstrumentType.objects.filter(pk=inst_id).first()
-            if not instrument:
+        # 批次選檔：一次選多份 PDF，每份配一個 "{樂器id}_{聲部id}" 槽位（空字串 = 略過）。
+        # 配對靠前端依檔名預填、使用者可改；後端只信 POST 回來的槽位值並逐筆驗證。
+        batch_files = request.FILES.getlist('batch_files')
+        batch_slots = request.POST.getlist('batch_slot')
+        skipped = 0
+        seen_slots = set()
+        for file, slot in zip(batch_files, batch_slots):
+            try:
+                inst_id_str, sect_id_str = slot.split('_', 1)
+                inst_id, sect_id = int(inst_id_str), int(sect_id_str)
+            except (ValueError, AttributeError):
+                skipped += 1
                 continue
-            section = SectionType.objects.filter(pk=sect_id).first() if sect_id else None
-
-            part, _ = Score.objects.get_or_create(
-                full_score=score,
-                instrument=instrument,
-                section=section,
-                defaults={
-                    'title': score.title,
-                    'score_type': Score.ScoreType.PART,
-                    'copyright_status': score.copyright_status,
-                },
-            )
-            part.file = file
-            part.save()
-            uploaded += 1
+            if (inst_id, sect_id) in seen_slots or not file.name.lower().endswith('.pdf'):
+                skipped += 1
+                continue
+            if _save_part(score, inst_id, sect_id, file):
+                seen_slots.add((inst_id, sect_id))
+                uploaded += 1
+            else:
+                skipped += 1
 
         if uploaded:
             messages.success(request, f'已上傳 {uploaded} 份分譜。')
         else:
             messages.warning(request, '未偵測到上傳檔案。')
+        if skipped:
+            messages.warning(request, f'有 {skipped} 個檔案已略過（未指定聲部、同一聲部重複，或不是 PDF）。')
         return redirect('scores:score_parts_manage', pk=pk)
 
     # 依分類（木管/銅管/打擊/其他）→ 族群 → 樂器 三層建立巢狀結構
@@ -354,9 +382,21 @@ def score_parts_manage(request, pk):
                 'families': families_in_cat,
             })
 
+    slot_options = [
+        {
+            'key': f'{inst.pk}_{section.pk}',
+            'label': f'{inst.name} {section.name}',
+            'instrument': inst.name,
+            'section': section.name,
+        }
+        for inst in InstrumentType.objects.order_by('family__category', 'family__name', 'name')
+        for section in sections
+    ]
+
     return render(request, 'scores/score_parts_manage.html', {
         'score': score,
         'categories_data': categories_data,
+        'slot_options': slot_options,
     })
 
 

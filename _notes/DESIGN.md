@@ -1128,6 +1128,19 @@ view 在 GET 時預先建立巢狀資料結構（`categories_data`）供 templat
 避免 template 內複雜的 dict 查找邏輯。`categories_data` 結構為：
 `[{category_label, families: [{family, instruments: [{instrument, sections: [{section, key, existing_part}]}], single}]}]`
 
+**批次選檔**（2026-10 譜務回饋：「以為可以批次上傳，結果還是要一個一個選」）：頁面最上方多一個
+`<input type="file" name="batch_files" multiple>`。選好後前端為每個檔案列一列，依**檔名**預填一個槽位
+`<select name="batch_slot">`（值為 `{樂器id}_{聲部id}`，空字串＝略過），使用者可逐列修改後一起送出。
+
+- 檔名配對（純前端，`score_parts_manage.html` 內的 JS）：樂器取「全名出現在檔名中」的最長者
+  （避免「低音豎笛」被「豎笛」搶走）；沒有全名命中時，去掉英文前綴（`Bb 豎笛`→`豎笛`）只在**唯一對應**時採用，
+  有歧義（如單寫「豎笛」，Eb／Bb 都符合）寧可留空讓人選，不亂猜。聲部比全名（第一部／Solo），再比 1／2／3，預設第一部。
+  配不出來的列標黃底、預設「略過」。
+- 後端 `score_parts_manage` 把 `batch_files` 與 `batch_slot` 依順序一對一處理，**不信任前端的配對結果**：
+  槽位格式錯誤、樂器不存在、副檔名非 `.pdf`、同一次內重複的槽位（只收第一份）一律算「略過」，最後彙總提示略過數。
+  存檔邏輯與原本逐格上傳共用 `_save_part()`（`get_or_create` → 已有就替換檔案）。
+- 原本逐格勾選上傳的流程保留不變。
+
 #### 樂器族群（InstrumentFamily）
 
 新增族群層級，讓分譜上傳 UI 可按族群分組顯示樂器：
