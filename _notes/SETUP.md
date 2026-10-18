@@ -249,6 +249,29 @@ venv\Scripts\python.exe manage.py migrate
 > 在自己機器上 `makemigrations` 只會在「你改了 model」時才該做；沒改卻跑出新檔案，
 > 通常代表你的分支跟別人的 model 有分歧，要先確認而不是直接產生。
 
+#### 拉完直接看成果（pull → 載 demo 資料 → 啟動）
+
+想在本機親眼確認剛合併的功能，從專案根目錄一路貼到底（`seed_demo` 可重複執行、
+只新增不修改既有資料，已經載過也沒關係）：
+
+```bash
+cd C:\Workspace\github\FJCWO-Web
+git checkout main
+git pull
+venv\Scripts\python.exe -m pip install -r requirements.txt
+venv\Scripts\python.exe manage.py migrate
+venv\Scripts\python.exe manage.py seed_demo
+venv\Scripts\python.exe manage.py runserver
+```
+
+啟動後開 <http://127.0.0.1:8000>，用 `demo_officer`（幹部）或其他 `demo_*`（團員）登入；
+密碼是 `DEMO_PASSWORD` 環境變數的值，沒設就是 DEMO.md 裡的預設值。
+
+- 資料庫是全新的（還沒載過基礎資料）時，要先照步驟六載 fixtures，`seed_demo` 才有樂器／聲部／場地可用。
+- 開不了 `127.0.0.1:8000`？先確認 `runserver` 視窗沒有報錯、PostgreSQL 有在跑。
+  `runserver` 只在**執行它的那台機器**上連得到，雲端環境（如 Claude Code 的 cloud session）
+  跑的伺服器，你自己電腦的瀏覽器是打不開的。
+
 ---
 
 ### 情境 D：建立正式（production）環境
