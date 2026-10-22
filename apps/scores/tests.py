@@ -235,6 +235,20 @@ class NormalizeDriveUrlTest(TestCase):
         self.assertEqual(score.drive_url, 'https://drive.google.com/drive/folders/abc')
 
 
+def schedule_in_setlist(*scores):
+    """把總譜排進一場演出的曲目單（團員只看得到已排進演出的曲目）"""
+    from apps.events.models import PerformanceEvent, Setlist
+    from apps.public.models import Venue
+
+    venue = Venue.objects.create(name=f'曲目單測試場地{Venue.objects.count()}', type='performance')
+    event = PerformanceEvent.objects.create(
+        name='曲目單測試演出', type='concert', performance_date=timezone.now(),
+        performance_venue=venue,
+    )
+    for order, score in enumerate(scores, start=1):
+        Setlist.objects.create(event=event, score=score, order=order)
+
+
 class ScoreListViewTest(TestCase):
     """樂譜庫存列表頁面"""
 
@@ -274,7 +288,25 @@ class ScoreListViewTest(TestCase):
             score_type=Score.ScoreType.PART,
             instrument=self.instrument,
         )
+        schedule_in_setlist(self.full_score)
         self.url = reverse('scores:score_list')
+
+    # ── 團員只看得到已排進演出的曲目 ─────────────────────────
+
+    def test_member_sees_only_scheduled_scores(self):
+        """團員的列表只含已排進演出曲目單的總譜，未排定的看不到"""
+        Score.objects.create(title='尚未排定的曲子', score_type=Score.ScoreType.FULL)
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertContains(r, '天空之城')
+        self.assertNotContains(r, '尚未排定的曲子')
+
+    def test_officer_sees_unscheduled_scores(self):
+        """幹部仍看得到全部總譜（含未排定的）"""
+        Score.objects.create(title='尚未排定的曲子', score_type=Score.ScoreType.FULL)
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertContains(r, '尚未排定的曲子')
 
     # ── T01 存取控制 ────────────────────────────────────────
 
@@ -318,7 +350,8 @@ class ScoreListViewTest(TestCase):
 
     def test_full_score_without_parts_shows_placeholder(self):
         """沒有任何分譜的總譜，分譜欄顯示提示而非 0"""
-        Score.objects.create(title='無分譜曲', score_type=Score.ScoreType.FULL)
+        no_parts = Score.objects.create(title='無分譜曲', score_type=Score.ScoreType.FULL)
+        schedule_in_setlist(no_parts)
         self.client.force_login(self.member)
         r = self.client.get(self.url)
         self.assertContains(r, '尚未上傳')
@@ -468,7 +501,25 @@ class ScoreDetailViewTest(TestCase):
             instrument=self.instrument,
             full_score=self.full_score,
         )
+        schedule_in_setlist(self.score, self.full_score)
         self.url = reverse('scores:score_detail', args=[self.score.pk])
+
+    # ── 團員只能看已排進演出的曲目 ───────────────────────────
+
+    def test_member_cannot_view_unscheduled_score(self):
+        """未排進演出的總譜，團員直接輸入網址也是 404；幹部可看"""
+        hidden = Score.objects.create(title='尚未排定的曲子', score_type=Score.ScoreType.FULL)
+        url = reverse('scores:score_detail', args=[hidden.pk])
+        self.client.force_login(self.member)
+        self.assertEqual(self.client.get(url).status_code, 404)
+        self.client.force_login(self.officer)
+        self.assertEqual(self.client.get(url).status_code, 200)
+
+    def test_member_can_view_part_of_scheduled_score(self):
+        """分譜以所屬總譜判斷：總譜已排進演出，團員就看得到"""
+        url = reverse('scores:score_detail', args=[self.part_score.pk])
+        self.client.force_login(self.member)
+        self.assertEqual(self.client.get(url).status_code, 200)
 
     # ── T03 存取控制 ────────────────────────────────────────
 
@@ -523,8 +574,9 @@ class ScoreDetailViewTest(TestCase):
 
     def test_deleting_a_full_score_still_redirects_to_list(self):
         """總譜刪掉後沒有可回去的曲目，維持導回清單"""
+        unscheduled = Score.objects.create(title='未排定總譜', score_type=Score.ScoreType.FULL)
         self.client.force_login(self.admin)
-        r = self.client.post(reverse('scores:score_delete', args=[self.full_score.pk]))
+        r = self.client.post(reverse('scores:score_delete', args=[unscheduled.pk]))
         self.assertRedirects(r, reverse('scores:score_list'), fetch_redirect_response=False)
 
     def test_officer_cannot_delete_a_part(self):
@@ -714,6 +766,7 @@ class ScoreEditViewTest(TestCase):
             score_type=Score.ScoreType.FULL,
             copyright_status=Score.CopyrightStatus.PUBLIC_DOMAIN,
         )
+        schedule_in_setlist(self.score)
         self.url = reverse('scores:score_edit', args=[self.score.pk])
 
     # ── 存取控制 ────────────────────────────────────────
@@ -938,6 +991,7 @@ class ScoreDriveLinkDisplayTest(TestCase):
 
     def test_detail_links_to_drive(self):
         score = Score.objects.create(title='有連結總譜', score_type=Score.ScoreType.FULL, drive_url=DRIVE)
+        schedule_in_setlist(score)
         self.client.force_login(self.member)
         r = self.client.get(reverse('scores:score_detail', args=[score.pk]))
         self.assertContains(r, f'href="{DRIVE}"')
@@ -945,6 +999,7 @@ class ScoreDriveLinkDisplayTest(TestCase):
 
     def test_detail_without_link_shows_no_digital_copy(self):
         score = Score.objects.create(title='無連結總譜', score_type=Score.ScoreType.FULL)
+        schedule_in_setlist(score)
         self.client.force_login(self.member)
         r = self.client.get(reverse('scores:score_detail', args=[score.pk]))
         self.assertContains(r, '無數位版本')
@@ -991,6 +1046,7 @@ class ScorePartsManageTest(TestCase):
         self.part_score = Score.objects.create(
             title='星空（長笛）', score_type=Score.ScoreType.PART, instrument=self.flute,
         )
+        schedule_in_setlist(self.full_score)
         self.url = reverse('scores:score_parts_manage', args=[self.full_score.pk])
 
     # ── T01 存取控制 ────────────────────────────────────────

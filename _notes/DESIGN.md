@@ -1596,6 +1596,13 @@ available_scores = Score.objects.filter(score_type=Score.ScoreType.FULL)
 
 **登入者可用**，一般團員與幹部皆可瀏覽。
 
+#### 團員只看得到已排進演出的曲目（2026-10-22）
+
+`score_list`、`score_detail` 對一般團員只開放「已排進任一場演出曲目單（Setlist）」的總譜：
+列表加 `filter(setlists__isnull=False).distinct()`；詳情頁若所屬總譜（分譜看 `full_score`）沒排進演出就回 404，
+避免直接輸入網址繞過。幹部／管理員不受限，仍看得到全部（含尚未排定、孤兒分譜）。
+團員要拿自己的分譜，走 `performance_parts`（§4.19）。
+
 #### score_list：只列總譜（#13-4）
 
 清單**固定只列總譜，分譜完全不出現**——要看分譜一律從總譜詳情頁進去：

@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db.models import Count
 from django.db.models.deletion import ProtectedError
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 
 from apps.accounts.models import InstrumentFamily, InstrumentType
@@ -28,6 +29,9 @@ def score_list(request):
         .select_related('parent_score')
         .annotate(part_count=Count('parts'))
     )
+    # 團員只看得到已排進演出曲目單的曲目；幹部看全部
+    if not request.user.is_officer:
+        scores = scores.filter(setlists__isnull=False).distinct()
 
     instrument_id = request.GET.get('instrument', '')
     query = request.GET.get('q', '').strip()
@@ -261,6 +265,11 @@ def score_detail(request, pk):
                      .prefetch_related('parts__instrument'),
         pk=pk,
     )
+    if not request.user.is_officer:
+        # 與樂譜庫存列表一致：團員只能看已排進演出的曲目（分譜看所屬總譜）
+        root = score.full_score if score.score_type == Score.ScoreType.PART else score
+        if root is None or not root.setlists.exists():
+            raise Http404
     versions = score.versions.select_related('instrument')
 
     return render(request, 'scores/score_detail.html', {
