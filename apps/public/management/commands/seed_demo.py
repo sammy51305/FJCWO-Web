@@ -28,7 +28,7 @@ from apps.accounts.models import (
 from apps.announcements.models import Announcement
 from apps.assets.models import AssetBorrow, BandProperty
 from apps.events.models import (
-    LeaveRequest, PerformanceAttendance, PerformanceEvent, Rehearsal,
+    EventPartFolder, LeaveRequest, PerformanceAttendance, PerformanceEvent, Rehearsal,
     RehearsalAttendance, Setlist,
 )
 from apps.finance.models import FeePeriod, FinanceRecord, MembershipFee, PaymentConfig
@@ -62,6 +62,8 @@ DEMO_MEMBERS = [
     ('demo_perc', '洪詩涵', '打擊樂', 'Solo', 2025, '0911-111-012'),
 ]
 
+DEMO_UNARCHIVED_TITLE = '借譜示範曲（未入藏）'
+
 DEMO_SCORE_TITLES = [
     'Festive Overture', 'First Suite in E-flat', 'Danzón No. 2',
     '宝島', '台灣民謠組曲', 'Blue Shades',
@@ -88,10 +90,6 @@ DEMO_REGISTRATION_EMAILS = [
     'chou.tzuhan@example.com', 'lai.weiting@example.com',
     'chien.liwen@example.com', 'tseng.chienlin@example.com',
 ]
-
-_PART_INSTRUMENTS = ['長笛', '雙簧管', 'Bb 豎笛', '中音薩克斯風',
-                     '小號', '法國號', '長號', '打擊樂']
-
 
 class Command(BaseCommand):
     help = '建立展示用的 demo 資料（可重複執行）'
@@ -130,8 +128,9 @@ class Command(BaseCommand):
         self._seed_attendance(members, rehearsals)
         self._seed_leaves(officer, event, rehearsals)
         self._seed_registrations()
-        full_scores = self._seed_scores()
-        self._seed_setlist(event, full_scores)
+        scores = self._seed_scores()
+        self._seed_setlist(event, scores)
+        self._seed_score_folders(event)
         assets = self._seed_assets(officer)
         self._seed_borrows(assets)
         self._seed_finance(officer, event)
@@ -309,39 +308,49 @@ class Command(BaseCommand):
             '台灣民謠組曲': ('傳統民謠', '李哲藝', 'licensed', 'beginner'),
             'Blue Shades': ('F. Ticheli', '', 'copyrighted', 'advanced'),
         }
-        full_scores, n = [], 0
-        for title in DEMO_SCORE_TITLES:
+        scores, n = [], 0
+        for i, title in enumerate(DEMO_SCORE_TITLES):
             comp, arr, cr, diff = meta[title]
             s, created = Score.objects.get_or_create(
-                title=title, score_type=Score.ScoreType.FULL,
-                defaults=dict(composer=comp, arranger=arr, copyright_status=cr,
-                              difficulty=diff, physical_quantity=1,
+                title=title, arranger=arr,
+                defaults=dict(composer=comp, copyright_status=cr, difficulty=diff,
                               source=Score.Source.PURCHASED,
-                              drive_url=f'https://drive.google.com/file/d/demo-full-{DEMO_SCORE_TITLES.index(title)}/view',
+                              drive_url=f'https://drive.google.com/drive/folders/demo-archive-{i}',
+                              # 前兩首示範「演出後已歸檔分譜」，其餘未切割
+                              parts_url=f'https://drive.google.com/drive/folders/demo-archive-{i}-parts' if i < 2 else '',
                               publisher='Hal Leonard' if cr == 'copyrighted' else ''),
             )
-            full_scores.append(s)
+            scores.append(s)
             n += created
-            for iname in _PART_INSTRUMENTS:
-                _, pc = Score.objects.get_or_create(
-                    title=f'{title} — {iname}分譜', score_type=Score.ScoreType.PART,
-                    defaults=dict(composer=comp, arranger=arr, copyright_status=cr,
-                                  instrument=self.itype[iname], full_score=s,
-                                  physical_quantity=4,
-                                  drive_url=f'https://drive.google.com/file/d/demo-{DEMO_SCORE_TITLES.index(title)}-{_PART_INSTRUMENTS.index(iname)}/view'),
-                )
-                n += pc
-        self.log.append(f'樂譜新建 {n} 筆（{len(DEMO_SCORE_TITLES)} 首總譜 × '
-                        f'{len(_PART_INSTRUMENTS)} 種分譜）')
-        return full_scores
+        self.log.append(f'藏譜新建 {n} 筆')
+        return scores
 
-    def _seed_setlist(self, event, full_scores):
+    def _seed_setlist(self, event, scores):
         n = 0
-        for i, s in enumerate(full_scores[:5], start=1):
+        for i, s in enumerate(scores[:5], start=1):
             _, created = Setlist.objects.get_or_create(
                 event=event, score=s, defaults=dict(order=i))
             n += created
+        # 特例：未入藏曲目（借譜演出）
+        _, created = Setlist.objects.get_or_create(
+            event=event, unarchived_title=DEMO_UNARCHIVED_TITLE,
+            defaults=dict(order=6, unarchived_reason='向友團借譜，演完歸還'))
+        n += created
         self.log.append(f'演出曲目新建 {n} 首')
+
+    def _seed_score_folders(self, event):
+        """演出樂譜資料夾：總譜、典藏與每個族群一格（demo 連結）。"""
+        if not event.conductor_folder_url:
+            event.conductor_folder_url = 'https://drive.google.com/drive/folders/demo-concert-conductor'
+            event.archive_folder_url = 'https://drive.google.com/drive/folders/demo-concert-archive'
+            event.save(update_fields=['conductor_folder_url', 'archive_folder_url'])
+        n = 0
+        for fam in self.fam.values():
+            _, created = EventPartFolder.objects.get_or_create(
+                event=event, family=fam,
+                defaults=dict(drive_url=f'https://drive.google.com/drive/folders/demo-concert-family-{fam.pk}'))
+            n += created
+        self.log.append(f'演出族群分譜資料夾新建 {n} 個')
 
     def _seed_assets(self, officer):
         spec = [

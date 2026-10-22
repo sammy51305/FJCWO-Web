@@ -10,6 +10,5 @@ urlpatterns = [
     path('<int:pk>/', views.score_detail, name='score_detail'),
     path('<int:pk>/edit/', views.score_edit, name='score_edit'),
     path('<int:pk>/delete/', views.score_delete, name='score_delete'),
-    path('<int:pk>/parts/', views.score_parts_manage, name='score_parts_manage'),
     path('performance/<int:pk>/parts/', views.performance_parts, name='performance_parts'),
 ]

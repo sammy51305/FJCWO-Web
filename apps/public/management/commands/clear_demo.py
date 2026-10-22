@@ -25,7 +25,7 @@ from apps.accounts.models import Registration, User
 from apps.announcements.models import Announcement
 from apps.assets.models import AssetBorrow, BandProperty
 from apps.events.models import (
-    LeaveRequest, PerformanceAttendance, PerformanceEvent,
+    EventPartFolder, LeaveRequest, PerformanceAttendance, PerformanceEvent,
     Rehearsal, RehearsalAttendance, RehearsalQRToken, Setlist,
 )
 from apps.finance.models import FeePeriod, FinanceRecord, MembershipFee, PaymentConfig
@@ -69,9 +69,7 @@ class Command(BaseCommand):
         events = freeze(PerformanceEvent,
                         PerformanceEvent.objects.filter(name=DEMO_EVENT_NAME))
         rehearsals = freeze(Rehearsal, Rehearsal.objects.filter(event__in=events))
-        full_scores = freeze(Score, Score.objects.filter(
-            title__in=DEMO_SCORE_TITLES, score_type=Score.ScoreType.FULL))
-        part_scores = freeze(Score, Score.objects.filter(full_score__in=full_scores))
+        scores = freeze(Score, Score.objects.filter(title__in=DEMO_SCORE_TITLES))
         assets = freeze(BandProperty,
                         BandProperty.objects.filter(name__in=DEMO_ASSET_NAMES))
         fee_periods = freeze(FeePeriod, FeePeriod.objects.filter(
@@ -91,6 +89,7 @@ class Command(BaseCommand):
 
         plan = [
             ('演出曲目 Setlist', Setlist.objects.filter(event__in=events)),
+            ('演出族群分譜資料夾', EventPartFolder.objects.filter(event__in=events)),
             ('排練出席紀錄', RehearsalAttendance.objects.filter(rehearsal__in=rehearsals)),
             ('排練 QR Token', RehearsalQRToken.objects.filter(rehearsal__in=rehearsals)),
             ('排練請假', LeaveRequest.objects.filter(rehearsal__in=rehearsals)),
@@ -100,8 +99,7 @@ class Command(BaseCommand):
             ('公告', announcements),
             ('財產借用紀錄', AssetBorrow.objects.filter(asset__in=assets)),
             ('公用財產', assets),
-            ('樂譜（分譜）', part_scores),
-            ('樂譜（總譜）', full_scores),
+            ('藏譜', scores),
             ('排練', rehearsals),
             ('演出活動', events),
             ('入團申請', registrations),

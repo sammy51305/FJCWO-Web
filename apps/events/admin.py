@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from apps.notifications.utils import fmt_dt, push_line_message
 
-from .models import (LeaveRequest, PartAssignment,
+from .models import (EventPartFolder, LeaveRequest, PartAssignment,
                      PerformanceAttendance, PerformanceEvent,
                      Rehearsal, RehearsalAttendance, RehearsalQRToken, Setlist)
 
@@ -16,7 +16,13 @@ class RehearsalInline(admin.TabularInline):
 class SetlistInline(admin.TabularInline):
     model = Setlist
     extra = 1
-    fields = ['order', 'score']
+    fields = ['order', 'score', 'unarchived_title', 'unarchived_reason']
+
+
+class EventPartFolderInline(admin.TabularInline):
+    model = EventPartFolder
+    extra = 0
+    fields = ['family', 'drive_url']
 
 
 @admin.register(PerformanceEvent)
@@ -24,7 +30,7 @@ class PerformanceEventAdmin(admin.ModelAdmin):
     list_display = ['name', 'type', 'performance_date', 'status']
     list_filter = ['type', 'status']
     search_fields = ['name']
-    inlines = [RehearsalInline, SetlistInline]
+    inlines = [RehearsalInline, SetlistInline, EventPartFolderInline]
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -97,7 +103,7 @@ class PerformanceAttendanceAdmin(admin.ModelAdmin):
 
 @admin.register(Setlist)
 class SetlistAdmin(admin.ModelAdmin):
-    list_display = ['event', 'order', 'score']
+    list_display = ['event', 'order', 'score', 'unarchived_title']
     list_filter = ['event']
 
 

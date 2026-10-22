@@ -1,77 +1,80 @@
 {% extends "base.html" %}
 
-{% block title %}我的分譜 — {{ event.name }} — 百韻管樂團{% endblock %}
+{% block title %}{% if user.is_officer %}樂譜資料夾{% else %}我的分譜{% endif %} — {{ event.name }} — 百韻管樂團{% endblock %}
 
 {% block content %}
 <nav aria-label="breadcrumb" class="mb-3">
   <ol class="breadcrumb">
     <li class="breadcrumb-item"><a href="{% url 'events:event_list' %}">演出活動</a></li>
     <li class="breadcrumb-item"><a href="{% url 'events:event_detail' event.pk %}">{{ event.name }}</a></li>
-    <li class="breadcrumb-item active">我的分譜</li>
+    <li class="breadcrumb-item active">{% if user.is_officer %}樂譜資料夾{% else %}我的分譜{% endif %}</li>
   </ol>
 </nav>
 
+{% if user.is_officer %}
+{# 幹部：典藏、總譜（A）與所有族群（C） #}
+<div class="d-flex justify-content-between align-items-center mb-1">
+  <h2 class="mb-0">樂譜資料夾</h2>
+  <a href="{% url 'events:score_folders_manage' event.pk %}" class="btn btn-outline-primary btn-sm">
+    <i class="bi bi-pencil"></i> 設定連結
+  </a>
+</div>
+<p class="text-muted mb-4">{{ event.tag }}</p>
+
+<div class="d-flex flex-wrap gap-2 mb-4">
+  {% if event.conductor_folder_url %}
+  <a href="{{ event.conductor_folder_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+    <i class="bi bi-folder2-open"></i> 總譜（A）
+  </a>
+  {% else %}
+  <span class="btn btn-outline-secondary disabled">總譜（A）尚無連結</span>
+  {% endif %}
+  {% if event.archive_folder_url %}
+  <a href="{{ event.archive_folder_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary">
+    <i class="bi bi-archive"></i> 典藏資料夾（帳號 1）
+  </a>
+  {% endif %}
+</div>
+
+{% for cat in all_folders %}
+<h5 class="mt-3 mb-2 text-primary border-bottom pb-1">{{ cat.label }}</h5>
+<div class="d-flex flex-wrap gap-2">
+  {% for row in cat.rows %}
+  <div class="border rounded px-3 py-2 small">
+    <div class="fw-medium">{{ row.family.name }}</div>
+    {% if row.folder %}
+    <a href="{{ row.folder.drive_url }}" target="_blank" rel="noopener noreferrer" class="text-success">
+      <i class="bi bi-download"></i> 分譜
+    </a>
+    {% else %}
+    <span class="text-muted">尚無連結</span>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endfor %}
+
+{% else %}
+{# 團員：只有自己族群的分譜資料夾（C），看不到總譜（A） #}
 <h2 class="mb-1">我的分譜</h2>
-<p class="text-muted mb-4">
-  {{ event.name }}{% if user_family %} · 依你的樂器族群「{{ user_family.name }}」自動篩選{% endif %}
-</p>
+<p class="text-muted mb-4">{{ event.name }}{% if user_family %} · {{ user_family.name }}{% endif %}</p>
 
 {% if not user_family %}
 <div class="alert alert-warning">
-  你的帳號尚未設定樂器族群，無法自動篩選分譜。請洽幹部協助設定，
-  或到 <a href="{% url 'scores:score_list' %}">樂譜庫存</a> 找到曲目、點「詳細」後從分譜清單自行下載。
+  你的帳號尚未設定樂器族群，無法找到你的分譜。請洽幹部協助設定。
 </div>
-{% elif not groups %}
+{% elif not my_folder %}
 <div class="alert alert-info">
-  這場演出的曲目目前沒有「{{ user_family.name }}」的分譜。可能是幹部尚未貼上連結，或曲目尚未排定。
+  「{{ user_family.name }}」的分譜還沒準備好，幹部貼上連結後就會出現在這裡。
 </div>
 {% else %}
-<p class="text-muted small mb-3">
-  同族群的各樂器分譜都會列出，請依你實際演奏的樂器自行選擇下載。
+<a href="{{ my_folder.drive_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-success btn-lg mb-3">
+  <i class="bi bi-cloud-download"></i> 下載{{ user_family.name }}分譜
+</a>
+<p class="text-muted small">
+  會開啟 Google Drive 上「{{ user_family.name }}」的資料夾，底下依樂器分好。
+  在 Drive 資料夾名稱旁按「下載」，可以一次打包整個資料夾；或點進自己的樂器只下載需要的部分。
 </p>
-{% if download_urls %}
-<div class="mb-3">
-  <button type="button" class="btn btn-success" id="open-all-parts">
-    <i class="bi bi-cloud-download"></i> 一鍵開啟全部分譜（{{ download_urls|length }} 份）
-  </button>
-  <div class="form-text">
-    會在新分頁一次打開以下所有有連結的分譜。若瀏覽器擋住彈出視窗，請選「允許」後再按一次。
-  </div>
-</div>
-{{ download_urls|json_script:"part-urls" }}
 {% endif %}
-{% for group in groups %}
-<div class="card mb-3">
-  <div class="card-header fw-semibold">{{ group.full_score.title }}</div>
-  <div class="card-body">
-    <div class="d-flex flex-wrap gap-2">
-      {% for part in group.parts %}
-      <div class="border rounded px-3 py-2 small">
-        <div class="fw-medium">{{ part.instrument_label }}</div>
-        {% if part.drive_url %}
-        <a href="{{ part.drive_url }}" target="_blank" rel="noopener noreferrer" class="text-success">
-          <i class="bi bi-download"></i> 下載
-        </a>
-        {% else %}
-        <span class="text-muted">尚無連結</span>
-        {% endif %}
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-</div>
-{% endfor %}
-{% endif %}
-{% endblock %}
-
-{% block extra_js %}
-{% if download_urls %}
-<script>
-  document.getElementById('open-all-parts').addEventListener('click', function () {
-    JSON.parse(document.getElementById('part-urls').textContent).forEach(function (url) {
-      window.open(url, '_blank', 'noopener');
-    });
-  });
-</script>
 {% endif %}
 {% endblock %}

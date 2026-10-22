@@ -678,7 +678,7 @@ class DemoCommandTest(TestCase):
         self.assertEqual(self._demo_user_qs().count(), 13)   # 1 幹部 + 12 團員
         self.assertTrue(PerformanceEvent.objects.filter(
             name='2026 秋季公演「聲之所向」').exists())
-        self.assertEqual(Score.objects.filter(score_type='full').count(), 6)
+        self.assertEqual(Score.objects.count(), 6)
         self.assertTrue(MembershipFee.objects.filter(status='reported').exists())
 
     def test_seed_is_idempotent(self):

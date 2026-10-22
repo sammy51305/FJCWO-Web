@@ -6,18 +6,20 @@ from collections import defaultdict
 import qrcode
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.accounts.models import User
+from apps.accounts.models import InstrumentFamily, User
 from apps.notifications.utils import fmt_dt, push_line_message
 from apps.public.models import Venue
-from apps.scores.models import Score
+from apps.scores.models import Score, normalize_drive_url, validate_drive_url
 
 from .models import (
-    LeaveRequest, PerformanceAttendance, PerformanceEvent,
+    EventPartFolder, LeaveRequest, PerformanceAttendance, PerformanceEvent,
     Rehearsal, RehearsalAttendance, RehearsalQRToken, Setlist,
 )
 
@@ -884,6 +886,10 @@ def rehearsal_edit(request, pk):
 
 @login_required
 def setlist_manage(request, pk):
+    """
+    曲目單管理（幹部）。曲目一般從藏譜挑；特例（借來演一次、不入藏）可只填曲名＋原因，
+    樂譜庫存頁會列出這些未入藏曲目讓幹部追蹤。
+    """
     if not request.user.is_officer:
         messages.error(request, '權限不足。')
         return redirect('events:event_detail', pk=pk)
@@ -893,37 +899,129 @@ def setlist_manage(request, pk):
     if request.method == 'POST':
         action = request.POST.get('action')
 
-        if action == 'add':
-            score_id = request.POST.get('score_id')
+        if action in ('add', 'add_unarchived'):
             order = request.POST.get('order', '').strip()
-            if not score_id or not order:
-                messages.error(request, '請選擇曲目並填寫演出順序。')
-            elif Setlist.objects.filter(event=event, order=order).exists():
-                messages.error(request, f'演出順序 {order} 已被使用。')
-            elif Setlist.objects.filter(event=event, score_id=score_id).exists():
-                messages.error(request, '此曲目已在曲目單中。')
+            item = Setlist(event=event)
+            if action == 'add':
+                score_id = request.POST.get('score_id')
+                item.score = Score.objects.filter(pk=score_id).first() if score_id else None
+                if score_id and item.score is None:
+                    raise Http404
             else:
-                score = get_object_or_404(Score, pk=score_id, score_type=Score.ScoreType.FULL)
-                Setlist.objects.create(event=event, score=score, order=order)
-                messages.success(request, f'已新增《{score.title}》。')
+                item.unarchived_title = request.POST.get('unarchived_title', '').strip()
+                item.unarchived_reason = request.POST.get('unarchived_reason', '').strip()
+
+            error = None
+            if not order.isdigit() or int(order) < 1:
+                error = '請填寫演出順序。'
+            elif Setlist.objects.filter(event=event, order=order).exists():
+                error = f'演出順序 {order} 已被使用。'
+            elif item.score and Setlist.objects.filter(event=event, score=item.score).exists():
+                error = '此曲目已在曲目單中。'
+            else:
+                item.order = int(order)
+                try:
+                    item.full_clean()
+                except ValidationError as e:
+                    error = '、'.join(e.messages)
+            if error:
+                messages.error(request, error)
+            else:
+                item.save()
+                messages.success(request, f'已新增《{item.display_title}》。')
 
         elif action == 'remove':
-            item_id = request.POST.get('item_id')
-            item = get_object_or_404(Setlist, pk=item_id, event=event)
-            title = item.score.title
+            item = get_object_or_404(Setlist, pk=request.POST.get('item_id'), event=event)
+            title = item.display_title
             item.delete()
             messages.success(request, f'已移除《{title}》。')
 
         return redirect('events:setlist_manage', pk=pk)
 
     setlists = event.setlists.select_related('score').order_by('order')
-    available_scores = Score.objects.filter(score_type=Score.ScoreType.FULL).order_by('title')
-    used_score_ids = list(setlists.values_list('score_id', flat=True))
+    used_score_ids = [s.score_id for s in setlists if s.score_id]
 
     return render(request, 'events/setlist_manage.html', {
         'event': event,
         'setlists': setlists,
-        'available_scores': available_scores,
+        'available_scores': Score.objects.order_by('title', 'arranger', 'version_note'),
         'used_score_ids': used_score_ids,
-        'next_order': (setlists.last().order + 1) if setlists.exists() else 1,
+        'next_order': (setlists.last().order + 1) if setlists else 1,
+    })
+
+
+@login_required
+def score_folders_manage(request, pk):
+    """
+    演出樂譜資料夾設定（幹部）：典藏資料夾（帳號 1）、總譜資料夾（帳號 2，A）、
+    13 個族群資料夾（帳號 2，C）。族群連結全部選填，清空的格子會移除該族群的資料夾。
+    """
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('events:event_detail', pk=pk)
+
+    event = get_object_or_404(PerformanceEvent, pk=pk)
+    families = list(InstrumentFamily.objects.order_by('pk'))
+    existing = {f.family_id: f for f in event.part_folders.all()}
+
+    if request.method == 'POST':
+        errors = []
+        event.archive_folder_url = normalize_drive_url(request.POST.get('archive_folder_url', ''))
+        event.conductor_folder_url = normalize_drive_url(request.POST.get('conductor_folder_url', ''))
+        for field in ('archive_folder_url', 'conductor_folder_url'):
+            value = getattr(event, field)
+            if value:
+                try:
+                    validate_drive_url(value)
+                except ValidationError as e:
+                    errors.append(f'{PerformanceEvent._meta.get_field(field).verbose_name}：{e.messages[0]}')
+
+        urls = {}
+        for fam in families:
+            value = normalize_drive_url(request.POST.get(f'family_{fam.pk}', ''))
+            if not value:
+                continue
+            try:
+                validate_drive_url(value)
+            except ValidationError as e:
+                errors.append(f'{fam.name}：{e.messages[0]}')
+                continue
+            urls[fam.pk] = value
+
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+            values = request.POST
+        else:
+            event.save(update_fields=['archive_folder_url', 'conductor_folder_url'])
+            for fam in families:
+                if fam.pk in urls:
+                    EventPartFolder.objects.update_or_create(
+                        event=event, family=fam, defaults={'drive_url': urls[fam.pk]})
+                elif fam.pk in existing:
+                    existing[fam.pk].delete()
+            messages.success(request, f'已儲存樂譜資料夾（族群 {len(urls)} 個）。')
+            return redirect('events:score_folders_manage', pk=pk)
+    else:
+        values = {
+            'archive_folder_url': event.archive_folder_url,
+            'conductor_folder_url': event.conductor_folder_url,
+            **{f'family_{fid}': f.drive_url for fid, f in existing.items()},
+        }
+
+    categories = []
+    for cat_value, cat_label in InstrumentFamily.Category.choices:
+        rows = [
+            {'family': fam, 'field': f'family_{fam.pk}', 'url': values.get(f'family_{fam.pk}', '')}
+            for fam in families if fam.category == cat_value
+        ]
+        if rows:
+            categories.append({'label': cat_label, 'rows': rows})
+
+    return render(request, 'events/score_folders_manage.html', {
+        'event': event,
+        'categories': categories,
+        'archive_folder_url': values.get('archive_folder_url', ''),
+        'conductor_folder_url': values.get('conductor_folder_url', ''),
+        'family_options': [{'field': f'family_{f.pk}', 'name': f.name} for f in families],
     })

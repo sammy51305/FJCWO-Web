@@ -4,38 +4,45 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-1">
-  <h2 class="mb-0">樂譜庫存</h2>
-  {% if user.is_officer %}
+  <h2 class="mb-0">樂譜庫存（藏譜）</h2>
   <a href="{% url 'scores:score_create' %}" class="btn btn-primary btn-sm">
-    <i class="bi bi-plus-lg"></i> 新增樂譜
+    <i class="bi bi-plus-lg"></i> 新增藏譜
   </a>
-  {% endif %}
 </div>
 <p class="text-muted small mb-3">
-  清單只列總譜；各樂器分譜請點進總譜的「詳細」頁查看與下載。
+  一首曲子（的一個版本）一筆，檔案在帳號 1 的「藏譜」資料夾。幹部限定；團員下載分譜請走演出活動的「我的分譜」。
 </p>
 
 <!-- 篩選列 -->
 <form method="get" class="row g-2 mb-4">
   <div class="col-sm-4 col-md-3">
     <input type="text" name="q" class="form-control form-control-sm"
-           placeholder="搜尋曲名…" value="{{ query }}">
+           placeholder="搜尋曲名／作曲／編曲…" value="{{ query }}">
   </div>
   <div class="col-auto">
-    <select name="instrument" class="form-select form-select-sm"
-            onchange="this.form.submit()"
-            title="篩出「底下有這個樂器分譜」的總譜">
-      <option value="">不限分譜樂器</option>
-      {% for inst in instruments %}
-      <option value="{{ inst.pk }}" {% if selected_instrument == inst.pk|stringformat:"s" %}selected{% endif %}>
-        {{ inst.name }}
-      </option>
+    <select name="event" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="">不限演出</option>
+      {% for ev in events %}
+      <option value="{{ ev.pk }}" {% if selected_event == ev.pk|stringformat:"s" %}selected{% endif %}>{{ ev.tag }}</option>
       {% endfor %}
     </select>
   </div>
   <div class="col-auto">
+    <select name="cut" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="">不限分譜</option>
+      <option value="yes" {% if cut == 'yes' %}selected{% endif %}>已切割</option>
+      <option value="no" {% if cut == 'no' %}selected{% endif %}>未切割</option>
+    </select>
+  </div>
+  <div class="col-auto">
+    <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="">依曲名排序</option>
+      <option value="count" {% if sort == 'count' %}selected{% endif %}>依演出次數排序</option>
+    </select>
+  </div>
+  <div class="col-auto">
     <button type="submit" class="btn btn-sm btn-primary">搜尋</button>
-    {% if query or selected_instrument %}
+    {% if query or selected_event or cut or sort %}
     <a href="{% url 'scores:score_list' %}" class="btn btn-sm btn-outline-secondary">清除</a>
     {% endif %}
   </div>
@@ -48,9 +55,8 @@
       <tr>
         <th>曲名</th>
         <th>作曲/編曲</th>
-        <th class="text-end">分譜</th>
-        <th>版權</th>
-        <th class="text-end">實體數量</th>
+        <th>分譜</th>
+        <th>演出紀錄</th>
         <th></th>
       </tr>
     </thead>
@@ -59,33 +65,22 @@
       <tr>
         <td>
           {{ score.title }}
-          {% if score.parent_score %}
-            <small class="text-muted ms-1">（改版）</small>
-          {% endif %}
+          {% if score.version_note %}<small class="text-muted ms-1">（{{ score.version_note }}）</small>{% endif %}
         </td>
         <td class="text-muted small">
           {% if score.composer %}{{ score.composer }}{% endif %}
           {% if score.composer and score.arranger %} / {% endif %}
           {% if score.arranger %}編：{{ score.arranger }}{% endif %}
         </td>
-        <td class="text-end">
-          {% if score.part_count %}
-            <span class="badge bg-secondary">{{ score.part_count }} 份</span>
+        <td>
+          {% if score.is_cut %}
+            <span class="badge bg-success">已切割</span>
           {% else %}
-            <span class="text-muted small">尚未上傳</span>
+            <span class="badge bg-light text-muted border">未切割</span>
           {% endif %}
         </td>
         <td>
-          {% if score.copyright_status == 'public_domain' %}
-            <span class="badge bg-success">公版</span>
-          {% elif score.copyright_status == 'licensed' %}
-            <span class="badge bg-info text-dark">已授權</span>
-          {% else %}
-            <span class="badge bg-warning text-dark">有版權</span>
-          {% endif %}
-        </td>
-        <td class="text-end">
-          {% if score.physical_quantity %}{{ score.physical_quantity }} 本{% else %}<span class="text-muted">—</span>{% endif %}
+          {% include "scores/_performance_tags.html" %}
         </td>
         <td>
           <div class="d-flex gap-1">
@@ -94,7 +89,7 @@
             <form method="post" action="{% url 'scores:score_delete' score.pk %}" class="d-inline">
               {% csrf_token %}
               <button type="submit" class="btn btn-sm btn-outline-danger"
-                      onclick="return confirm('確定要刪除總譜《{{ score.title }}》嗎？此操作將一併刪除所有分譜，無法復原。')">
+                      onclick="return confirm('確定要刪除藏譜《{{ score }}》嗎？無法復原。')">
                 <i class="bi bi-trash"></i>
               </button>
             </form>
@@ -107,31 +102,7 @@
   </table>
 </div>
 {% else %}
-<p class="text-muted">沒有符合條件的樂譜。</p>
-{% endif %}
-
-{% if orphan_parts %}
-{# 分譜不再列在清單上，沒綁總譜的分譜等於失去入口；列出來讓幹部點進去補綁定 #}
-<div class="card border-warning mt-4">
-  <div class="card-header text-warning fw-semibold">
-    <i class="bi bi-exclamation-triangle"></i> 有 {{ orphan_parts|length }} 份分譜未綁定總譜
-  </div>
-  <div class="card-body">
-    <p class="small text-muted mb-2">
-      分譜應掛在所屬總譜底下才找得到。以下分譜沒有指定總譜，請點進去編輯、補上「所屬總譜」。
-    </p>
-    <ul class="list-unstyled mb-0">
-      {% for part in orphan_parts %}
-      <li class="small mb-1">
-        <a href="{% url 'scores:score_detail' part.pk %}">{{ part.title }}</a>
-        {% if part.instrument %}
-        <span class="text-muted">（{{ part.instrument_label }}）</span>
-        {% endif %}
-      </li>
-      {% endfor %}
-    </ul>
-  </div>
-</div>
+<p class="text-muted">沒有符合條件的藏譜。</p>
 {% endif %}
 
 {% if page_obj.has_other_pages %}
@@ -139,7 +110,7 @@
   <ul class="pagination pagination-sm justify-content-center">
     {% if page_obj.has_previous %}
     <li class="page-item">
-      <a class="page-link" href="?{% if query %}q={{ query }}&{% endif %}{% if selected_instrument %}instrument={{ selected_instrument }}&{% endif %}page={{ page_obj.previous_page_number }}">上一頁</a>
+      <a class="page-link" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.previous_page_number }}">上一頁</a>
     </li>
     {% endif %}
     <li class="page-item disabled">
@@ -147,10 +118,55 @@
     </li>
     {% if page_obj.has_next %}
     <li class="page-item">
-      <a class="page-link" href="?{% if query %}q={{ query }}&{% endif %}{% if selected_instrument %}instrument={{ selected_instrument }}&{% endif %}page={{ page_obj.next_page_number }}">下一頁</a>
+      <a class="page-link" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.next_page_number }}">下一頁</a>
     </li>
     {% endif %}
   </ul>
 </nav>
 {% endif %}
+
+<div class="row g-3 mt-2">
+  {% if uncut_performed %}
+  {# 演過但藏譜還沒有切割分譜：提醒譜務從音樂會資料夾整理回「藏譜/<樂曲名>/分譜」 #}
+  <div class="col-md-6">
+    <div class="card border-warning">
+      <div class="card-header text-warning fw-semibold">
+        <i class="bi bi-exclamation-triangle"></i> 已演出但尚未歸檔分譜（{{ uncut_performed|length }}）
+      </div>
+      <div class="card-body">
+        <p class="small text-muted mb-2">
+          這些曲目演出過，但藏譜還沒有切割好的分譜。請把分譜從音樂會資料夾整理到「藏譜/&lt;樂曲名&gt;/分譜」，再編輯藏譜填上「分譜資料夾連結」。
+        </p>
+        <ul class="list-unstyled mb-0">
+          {% for s in uncut_performed %}
+          <li class="small mb-1"><a href="{% url 'scores:score_edit' s.pk %}">{{ s }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if unarchived %}
+  <div class="col-md-6">
+    <div class="card border-secondary">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-journal-x"></i> 未入藏的演出曲目（{{ unarchived|length }}）
+      </div>
+      <div class="card-body">
+        <p class="small text-muted mb-2">曲目單裡沒有連到藏譜的特例曲目。之後若要入藏：先新增藏譜，再到該場曲目管理移除這筆、改從藏譜加入。</p>
+        <ul class="list-unstyled mb-0">
+          {% for item in unarchived %}
+          <li class="small mb-1">
+            <a href="{% url 'events:setlist_manage' item.event.pk %}">{{ item.event.tag }}</a>
+            ／{{ item.unarchived_title }}
+            <span class="text-muted">— {{ item.unarchived_reason }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
 {% endblock %}

@@ -2,7 +2,7 @@
 
 > 本文件說明 Phase 1 & 2 的設計決策、資料庫結構與各系統的運作邏輯。
 > 目標讀者：接手開發或複習程式碼的人（包含自己）。
-> 最後更新：2026-09-09（#13-2／#13-9／#13-10 改名「入團申請」、請假頁分部長提示、保險費分類，#13 全部結案；#13-4 樂譜庫存只列總譜；#13-7／#13-8 請假截止改當天 23:59、過期樣式明確；#11 批次匯入完成，P0 全數結案；測試站接上 Gmail SMTP，#10 完成；#13-1 決定二定案並實作敏感個資欄位加密，#13-1 全部完成；新增 #16 金鑰管理強化待辦；#13-5／#13-6 演出出席意願三態完成、演出請假廢除；測試站已上線 Render＋Neon 並加 robots.txt／noindex；#10 選定路線 A；#4 確認申報需身分證字號；#13-3 公告三欄已完成；2026-09-19 首頁「下次排練」改成當天整天都留著、加路徑標示，見 §4.11；2026-09-19 場地管理列表補用途說明與使用次數，見 §4.3）
+> 最後更新：2026-10-22（藏譜改版：樂譜庫存改藏譜、幹部限定，分譜改掛演出族群資料夾、演出標籤，見 §4.8／§4.12／§4.19）；2026-09-09（#13-2／#13-9／#13-10 改名「入團申請」、請假頁分部長提示、保險費分類，#13 全部結案；#13-4 樂譜庫存只列總譜；#13-7／#13-8 請假截止改當天 23:59、過期樣式明確；#11 批次匯入完成，P0 全數結案；測試站接上 Gmail SMTP，#10 完成；#13-1 決定二定案並實作敏感個資欄位加密，#13-1 全部完成；新增 #16 金鑰管理強化待辦；#13-5／#13-6 演出出席意願三態完成、演出請假廢除；測試站已上線 Render＋Neon 並加 robots.txt／noindex；#10 選定路線 A；#4 確認申報需身分證字號；#13-3 公告三欄已完成；2026-09-19 首頁「下次排練」改成當天整天都留著、加路徑標示，見 §4.11；2026-09-19 場地管理列表補用途說明與使用次數，見 §4.3）
 
 ---
 
@@ -19,7 +19,7 @@
    - [4.5 QR Code 簽到（events）](#45-qr-code-簽到events)
    - [4.6 請假申請（events）](#46-請假申請events)
    - [4.7 財務管理（finance）](#47-財務管理finance)
-   - [4.8 樂譜庫存（scores）](#48-樂譜庫存scores)
+   - [4.8 樂譜庫存（scores）— 藏譜](#48-樂譜庫存scores-藏譜)
    - [4.9 公用財產與借用（assets）](#49-公用財產與借用assets)
    - [4.10 公告（announcements）](#410-公告announcements)
    - [4.11 首頁 Dashboard（public）](#411-首頁-dashboardpublic)
@@ -31,7 +31,7 @@
    - [4.17 報表：請假統計（events）](#417-報表請假統計events)
    - [報表：團員通訊錄名冊（accounts）— 附於報表群，無節號（見內文說明）](#報表團員通訊錄名冊accounts)
    - [4.18 LINE 群組通知（notifications）](#418-line-群組通知notifications)
-   - [4.19 演出分譜下載（scores）](#419-演出分譜下載scores)
+   - [4.19 演出分譜下載（scores）與樂譜資料夾設定（events）](#419-演出分譜下載scores與樂譜資料夾設定events)
    - [4.20 關於百韻內容管理（public）](#420-關於百韻內容管理public)
    - [4.21 組織章程管理（public）](#421-組織章程管理public)
    - [4.22 演出出席意願（events）](#422-演出出席意願events)
@@ -165,9 +165,11 @@ InstrumentFamily ←─── User ───→ SectionType
 
 Venue ──→ VenueTimeSlot
   │
-  ├── PerformanceEvent ──→ Setlist ──→ Score
+  ├── PerformanceEvent ──→ Setlist ──→ Score（藏譜；特例未入藏時為空）
   │         │                │
   │         │                └──→ PartAssignment ──→ User（含 role=guest 槍手）
+  │         │
+  │         ├──→ EventPartFolder ──→ InstrumentFamily（演出族群分譜資料夾）
   │         │
   │         ├──→ Rehearsal ──→ RehearsalQRToken
   │         │         │
@@ -179,8 +181,6 @@ Venue ──→ VenueTimeSlot
 FinanceRecord ──→ PerformanceEvent（選填）
                ──→ User（登記者）
 
-Score ──→ Score（full_score，分譜→總譜，CASCADE）
-Score ──→ Score（parent_score，版本鏈，SET_NULL）
 ScoreExchange ──→ ScoreExchangeItem ──→ Score
 
 BandProperty ──→ AssetBorrow ──→ User
@@ -616,7 +616,7 @@ views 端共用 `_parse_profile_fields()`、template 端共用 `accounts/_profil
 九個實際填答值全部有對應（只有「打擊樂器→打擊樂」差一字，匯入時對照即可）。
 
 另兩個好處：與 `User.instrument` 同一層，核准建帳號時不必再 `.family` 轉換；
-且**分譜仍用 `InstrumentType` 保有細分**——Bb 豎笛與低音豎笛是不同分譜，那層不能合併。
+且**樂器細項仍用 `InstrumentType` 保留**（Bb 豎笛與低音豎笛是不同樂器）。2026-10 藏譜改版後，演出分譜也改記到族群層（§4.19），與 `User.instrument` 同層。
 
 > **Migration 注意**：改 FK 指向時，欄位裡存的還是舊的 `InstrumentType` id，
 > 不清掉會被當成 `InstrumentFamily` id 重新解讀，變成「指向不相干樂器」的安靜錯資料。
@@ -680,7 +680,7 @@ view、template、form 用起來與一般欄位無異。
 兩者天生就是「先建父層、再建子層」的順序，用兩個步驟比在同一個表單塞進動態數量的時段列更單純。
 
 時段的新增/刪除各自是獨立的 action（`add_timeslot` 這個 POST 參數判斷是不是新增時段的表單），
-跟 `score_parts_manage`、`registration_review` 的核准/拒絕是同樣的「同一頁面多個小 action」寫法。
+跟 `setlist_manage`、`registration_review` 的核准/拒絕是同樣的「同一頁面多個小 action」寫法。
 
 #### 為什麼列表要寫用途說明與使用次數
 
@@ -821,8 +821,8 @@ qr_checkin_confirm（POST）：建立或更新 RehearsalAttendance（status=pres
 
 #### 導覽列「團練」選單與團練日誌
 
-團員每週會用到的入口收進導覽列「團練」下拉：簽到、團練日誌、樂譜庫存、我的請假、我的會費
-（原本是各自平鋪的導覽項；「演出活動」維持頂層）。
+團員每週會用到的入口收進導覽列「團練」下拉：簽到、團練日誌、我的請假、我的會費
+（原本是各自平鋪的導覽項；「演出活動」維持頂層）。「樂譜庫存」原本也在這裡，2026-10-22 藏譜改為幹部限定後移到幹部導覽區（§4.8）。
 
 - `checkin_entry`（`/events/checkin/`）：找 QR 有效（啟用且未過期）的排練，有就導向 `qr_checkin`，
   沒有就導回首頁並提示「目前沒有開放簽到的排練」。以 QR 有效性判斷，不重用首頁的 `_dashboard_rehearsal`
@@ -1067,249 +1067,103 @@ def status_of(rehearsal, member):
 
 ---
 
-### 4.8 樂譜庫存（scores）
+### 4.8 樂譜庫存（scores）— 藏譜
 
-**檔案**：`apps/scores/models.py`、`apps/scores/views.py`
+**檔案**：`apps/scores/models.py`（`Score`）、`apps/scores/views.py`（`score_list`／`score_detail`／`score_create`／`score_edit`／`score_delete`）
 
-#### 總譜 vs 分譜
+**幹部限定**（整個樂譜庫存，含列表、詳情、新增、編輯；刪除再限管理員）。團員下載分譜一律走演出的「我的分譜」（§4.19）。
 
-```python
-class ScoreType(models.TextChoices):
-    FULL = 'full', '總譜'   # 指揮用，不需要填樂器
-    PART = 'part', '分譜'   # 各樂器用，需要填樂器＋聲部
-```
+#### 改版（2026-10-22）：從「總譜／分譜」改成「藏譜＋演出族群資料夾」
 
-`instrument` 欄位設為 `null=True, blank=True`，因為總譜不需要樂器，但分譜需要。
+舊設計把樂譜分成總譜與分譜，分譜掛在總譜下（`Score.full_score`），再加改版鏈（`parent_score`）、
+實體數量、樂器等欄位。和譜務討論後發現它對不上實際流程：
 
-> **2026-10 改版**：樂譜不再區分「聲部」（`Score.section` 移除；`SectionType` 仍給團員／入團申請使用），
-> 也不再自己存檔（`Score.file` 移除），改為 `drive_url` 記 Google Drive 連結。原因：Render 免費方案磁碟會在
-> 重新部署時清空上傳的 PDF，改由譜務把切好的總譜與各樂器分譜放進音樂會專用的 Drive 資料夾，系統只負責
-> 「把連結依樂器交給團員」。
+| 代號 | 內容 | 放哪裡 |
+|------|------|--------|
+| A | 指揮看的總譜 | 藏譜、音樂會都有 |
+| B | 未切割的譜 | 只在藏譜 |
+| C | 依樂器切割好的分譜 | 音樂會（演出後再歸檔回藏譜） |
 
-Model 層透過 `clean()` 驗證確保資料一致性：
+Google Drive 有兩個帳號：
+- **帳號 1**：`根目錄/藏譜/<樂曲名>`（A＋B，演出後加 `分譜/` 放 C）、`根目錄/音樂會專用/<年月日音樂會名稱>/…`（典藏）
+- **帳號 2**：只放當前音樂會，結構同帳號 1 的音樂會路徑：`<年月日音樂會名稱>/總譜/`（A）、`<年月日音樂會名稱>/<族群>/<樂器>/`（C）
 
-```python
-def clean(self):
-    if self.score_type == self.ScoreType.FULL:
-        if self.instrument or self.custom_instrument_name:
-            raise ValidationError('總譜不應指定樂器。')
-        if self.full_score:
-            raise ValidationError('總譜不應指定所屬總譜。')
-    elif self.score_type == self.ScoreType.PART:
-        if not self.instrument:
-            raise ValidationError('分譜必須指定樂器。')
-        if self.full_score and self.full_score.score_type != self.ScoreType.FULL:
-            raise ValidationError('所屬總譜必須是總譜類型。')
-        # 樂器選「其他（手填）」必填名稱；其餘樂器不可手填名稱
-```
-
-**Google Drive 連結**（`drive_url`）：存之前先過 `normalize_drive_url`——去頭尾空白，並拿掉網址裡的瀏覽器帳號編號
-`/u/數字/`（從瀏覽器複製常帶 `/drive/u/1/folders/…`，`1` 是「這個瀏覽器的第二個 Google 帳號」，別人點進去可能被帶去錯的帳號）。
-表單、分譜管理頁（樂器格與手填列）在驗證前整理，`Score.save()` 再整理一次當安全網（Admin 等入口也涵蓋）。
-只處理 Google 網域，其他網址原樣交給驗證擋掉；查詢參數保留。`validate_drive_url` 只收 `https` 且主機為 `drive.google.com`／`docs.google.com`，
-避免把團員導到任意外站。畫面上以 `target="_blank" rel="noopener noreferrer"` 連過去，系統不再提供 `/download/` 路由。
-
-**手填樂器**：「其他」族群裡有一個固定的樂器「其他（手填）」（`CUSTOM_INSTRUMENT_NAME`）。譜務選它時
-填 `custom_instrument_name`（例如「手搖鈴」），畫面一律用 `instrument_label`（手填名優先）。因為分譜本來就要有樂器，
-這樣不用破例放寬「分譜必須指定樂器」，下載篩選（依樂器族群）也照常運作——特殊樂器歸在「其他」族群。
-
-#### 總譜與分譜的關聯
-
-分譜透過 `full_score` FK 指向其所屬的總譜：
+C 在 Drive 上是「場次 → 族群 → 樂器」放，一個族群資料夾裡混著整場所有曲子，**不屬於個別曲子**。
+所以系統不再逐份記分譜，只記「資料夾連結」：
 
 ```
-Score（天空之城，total）
-    ├── Score（天空之城，Bb 豎笛）→ Drive 連結
-    ├── Score（天空之城，長笛）→ Drive 連結
-    └── Score（天空之城，手搖鈴〔其他（手填）〕）→ Drive 連結
+藏譜 Score（一首曲子的一個版本一筆）
+  drive_url（必填）  帳號1 藏譜/<樂曲名>（A＋B）
+  parts_url（選填）  藏譜/<樂曲名>/分譜（C，演出後歸檔）
+        ▲
+        │ Setlist（曲目單）← 藏譜與演出的唯一關聯；演出標籤與次數也從這裡算
+        │
+演出 PerformanceEvent
+  archive_folder_url     帳號1 音樂會專用/<年月日音樂會名稱>（幹部）
+  conductor_folder_url   帳號2 …/總譜（A，幹部）
+  EventPartFolder × 族群 帳號2 …/<族群>（C，團員看自己族群）
 ```
 
-`full_score` 使用 `CASCADE`，刪掉總譜時所有分譜一併刪除。
-透過 `score.parts.all()` 可取得該曲目的所有分譜。
+舊資料不搬移：migration `scores 0005` 把樂譜、分譜、曲目單、分譜分配、樂譜交換紀錄全部清掉
+（owner 決定；當時正式站未啟用，只有測試站資料），`0006` 才改欄位——刪列與 ALTER TABLE 分兩支，
+理由同 0003／0004（Postgres 同一交易內有待處理外鍵檢查時不能 ALTER TABLE）。
+`PartAssignment.score_part`（指向舊分譜）一併移除。
 
-#### 分譜連結管理（score_parts_manage）
+#### 欄位
 
-路由：`/scores/<pk>/parts/`，幹部限定。樂譜檔案由譜務放進樂團 Google Drive，這裡只貼連結。
+| 欄位 | 必填 | 說明 |
+|------|:---:|------|
+| 曲名 `title` | ✅ | |
+| 作曲 `composer`／編曲 `arranger` | | |
+| 版本說明 `version_note` | | 同曲名多版本時區分（縮編版、2020 新版…）|
+| 版權 `copyright_status` | | 改版前必填，改為選填 |
+| 來源／出版商／難度 | | |
+| 藏譜資料夾 `drive_url` | ✅ | 改版前選填，改為必填 |
+| 分譜資料夾 `parts_url` | | 有值 = 「已切割」（`Score.is_cut`）|
 
-- 結構：樂器大分類（木管／銅管／打擊／其他）› 族群（InstrumentFamily）› 樂器，**每種樂器一格連結輸入框**
-  （欄位名 `url_<樂器id>`）。**全部選填**（一首曲子用不到全部樂器，空白＝這首沒有這個樂器），**至少填一個**。
-- 「其他（手填）」不在固定清單，另開「其他樂器（手填）」區：可新增多列，每列「名稱＋連結」
-  （`custom_name`／`custom_url` 成對），已存在的會回填。
-- **以送出內容為準**：再次送出時，清空的格子或沒帶上的手填列，其分譜會被移除（被其他資料引用而刪不掉的保留並提示）。
-  同一首、同一樂器已有分譜就更新連結（不重複建立）。
-- 驗證：每個連結過 `validate_drive_url`；手填列名稱與連結缺一不可、名稱不可重複；任何錯誤都整批不存，
-  並把使用者剛填的值帶回表單（`values=request.POST`）。
-- **批次貼上**（純前端）：大文字框一行一筆「名稱 連結」（可從 Google 試算表整欄複製），按「帶入下方欄位」依名稱填進對應格子；
-  配不到固定樂器的放進手填區讓譜務確認名稱，沒有連結的行略過並提示。按「儲存」才真的送出。
-  名稱配對：樂器取「全名出現在名稱中」的最長者（避免「低音豎笛」被「豎笛」搶走）；沒有全名命中時去掉英文前綴
-  （`Bb 豎笛`→`豎笛`）只在**唯一對應**時採用，有歧義寧可不猜。
+移除：譜種、樂器、手填樂器名、所屬總譜、改版自、實體紙本數量。
+兩個連結都只收 https 的 Google 網域（`validate_drive_url`），存檔前拿掉 `/u/數字/`（`normalize_drive_url`，`save()` 安全網）。
 
-#### 改版歷程：聲部移除與資料搬移（migration 0003／0004）
+#### 同一首曲子的不同版本
 
-- `0003`：新增 `drive_url`、`custom_instrument_name`；補上新樂器（吉他族群：吉他／電吉他／Bass 吉他，及「其他（手填）」）；
-  **清掉既有的分譜紀錄**（總譜保留）：舊分譜是「樂器＋聲部＋上傳檔案」，檔案早已在 Render 重新部署時遺失，結構也與新的
-  「每種樂器一個 Drive 連結」不同，owner 決定清掉重來，等譜務把連結貼上（被其他資料引用而刪不掉的保留）。
-  **只在已有樂器資料的資料庫做**（Render）：全新資料庫的樂器由 `fixtures/instruments.json` 載入（已含同樣資料、主鍵一致），
-  migration 先塞會跟 fixture 主鍵衝突。
-- `0004`：移除 `section`、`file`。**刻意與 0003 分開**——0003 會刪列（有待處理的外鍵觸發事件），Postgres 不允許同一交易再
-  `ALTER TABLE`（`cannot ALTER TABLE ... because it has pending trigger events`），合併會在有資料的資料庫上失敗
-  （2026-10 實測發現）。
+每個版本各建一筆藏譜（Drive 也各一個資料夾），以編曲者＋版本說明區分，顯示為「天空之城（真島俊夫 編、縮編版）」。
+不做版本鏈：版本之間是並列關係，演出標籤掛在實際演出的那個版本上。
+新增／編輯時若「曲名＋編曲＋版本說明」完全相同已有一筆，跳警告但不擋（`_warn_if_duplicate`）。
 
-#### 樂器族群（InstrumentFamily）
+#### 演出標籤與次數
 
-新增族群層級，讓分譜上傳 UI 可按族群分組顯示樂器：
+標籤字串 = `PerformanceEvent.tag` = 本地日期 `YYYYMMDD` ＋ 活動名稱，例如 `20270124輔韻之聲`，
+與 Drive 場次資料夾命名規則相同（資料夾設定頁會提示）。不另建 Tag 資料表——「這首在這場演過」就是 Setlist。
 
-```
-木管
-  └── 豎笛族
-        ├── Eb 豎笛
-        ├── Bb 豎笛
-        ├── 中音豎笛
-        └── 低音豎笛
-  └── 薩克斯風族
-        ├── 中音薩克斯風
-        └── ...
-銅管
-  └── 小號族
-        └── 小號
-  └── ...
-```
+| | 規則 |
+|---|---|
+| 顯示哪些標籤 | 所有**未取消**場次；已演出實心、即將演出空心，點了進活動頁 |
+| 演出次數 | 只算「演出時間已過且未取消」的場次，同一場重複列（安可）只算一次（`Count(..., distinct=True)`）|
+| 依次數排序 | 列表 `?sort=count` |
 
-預設資料儲存在 `fixtures/instruments.json`（13 族群、28 種樂器）
-與 `fixtures/sections.json`（第一部〜第四部、Solo，給團員／入團申請用）。
+日期取本地時區：資料庫存 UTC，台灣清晨的演出直接取 `.date()` 會差一天。
+之後要做演出統計表，資料已足夠（Setlist × 未取消場次），不需補欄位。
 
-2026-10 在「其他」大分類新增 **吉他族群**（吉他、電吉他、Bass 吉他），並在「其他」族群放固定樂器
-**「其他（手填）」**（特殊樂器由譜務手填名稱，見上方 Score 說明）。已部署的資料庫由 migration `0003` 依名稱補上，
-新樂器的主鍵（族群 13、樂器 25～28）與 fixture 一致，之後再 `loaddata` 也不衝突。
+#### 列表（score_list）
 
-#### 新增／編輯樂譜（score_create / score_edit）
+- 篩選：關鍵字（曲名／作曲／編曲／版本說明）、演出場次、已切割／未切割；排序：曲名或演出次數
+- 待辦卡片「已演出但尚未歸檔分譜」：演過、但 `parts_url` 空白的藏譜，提醒譜務把 C 從音樂會資料夾整理回 `藏譜/<樂曲名>/分譜` 再填連結
+  （不做自動搬檔：要寫入 Drive、還要拆開混在一起的族群資料夾，複雜度與出錯代價都高）
+- 待辦卡片「未入藏的演出曲目」：Setlist 裡 `score` 為空的特例曲目（§4.12）
+- 標籤用 `Prefetch(..., to_attr='active_setlists')` 一次撈，次數用 annotate，避免 N+1
 
-路由：`/scores/create/`、`/scores/<pk>/edit/`，皆幹部限定。原本「新增樂譜」「編輯」按鈕都直接連到
-Django Admin 的頁面，但一般 `officer` 角色沒有 `is_staff`（見 §2 `is_staff` 自動設定），
-無法進入 `/admin/`，等於幹部點了按鈕卻進不去——`score_edit` 是後來才發現的同一種問題，
-`score_detail.html` 的「編輯」連結曾經漏了修，和 `score_create` 一起補齊。
+#### 詳情（score_detail）
 
-兩個 view 共用同一套邏輯，避免寫兩份重複的欄位解析與驗證：
-
-```python
-def _apply_score_form(request, score):
-    """把 POST 資料寫進 score 實例（新建或既有皆可），回傳 errors 清單"""
-    ...
-    score.title = request.POST.get('title', '').strip()
-    ...
-    if not errors:
-        try:
-            score.full_clean()   # 沿用 Model 既有的 clean() 規則，不重複造輪子
-        except ValidationError as e:
-            ...
-    return errors
-```
-
-`score_create` 傳入一個空的 `Score()`；`score_edit` 傳入 `get_object_or_404(Score, pk=pk)` 取出的既有實例，
-兩者都呼叫 `_apply_score_form()` 寫入欄位再 `full_clean()`，驗證邏輯完全一致。
-
-表單依 `score_type` 用純 JS 顯示/隱藏「樂器」「聲部」欄位（總譜不需要，分譜必填樂器）。
-
-#### 編輯頁的欄位預先帶入：form_data
-
-`score_create` 的 GET 沒有既有資料，欄位一律空白；`score_edit` 的 GET 則要把既有樂譜的值填進表單。
-兩者共用同一份 `score_form.html`，為了不在 template 裡到處寫「有 POST 用 POST、沒有就用 score 的值」
-這種條件判斷，改在 view 層統一組出一個 `form_data` 字典再傳給 template：
-
-```python
-'form_data': request.POST if request.method == 'POST' else _initial_form_data(score),
-```
-
-`_initial_form_data()` 把 `score` 的欄位轉成跟表單欄位同名的字典（FK 欄位轉成字串 pk，對應 `<select>` 的 value）。
-Template 只需要統一寫 `{{ form_data.title }}`，不論是新增頁（空字典）、編輯頁 GET（既有資料）、
-或驗證失敗重新顯示（使用者剛送出的值）都適用同一套寫法。
-
-#### 為什麼 file 欄位沒有值就不覆蓋
-
-```python
-file = request.FILES.get('file')
-if file:
-    score.file = file
-```
-
-編輯時如果沒有重新選檔案，`request.FILES` 就不會有 `file` 這個 key，這裡刻意只在有上傳新檔案時才覆寫，
-避免使用者只是想改個曲名，卻不小心把已上傳的 PDF 清空。
-
-#### 分譜跟總譜的綁定：score_create / score_edit 也能指定 full_score
-
-早期版本 `score_create` / `score_edit` 完全不提供 `full_score` 欄位，理由是「避免和
-`score_parts_manage` 的批次上傳流程產生兩套重複入口」。但這樣一來，如果使用者用「新增樂譜」
-分別建一筆總譜跟一筆分譜（而不是透過總譜詳情頁的「管理分譜」上傳），兩筆記錄之間完全沒有關聯，
-分譜不會出現在總譜的「分譜清單」裡，變成一筆孤立紀錄——這是實際使用時發現的問題，不是刻意設計。
-
-現在 `score_type` 選「分譜」時，表單多一個「所屬總譜」下拉選單（選填），`_apply_score_form()`
-會依 POST 的 `full_score` 設定關聯；選「總譜」時無論 POST 帶了什麼值都會被忽略
-（`full_score` 設回 `None`，跟 `instrument`/`section` 同樣的處理方式）。
-
-`score_parts_manage` 的批次上傳流程仍然保留，並沒有被取代——兩者現在是兩條都能正確綁定關聯的路徑，
-差別只在於 `score_parts_manage` 一次可以处理多個樂器/聲部的分譜上傳，`score_create`/`score_edit`
-一次只處理一筆。
-
-#### Setlist 只連結總譜
-
-`Setlist.score` 外鍵指向 `Score`，view 層限制只能選 `score_type='full'` 的曲子：
-
-```python
-available_scores = Score.objects.filter(score_type=Score.ScoreType.FULL)
-```
-
-演出曲目只需要記錄「哪首曲子」，個別樂手用哪份分譜由 `PartAssignment` 負責。
-把「曲目選擇」限制在總譜層面，讓 setlist 語意明確：一首曲子一個 item，不會因為分譜數量不同而重複列出。
-
-#### 版本鏈設計
-
-```python
-parent_score = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True)
-```
-
-`ForeignKey('self', ...)` 是指向同一張表的外鍵，用來表達「改版自哪個版本」（與 `full_score` 語意不同）：
-
-```
-原版《天空之城》
-    └── 改版 v1（加了長笛 ossia）
-            └── 改版 v2（加了打擊聲部）
-```
-
-`on_delete=SET_NULL` 確保刪掉某個版本不會連鎖刪掉衍生版本，只是斷開關聯。
+已切割時最顯眼的按鈕是「切割好的分譜（C）」，藏譜資料夾排後面；未切割只顯示藏譜資料夾並提示歸檔位置。
+下方是演出紀錄（標籤＋次數）。舊的分譜清單整個拿掉（藏譜不再有分譜紀錄）。
 
 #### 對外交換的主從結構
 
-```
-ScoreExchange（一次交換事件，記錄對方樂團與聯絡人）
-    ├── ScoreExchangeItem（這次交換：給出《天空之城》分譜）
-    └── ScoreExchangeItem（這次交換：收入《卡門》總譜）
-```
-
-一次交換可能包含多首曲目，用主表 + 明細表拆開，比把所有樂譜塞在一個欄位更容易查詢與維護。
+`ScoreExchange`（一次交換事件）→ `ScoreExchangeItem`（每筆給出／收入的藏譜，PROTECT）。目前只有 Admin 介面。
 
 #### score_delete：刪除限管理員
 
-跟 `member_delete`／`event_delete`／`venue_delete` 是同一套「管理員限定」的權限模式
-（`admin` 角色或 `superuser`）。樂譜被引用的方式有兩種，處理方式不同：
-
-- `Setlist.score`、`ScoreExchangeItem.score` 都是 `PROTECT`——這是資料庫層級的硬限制，
-  管理員也無法繞過，`score_delete` 用 `try/except ProtectedError` 包成友善訊息，不會噴 500。
-- `Score.full_score`（分譜指向所屬總譜）是 `CASCADE`——刪除總譜會連帶刪除底下所有分譜，
-  這是既有預期行為（見前面「總譜與分譜的關聯」一節），不需要額外保護。
-
-不像 `member_delete` 需要 `Collector` 判斷「有沒有關聯紀錄才放行真刪除」，樂譜這邊直接讓
-`PROTECT` 擋、`CASCADE` 放行即可，因為分譜隨總譜刪除本來就是設計上允許的，不像團員的出席/請假
-歷史需要額外一層保護。
-
-刪除入口放在 `score_list` 跟 `score_detail` 兩處（管理員限定），跟演出活動同樣的考量：
-列表頁方便一次瀏覽多筆樂譜時清理，詳情頁方便正在檢視某份樂譜時順手刪除。
-
-#### score_list 顯示分譜的所屬總譜
-
-分譜現在可能綁定 `full_score`（見前一節），列表頁「類型」欄位除了樂器/聲部之外，
-再多顯示一行「屬於《總譜名稱》」（連結到該總譜的詳情頁），沒有綁定的分譜則顯示「未綁定總譜」
-提示文字，讓幹部一眼看出哪些分譜還是孤立紀錄、需要補綁定。`score_list` 的 `select_related`
-補上 `full_score`，避免分頁 30 筆時產生 N+1 查詢。
+跟演出活動／場地／團員通訊錄一致。藏譜被 Setlist 或 ScoreExchangeItem 引用（PROTECT）時擋下並提示。
 
 ---
 
@@ -1563,142 +1417,29 @@ result_seen = models.BooleanField('團員已讀審核結果', default=True, ...)
 
 **幹部限定**，管理某場演出的曲目順序清單（Setlist）。
 
-#### 兩個 action 的邏輯
-
 | action | 說明 |
 |--------|------|
-| `add` | 從總譜清單選一首、填演出順序，建立 `Setlist`。同一場演出的順序號不可重複（view 層檢查），同一首曲目也不可重複加入 |
+| `add` | 從藏譜選一首、填演出順序。順序號不可重複、同一首藏譜不可重複加入 |
+| `add_unarchived` | 特例：不入藏的曲目（例如向他團借譜、演完歸還），只填曲名＋原因，`score` 留空 |
 | `remove` | 刪除指定的 `Setlist` item |
 
-#### 為什麼只能選總譜？
+`Setlist.clean()`：藏譜與「未入藏曲名」二擇一，未入藏必須填原因。`display_title` 統一給畫面用。
 
-```python
-available_scores = Score.objects.filter(score_type=Score.ScoreType.FULL)
-```
+#### 為什麼特例不直接規定「一律先建藏譜」？
 
-演出曲目記錄的是「這場演出演哪首曲子」，概念上是作品層級。
-個別樂手的分譜分配由 `PartAssignment` 負責，兩者分層管理，
-避免因分譜數量不同而讓同一首曲子在 setlist 出現多次。
+藏譜資料夾連結是必填，借來的譜通常沒有藏譜資料夾可貼；硬要建就會出現假連結。
+讓曲目單可以記不入藏的曲目，節目單仍完整，樂譜庫存頁再列成待辦讓幹部追蹤。
+這類曲目不出現在藏譜的演出標籤與次數裡；之後若要入藏，先建藏譜，再移除這筆、改從藏譜加入。
 
-#### 下一個可用順序號
-
-```python
-'next_order': (setlists.last().order + 1) if setlists.exists() else 1,
-```
-
-自動填入建議的下一個演出順序，方便幹部快速新增，不用自己算。
+自動填入下一個演出順序（`next_order`），方便幹部快速新增。
 
 ---
 
 ### 4.13 樂譜瀏覽與下載（scores）
 
-**檔案**：`apps/scores/views.py`（`score_list`、`score_detail`；下載＝直接連 Google Drive）
-
-**登入者可用**，一般團員與幹部皆可瀏覽。
-
-#### 團員只看得到已排進演出的曲目（2026-10-22）
-
-`score_list`、`score_detail` 對一般團員只開放「已排進任一場演出曲目單（Setlist）」的總譜：
-列表加 `filter(setlists__isnull=False).distinct()`；詳情頁若所屬總譜（分譜看 `full_score`）沒排進演出就回 404，
-避免直接輸入網址繞過。幹部／管理員不受限，仍看得到全部（含尚未排定、孤兒分譜）。
-團員要拿自己的分譜，走 `performance_parts`（§4.19）。
-
-#### score_list：只列總譜（#13-4）
-
-清單**固定只列總譜，分譜完全不出現**——要看分譜一律從總譜詳情頁進去：
-
-```python
-scores = (
-    Score.objects.filter(score_type=Score.ScoreType.FULL)
-    .annotate(part_count=Count('parts'))
-)
-
-instrument_id = request.GET.get('instrument', '')  # 樂器 ID
-query         = request.GET.get('q', '').strip()   # 曲名關鍵字（icontains）
-
-if instrument_id:
-    scores = scores.filter(parts__instrument_id=instrument_id).distinct()
-
-paginator = Paginator(scores, 30)  # 每頁 30 筆
-```
-
-**為什麼分譜不列**：一首曲子動輒 20〜30 份分譜，混在清單裡會把總譜完全淹沒，
-而「找某首曲子的某個分譜」的實際動線本來就是「先找到曲子、再挑聲部」，
-總譜詳情頁的分譜清單正好就是那一步。演出當天的分譜下載另有 `performance_parts` 專屬入口。
-
-**連帶的兩項調整**：
-
-| 項目 | 改法 | 原因 |
-|------|------|------|
-| 「譜種」篩選器 | 移除 | 清單只剩一種譜種，篩了沒意義 |
-| 「樂器」篩選器 | 語意改為「底下有這個樂器分譜的總譜」 | 樂器是分譜才有的屬性（`Score.instrument`），總譜恆為 `NULL`；沿用舊的 `filter(instrument_id=...)` 會永遠篩不出東西 |
-
-樂器篩選改走 `parts__instrument_id` 反向 join。同一總譜底下同一樂器可能有多個聲部
-（第一部／第二部…），join 會產生重複列，**必須加 `distinct()`**。
-
-「類型」欄位（每列都是「總譜」，沒有資訊量）改為 **分譜份數**，用 `annotate(Count('parts'))`
-一次算完，避免每列各發一次 count 查詢。
-
-#### 未綁定總譜的分譜：清單頁的幹部警告區
-
-`Score.full_score` 是 `null=True`，`clean()` 也沒強制分譜必須綁總譜，
-因此可能存在「分譜但沒有所屬總譜」的資料。**#13-4 之後這種資料會失去所有入口**——
-清單不列分譜，總譜詳情頁又找不到它，等於憑空消失。
-
-不改 model（加 NOT NULL 要處理既有資料、且 `score_parts_manage` 上傳的分譜本來就一定有總譜），
-改在 `score_list` 撈出這批孤兒、以**幹部限定**的警告卡片列出，點進去可編輯補綁定：
-
-```python
-orphan_parts = []
-if request.user.is_officer:
-    orphan_parts = list(
-        Score.objects.filter(score_type=Score.ScoreType.PART, full_score__isnull=True)
-        ...
-    )
-```
-
-一般團員看不到——那是資料錯誤，不是他們要處理的事。
-分譜詳情頁同步補上「所屬總譜」連結（沒綁的顯示警告），讓進到分譜頁時有回頭路。
-
-#### 分譜的唯一入口（#13-4 的補救）
-
-清單不列分譜之後，**總譜詳情頁的分譜清單就是進入分譜的唯一入口**。
-初版只在那裡放了「下載」連結、沒有連到分譜詳情頁，結果是已綁定的分譜
-**編輯不到也刪不掉**——庫存清單已經不列它，而分譜清單只給下載。
-（`score_detail` / `score_edit` / `score_delete` 三個 view 本身都好好的，缺的只是那條連結。）
-
-修法是分譜清單每一格補一個「詳細」連結。`ScoreDetailViewTest` 有一則測試專門釘住這條路，
-避免日後改版又把它拿掉。
-
-順帶調整 `score_delete` 的導向：**刪掉分譜後導回所屬總譜**，不是導回清單。
-清單已經不列分譜，導回清單等於把幹部丟在找不到原本那首曲子的地方；
-導回總譜則可以接著處理同一首的其他分譜。刪掉總譜時沒有可回去的曲目，維持導回清單。
-
-#### 麵包屑保留列表篩選條件
-
-`score_list` 的「詳細」連結、`score_detail` 的麵包屑「樂譜庫存」連結，
-都用 `{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}` 把目前的 query string 原樣轉發：
-
-```
-score_list（?q=天空&instrument=3）→ 詳細 → score_detail?q=天空&instrument=3 → 麵包屑 → score_list?q=天空&instrument=3
-```
-
-純 template 端處理，不需要 view 額外傳參數（`request` context processor 已在 `settings.py` 啟用）。
-沒有帶查詢字串進入詳情頁時，麵包屑就連回不帶參數的預設列表，行為不變。
-
-#### score_detail：版本鏈顯示
-
-```python
-versions = score.versions.select_related('instrument')
-```
-
-`versions` 是 `parent_score` ForeignKey 的 `related_name`，
-顯示從這個版本衍生出去的所有改版，讓使用者沿著版本鏈上下追溯。
-
-#### 下載：直接連 Google Drive
-
-`score_download` 與 `/scores/<pk>/download/` 已移除（檔案不再存在本系統）。有 `drive_url` 的樂譜在詳情頁顯示
-「在 Google Drive 開啟」、分譜顯示「下載」，連結 `target="_blank" rel="noopener noreferrer"`；沒有連結顯示「無數位版本」／「尚無連結」。
+已併入 §4.8（藏譜，幹部限定）與 §4.19（演出分譜，團員依族群）。
+2026-10-22 之前團員可瀏覽樂譜庫存（曾限縮為「只看已排進演出的曲目」），藏譜改版後整個樂譜庫存改為幹部限定：
+藏譜資料夾裡有未切割的完整譜（B），不給團員；導覽列的「樂譜庫存」也從「團練」下拉移到幹部區。
 
 ---
 
@@ -1884,58 +1625,44 @@ def push_line_message(text: str) -> None:
 
 ---
 
-### 4.19 演出分譜下載（scores）
+### 4.19 演出分譜下載（scores）與樂譜資料夾設定（events）
 
-**檔案**：`apps/scores/views.py`（`performance_parts`）、路由：`/scores/performance/<pk>/parts/`
-入口：演出活動詳情頁「演出曲目」卡片的「我的分譜」按鈕（有排定曲目時才顯示）。
+**檔案**：`apps/scores/views.py`（`performance_parts`，路由 `/scores/performance/<pk>/parts/`）、
+`apps/events/views.py`（`score_folders_manage`，路由 `/events/<pk>/score-folders/`）
 
-**登入者可用**，依登入者的樂器族群，自動篩選出這場演出曲目單裡用得到的分譜。
+入口：演出活動詳情頁「演出曲目」卡片的「我的分譜」（幹部顯示「樂譜資料夾」）、演出活動列表、首頁「下載音樂會譜」卡片。
 
-#### 資料查詢邏輯
+#### 誰看得到什麼
 
-```python
-parts = Score.objects.filter(
-    score_type=Score.ScoreType.PART,
-    full_score__setlists__event=event,           # 分譜的總譜有被排進這場演出
-    instrument__family=request.user.instrument,  # 依登入者的樂器族群
-).select_related('instrument', 'full_score').distinct()
-```
+| | 典藏（帳號 1）| 總譜 A（帳號 2）| 自己族群 C | 其他族群 C |
+|---|:---:|:---:|:---:|:---:|
+| 團員 | ✗ | ✗ | ✓ | ✗ |
+| 幹部 | ✓ | ✓ | ✓ | ✓ |
 
-關聯路徑是 **PerformanceEvent → Setlist.score（總譜）→ Score.parts（分譜）**，不是直接從分譜連到演出。
-分譜透過 `full_score` 掛在總譜下，被 `Setlist` 排進演出的是總譜，所以要用 `full_score__setlists__event`
-反查。查完依所屬總譜（曲目）分組，前端一首一首列出。
+團員頁面只有一顆「下載<族群>分譜」按鈕，連到帳號 2 的 `<年月日音樂會名稱>/<族群>` 資料夾；
+Drive 下載資料夾時會連同底下各樂器子資料夾打包成 zip，這就是「一鍵下載」。
+（2026-10 曾做過「一次開多個分頁」的過渡版，改版後由族群資料夾取代。）
+族群直接對應 `User.instrument`（族群層級），所以系統記到族群這層即可，不需要記到樂器。
 
-> **⚠️ 樂器層級差一層（實作時的關鍵修正）**
-> `User.instrument` 指向 **`InstrumentFamily`（族群）**，而 `Score.instrument` 指向
-> **`InstrumentType`（具體樂器）**，兩者不同層級。所以不能寫 `instrument=request.user.instrument`
-> （型別對不上），必須用 `instrument__family=request.user.instrument` 以族群比對。
-> 本節早期曾寫成 `setlist__event` ＋ `instrument=user.instrument`，兩處都與實際 Model 對不上，
-> 2026-07-31 實作時依真實 schema 修正。
+#### ⚠️ 系統只控制「顯示哪個連結」，擋檔案靠 Drive 分享設定
 
-#### 顯示規則：族群內全列，讓團員自選
+- 各族群資料夾分別設「知道連結的人可檢視」
+- 「總譜」資料夾只分享給幹部的 Google 帳號
+- 場次資料夾本身**不要**開連結分享，否則底下所有子資料夾（含總譜）都會被看到
 
-同族群底下各具體樂器的分譜全部列出（例：薩克斯風族會同時出現中音、次中音…各樂器），
-有 Drive 連結的顯示下載按鈕，沒連結的顯示「尚無連結」。
+已知取捨：族群連結是「知道連結就能看」，團員轉給其他族群的人系統擋不住。C 本來就要發給團員，可接受；
+若要連這個都擋，得每個族群資料夾只分享給該族群團員的帳號，維護成本太高。
 
-#### 一鍵開啟全部
+#### 資料夾設定頁（score_folders_manage，幹部）
 
-頁面上方有「一鍵開啟全部分譜（N 份）」按鈕：view 把所有有 `drive_url` 的分譜連結組成 `download_urls`
-（以 `json_script` 交給前端），點擊時 JS 逐一 `window.open(url, '_blank', 'noopener')`。
-樂譜檔案在 Google Drive、系統只存連結，伺服器無法代為打包 zip，所以用「一次開多個分頁」取代一個一個點。
-同族群的各樂器分譜都會開（與列表一致）；沒有任何連結時不顯示按鈕。瀏覽器可能擋彈出視窗，頁面已提示使用者選「允許」。
+一頁填完：總譜、典藏、13 個族群（依類別分組）。族群全部選填，再次送出以送出內容為準（清空 = 移除）；
+任一格不是 Google 連結就整批不存並帶回已填值。支援批次貼上「族群名稱 連結」（前端依名稱配對，取最長命中），
+也可以貼「總譜 連結」。頁面上提示 Drive 場次資料夾命名（`event.tag`）與上面的分享設定。
 
-#### 設計選擇：不強制指定聲部
+#### 之後：Google Drive API 自動帶入（未做，待討論）
 
-指揮可能在排練過程中調度聲部，事先指定每位團員的聲部會增加維護負擔。
-系統只負責篩選「正確樂器族群」的譜，由團員登入後自行判斷要下載哪個聲部——
-這也正好呼應「User 只記錄到族群層級」的資料設計：族群篩選是現有欄位能做到的最精準篩選。
-
-#### 邊界情況
-
-| 情況 | 前端顯示 |
-|------|---------|
-| 登入者未設定樂器族群（`User.instrument` 為空）| 提示請洽幹部設定，並附樂譜庫存連結 |
-| 這場沒有該族群的分譜 | 友善訊息（可能尚未上傳或曲目未排定）|
+只貼場次資料夾，系統讀出「總譜」與各族群子資料夾自動配對。需要 Google 服務帳號、把兩個帳號的根目錄分享給它、
+金鑰放環境變數；與「掃描藏譜資料夾自動建藏譜」是同一套基礎，一起評估。見 BACKLOG。
 
 ---
 

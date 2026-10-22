@@ -38,9 +38,13 @@
           <tr>
             <td class="text-center">{{ item.order }}</td>
             <td>
-              <a href="{% url 'scores:score_detail' item.score.pk %}" class="text-decoration-none">
-                {{ item.score.title }}
-              </a>
+              {% if item.score %}
+              <a href="{% url 'scores:score_detail' item.score.pk %}" class="text-decoration-none">{{ item.score }}</a>
+              {% else %}
+              {{ item.unarchived_title }}
+              <span class="badge bg-secondary ms-1" title="{{ item.unarchived_reason }}">未入藏</span>
+              <div class="small text-muted">{{ item.unarchived_reason }}</div>
+              {% endif %}
             </td>
             <td class="text-muted small">{{ item.score.composer|default:"—" }}</td>
             <td class="text-end">
@@ -49,7 +53,7 @@
                 <input type="hidden" name="action" value="remove">
                 <input type="hidden" name="item_id" value="{{ item.pk }}">
                 <button class="btn btn-sm btn-outline-danger"
-                        onclick="return confirm('確認移除《{{ item.score.title }}》？')">
+                        onclick="return confirm('確認移除《{{ item.display_title }}》？')">
                   <i class="bi bi-trash"></i>
                 </button>
               </form>
@@ -74,13 +78,13 @@
           <input type="hidden" name="action" value="add">
 
           <div class="mb-3">
-            <label class="form-label">曲目（總譜）</label>
+            <label class="form-label">曲目（藏譜）</label>
             <select name="score_id" class="form-select" required>
               <option value="">— 請選擇 —</option>
               {% for score in available_scores %}
               <option value="{{ score.pk }}"
                 {% if score.pk in used_score_ids %}disabled{% endif %}>
-                {{ score.title }}
+                {{ score }}
                 {% if score.pk in used_score_ids %}（已加入）{% endif %}
                 {% if score.composer %} ／ {{ score.composer }}{% endif %}
               </option>
@@ -88,9 +92,9 @@
             </select>
             {% if not available_scores %}
             <div class="form-text text-warning">
-              樂譜庫存中尚無總譜，請先至
-              <a href="{% url 'scores:score_list' %}">樂譜庫存</a>
-              新增。
+              樂譜庫存中尚無藏譜，請先至
+              <a href="{% url 'scores:score_create' %}">樂譜庫存</a>
+              新增，或用下方「未入藏曲目」。
             </div>
             {% endif %}
           </div>
@@ -104,6 +108,32 @@
           <button class="btn btn-primary w-100" {% if not available_scores %}disabled{% endif %}>
             <i class="bi bi-plus-lg"></i> 加入曲目
           </button>
+        </form>
+      </div>
+    </div>
+
+    {% comment %} 特例：借來演一次、不入藏的曲目，只填曲名＋原因；樂譜庫存頁會列出來讓幹部追蹤。 {% endcomment %}
+    <div class="card mt-3">
+      <div class="card-header fw-semibold">未入藏曲目（特例）</div>
+      <div class="card-body">
+        <p class="small text-muted">不建藏譜的曲目，例如向他團借譜、演完歸還。會列在樂譜庫存的「未入藏的演出曲目」。</p>
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="add_unarchived">
+          <div class="mb-2">
+            <label class="form-label">曲名</label>
+            <input type="text" name="unarchived_title" class="form-control" maxlength="200" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">未入藏原因</label>
+            <input type="text" name="unarchived_reason" class="form-control" maxlength="200" required
+                   placeholder="例如：向某團借譜，演完歸還">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">演出順序</label>
+            <input type="number" name="order" class="form-control" min="1" value="{{ next_order }}" required>
+          </div>
+          <button class="btn btn-outline-primary w-100"><i class="bi bi-plus-lg"></i> 加入未入藏曲目</button>
         </form>
       </div>
     </div>

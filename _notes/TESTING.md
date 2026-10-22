@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-10-22（共 599 個測試）
+> 最後更新：2026-10-22（共 553 個測試；藏譜改版重寫 scores 測試）
 
 ---
 
@@ -90,7 +90,7 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **561 個測試**，分布在 8 個 app。
+共 **553 個測試**，分布在 8 個 app。
 
 > 最近一次全站測試：2026-10-04 執行 `python manage.py test`，**561/561 全數通過、無 regression**（System check 亦無問題）。
 
@@ -115,7 +115,7 @@ python manage.py test --noinput
 | `MemberDirectoryReportTest` | 通訊錄列印報表：存取控制（未登入/一般團員無權限含電話Email→導回通訊錄/幹部可看）、顯示姓名電話Email、依樂器族群分組、列印按鈕、status 篩選（預設在團排除退團、inactive、all）|
 | `GuestManageTest` | 客座團員（槍手）管理：存取控制、CRUD（新增設 role=guest／不可登入／空 email 存 NULL、姓名必填、email 重複擋、編輯、刪除）、轉正（改 member／補 email／開通登入／強制改密碼、缺 email 擋）、資安（guest 即使有密碼也被登入表單擋、通訊錄排除 guest、guest 列表顯示）|
 
-### `apps/events/tests.py`（149 個）
+### `apps/events/tests.py`（162 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -124,9 +124,11 @@ python manage.py test --noinput
 | `PerformanceIntentTestCase` | 演出出席意願三態（#13-6）：存取控制、確認參加、不參加需填原因、改回確認要清掉原因、可反覆改且不產生第二筆、演出開始後鎖住、無效值與 GET 不改狀態、intent 與 attended 互不影響、統計頁限幹部、三態計數、**沒有紀錄的人要出現在待確認名單**、依聲部分組、顯示不參加原因、排除客座團員、詳情頁表態入口與目前狀態、我的請假頁不再有演出請假 |
 | `EventViewsTest` | 演出活動列表/詳情、排練詳情、摘要/備註顯示、申請請假按鈕（未來啟用/過去停用）、活動詳情頁請假捷徑連結（未來顯示/過去不顯示）|
 | `QRCodeTest` | QR 管理頁存取控制、產生 token、重新產生換 UUID、小時數邊界、停用/啟用 toggle、簽到頁顯示、已簽到提示、簽到確認建立出席紀錄、團員簽到入口（排練詳情頁／首頁在 QR 有效時顯示「我要簽到」，無 QR 或已停用時不顯示）|
-| `PracticeMenuTest` | 導覽列「團練」下拉含五個入口、團練日誌需登入、只列已開始排練並標示有無摘要、簽到入口有 QR 時導向簽到頁／沒有時導回首頁並說明 |
+| `PracticeMenuTest` | 導覽列「團練」下拉含四個入口（樂譜庫存已移到幹部區、團員看不到）、團練日誌需登入、只列已開始排練並標示有無摘要、簽到入口有 QR 時導向簽到頁／沒有時導回首頁並說明 |
 | `EventListDownloadButtonTest` | 演出活動列表每場即將到來的演出旁有「下載我的樂譜」並連到該場分譜下載頁 |
-| `SetlistManageTest` | 曲目管理存取控制、新增總譜成功、新增分譜被擋（404）、重複順序被擋、移除曲目 |
+| `SetlistManageTest` | 曲目管理存取控制、從藏譜新增成功、不存在的藏譜 404、重複順序被擋、未入藏特例（曲名＋原因）可加入、未入藏缺原因被擋、未入藏曲目顯示「未入藏」標記、移除曲目 |
+| `SetlistModelTest` | `Setlist.clean()`：藏譜與未入藏曲名二擇一、未入藏需原因；`PerformanceEvent.tag` 為本地日期＋名稱（20270124輔韻之聲）|
+| `ScoreFoldersManageTest` | 演出樂譜資料夾設定：團員被擋、幹部頁面每族群一格依類別分組並提示資料夾命名、儲存總譜／典藏／族群連結（拿掉 /u/1/）、清空移除族群資料夾、非 Google 連結整批不存並帶回已填值 |
 | `AttendanceReportTest` | 存取控制（未登入/一般團員/幹部）、404、出席/請假分類計數、**「無紀錄」只保留給未過截止的排練（已過截止無紀錄＝缺席，#13-7）**、個人出席率計算 |
 | `LeaveStatsTest` | 存取控制、預設最新活動、排練層計數（核准/待審）、個人層出現、按總次數遞減排序 |
 | `LeaveRequestPastRehearsalTest` | 直接 POST 到已結束排練的請假 URL 應被 server-side 阻擋 |
@@ -134,20 +136,20 @@ python manage.py test --noinput
 | `EventDeleteTest` | 團員/幹部無法刪除、GET 不刪除、管理員 POST 刪除並導回列表、刪除 cascade 排練、刪除按鈕在列表頁與詳情頁皆出現（管理員可見/幹部不可見）|
 | `RehearsalManageTest` | 存取控制（未登入/團員/幹部）、新增排練成功、重複 sequence 被擋、空日期被擋、編輯排練更新 sequence |
 
-### `apps/scores/tests.py`（108 個）
+### `apps/scores/tests.py`（49 個）
+
+2026-10-22 藏譜改版後重寫（舊的總譜／分譜、分譜管理頁測試隨功能移除）。
 
 | Class | 測試內容 |
 |-------|---------|
-| `ScoreModelValidationTest` | `clean()` 驗證：總譜不可有樂器／手填名稱／full_score、分譜的 full_score 必須指向總譜；「其他（手填）」必須填名稱、一般樂器不可手填；`__str__`／`instrument_label` 格式（一般、手填、總譜）；`drive_url` 只收 https 的 Google 網域（http、外站、偽裝網域一律拒絕）|
-| `NormalizeDriveUrlTest` | 連結整理：拿掉 `/u/數字/`（資料夾、文件、多位數帳號編號）、保留查詢參數、不誤刪檔案 id 裡的 u、去頭尾空白、非 Google 網址原樣留給驗證擋、`save()` 安全網 |
-| `ScoreListViewTest` | 存取控制、只列總譜（#13-4：分譜不出現、舊 `?type=part` 網址失效）、分譜份數欄、`instrument` 篩選改篩「有此樂器分譜的總譜」（含去重、排除、份數不受篩選影響）、關鍵字搜尋、無結果空狀態、未綁總譜分譜的幹部限定警告區、刪除按鈕限管理員可見、團員只看得到已排進演出的曲目（幹部看全部） |
-| `ScoreDetailViewTest` | 存取控制、曲名/作曲顯示、404、無 PDF 顯示提示、麵包屑帶/不帶篩選條件連回列表、總譜詳情頁連到每份分譜（#13-4 後分譜的唯一入口）、管理員可刪單一分譜、刪分譜導回所屬總譜、刪總譜仍導回清單、幹部不可刪、團員直接輸入網址看未排定曲目回 404（分譜看所屬總譜） |
-| `ScoreCreateViewTest` | 存取控制（未登入/一般團員/幹部）、POST 新增總譜成功並導向詳情頁、POST 新增分譜（含樂器）成功、空曲名不建立記錄、分譜缺樂器不建立記錄、新增分譜時指定 full_score 正確綁定、總譜忽略殘留的 full_score 值 |
-| `ScoreEditViewTest` | 存取控制（未登入/一般團員/幹部）、GET 既有資料預先帶入欄位、404、POST 更新成功、空曲名不更新、沒送 drive_url 保留原連結、送新連結取代、非 Google 連結被擋下且原連結不變、貼帶 /u/1/ 的連結存成整理後的版本、編輯分譜綁定總譜 |
-| `ScoreDeleteViewTest` | 一般幹部無法刪除、管理員可刪除並導向列表、刪除總譜連帶刪除分譜（CASCADE）、被 Setlist 或 ScoreExchangeItem 引用（PROTECT）時即使管理員也無法刪除 |
-| `ScoreDriveLinkDisplayTest` | 詳情頁有 Drive 連結就直接連過去（新分頁、`noopener noreferrer`）、沒連結顯示「無數位版本」、舊 `/download/` 路由已移除（404）|
-| `ScorePartsManageTest` | 存取控制（未登入／團員 GET 與 POST／幹部）、分譜／無效 pk 回 404、每種樂器一格輸入框且不含「其他（手填）」、只填的樂器建分譜（繼承曲名與版權）、再送出更新不重複、貼帶 /u/1/ 的連結存成整理後版本（樂器格與手填列）、清空格子移除分譜、全部留白被擋、非 Google 連結整批不存並帶回填的值、手填列（多列、名稱與連結缺一不可、沒帶上的手填列被移除、GET 回填）|
-| `PerformancePartsViewTest` | 演出分譜下載入口：存取控制（未登入/登入）、無效演出 pk 回 404、依登入者樂器族群篩選（列出同族群、排除他族群）、非本場曲目的分譜排除、未設族群顯示提示、無對應分譜顯示空狀態、「一鍵開啟全部」按鈕只含自己族群的連結／無連結時不顯示 |
+| `ScoreModelTest` | 只要曲名＋藏譜資料夾即合法（版權等選填）、藏譜資料夾必填、兩個連結只收 https 的 Google 網域、`is_cut` 依分譜資料夾、`__str__` 含編曲者與版本說明 |
+| `NormalizeDriveUrlTest` | 連結整理：拿掉 `/u/數字/`（資料夾、文件、多位數帳號編號）、保留查詢參數、不誤刪檔案 id 裡的 u、去頭尾空白、非 Google 網址原樣留給驗證擋、`save()` 安全網（藏譜與分譜資料夾都整理）|
+| `ScoreAccessTest` | 樂譜庫存整個限幹部：未登入導向登入、團員（列表／新增／詳情／編輯）導回首頁並提示權限不足、團員 POST 新增無效、幹部可進、導覽列連結只出現在幹部畫面 |
+| `ScoreListViewTest` | 關鍵字搜尋（曲名／作曲／編曲）、已切割／未切割篩選、依演出篩選、演出標籤與次數、次數排除取消與未來場次且同場重複只算一次（未來場次仍顯示空心標籤）、依次數排序、「已演出但尚未歸檔分譜」待辦（只排未來演出的不列）、「未入藏的演出曲目」待辦、刪除按鈕限管理員 |
+| `ScoreDetailViewTest` | 已切割顯示分譜與藏譜資料夾連結（新分頁、`noopener noreferrer`）、未切割顯示藏譜資料夾與歸檔提示、演出標籤／次數／連回活動、404 |
+| `ScoreCreateEditViewTest` | 只填曲名＋藏譜資料夾即可新增（版權可空）、缺藏譜資料夾被擋、非 Google 連結被擋（兩個欄位）、存成拿掉 /u/1/ 的連結、表單已無改版自／實體數量／譜種／樂器／所屬總譜、同曲名＋編曲＋版本跳警告但仍建立、不同版本不警告、編輯預先帶入與更新、無效編輯不存 |
+| `ScoreDeleteViewTest` | 幹部無法刪除、管理員可刪除並導回列表、被 Setlist 或 ScoreExchangeItem 引用（PROTECT）時擋下 |
+| `PerformancePartsViewTest` | 演出分譜下載：未登入導向登入、無效演出 404、團員只看到自己族群資料夾（看不到其他族群、總譜、典藏）、未設族群顯示提示、族群尚無資料夾顯示提示、幹部看到總譜／典藏／所有族群與設定連結 |
 
 ### `apps/assets/tests.py`（9 個）
 
@@ -325,8 +327,7 @@ def test_invalid_state_raises(self):
 | App | 功能 | 說明 |
 |-----|------|------|
 | `public` | `about_manage` / `about_create` / `about_edit` / `about_delete` | 關於百韻內容管理，尚無自動測試 |
-| `scores` | 分譜管理頁「批次貼上」的名稱→樂器自動配對（前端 JS） | Django 測試碰不到瀏覽器 JS；2026-10-15 以 node 對真實樂器清單手動驗證過配對規則，後端不信任前端、只驗收最後送出的欄位（見 DESIGN §分譜連結管理）|
-| `scores` | 分譜下載頁「一鍵開啟全部」的 `window.open` 行為與彈出視窗攔截 | Django 測試碰不到瀏覽器 JS；後端只驗證按鈕與連結清單 |
-| `scores` | 首頁／分譜管理頁在真實瀏覽器的版面 | 無瀏覽器自動化測試；雲端環境連不到 CDN、Bootstrap 沒載入，只能看結構 |
+| `events` | 演出樂譜資料夾設定頁「批次貼上」的名稱→族群自動配對（前端 JS） | Django 測試碰不到瀏覽器 JS；2026-10-22 以 node 對 13 個族群名稱＋「總譜」手動驗證過配對（含「上低音號」不被「低音號」搶走）；後端不信任前端、只驗收最後送出的欄位 |
+| `scores` | 樂譜庫存／演出樂譜資料夾在真實瀏覽器的版面 | 無瀏覽器自動化測試；雲端環境連不到 CDN、Bootstrap 沒載入，只能看結構 |
 | `meetings` | 所有功能 | Phase 3，尚未實作 |
 | `notifications` | Admin 觸發通知的整合測試 | 需要 mock Admin save_model，目前僅覆蓋 utils 層 |

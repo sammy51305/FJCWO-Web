@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ score.title }} — 樂譜庫存 — 百韻管樂團{% endblock %}
+{% block title %}{{ score }} — 樂譜庫存 — 百韻管樂團{% endblock %}
 
 {% block content %}
 <nav aria-label="breadcrumb" class="mb-3">
@@ -14,38 +14,18 @@
   <div>
     <h2 class="mb-1">{{ score.title }}</h2>
     <div class="d-flex gap-2 flex-wrap">
-      {% if score.score_type == 'full' %}
-        <span class="badge bg-primary">總譜</span>
+      {% if score.version_note %}<span class="badge bg-light text-dark border">{{ score.version_note }}</span>{% endif %}
+      {% if score.is_cut %}
+        <span class="badge bg-success">已切割</span>
       {% else %}
-        <span class="badge bg-secondary">分譜</span>
-        {% if score.instrument %}<span class="badge bg-light text-dark border">{{ score.instrument_label }}</span>{% endif %}
+        <span class="badge bg-light text-muted border">未切割</span>
       {% endif %}
       {% if score.difficulty %}
         <span class="badge bg-light text-dark border">{{ score.get_difficulty_display }}</span>
       {% endif %}
     </div>
-    {# #13-4：分譜不再列在庫存清單上，只能從總譜詳情頁進來，這裡要留回頭路 #}
-    {% if score.score_type == 'part' %}
-    <div class="small mt-2">
-      {% if score.full_score %}
-        <span class="text-muted">所屬總譜：</span>
-        <a href="{% url 'scores:score_detail' score.full_score.pk %}">{{ score.full_score.title }}</a>
-      {% else %}
-        <span class="text-warning">
-          <i class="bi bi-exclamation-triangle"></i>
-          未綁定總譜——請「編輯」補上所屬總譜，否則這份分譜不會出現在任何總譜底下。
-        </span>
-      {% endif %}
-    </div>
-    {% endif %}
   </div>
-  {% if user.is_officer %}
   <div class="d-flex gap-2">
-    {% if score.score_type == 'full' %}
-    <a href="{% url 'scores:score_parts_manage' score.pk %}" class="btn btn-outline-primary btn-sm">
-      <i class="bi bi-music-note-list"></i> 管理分譜
-    </a>
-    {% endif %}
     <a href="{% url 'scores:score_edit' score.pk %}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-pencil"></i> 編輯
     </a>
@@ -53,18 +33,39 @@
     <form method="post" action="{% url 'scores:score_delete' score.pk %}" class="d-inline">
       {% csrf_token %}
       <button type="submit" class="btn btn-outline-danger btn-sm"
-              onclick="return confirm('確定要刪除樂譜《{{ score.title }}》嗎？{% if score.score_type == 'full' %}此操作將一併刪除所有分譜。{% endif %}無法復原。')">
+              onclick="return confirm('確定要刪除藏譜《{{ score }}》嗎？無法復原。')">
         <i class="bi bi-trash"></i> 刪除
       </button>
     </form>
     {% endif %}
   </div>
-  {% endif %}
 </div>
 
 <div class="row g-4">
   <div class="col-md-6">
-    <div class="card">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">樂譜檔案</div>
+      <div class="card-body">
+        {% if score.is_cut %}
+        <a href="{{ score.parts_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-success mb-2">
+          <i class="bi bi-folder2-open"></i> 切割好的分譜（C）
+        </a>
+        <div class="small">
+          <a href="{{ score.drive_url }}" target="_blank" rel="noopener noreferrer">藏譜資料夾</a>
+          <span class="text-muted">（總譜 A、未切割譜 B）</span>
+        </div>
+        {% else %}
+        <a href="{{ score.drive_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary mb-2">
+          <i class="bi bi-folder2-open"></i> 藏譜資料夾（總譜 A、未切割譜 B）
+        </a>
+        <div class="small text-muted">尚未有切割好的分譜。演出後請把分譜整理到「藏譜/{{ score.title }}/分譜」，再編輯填上連結。</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card h-100">
       <div class="card-header fw-semibold">基本資料</div>
       <div class="card-body">
         <dl class="row mb-0">
@@ -76,98 +77,30 @@
           <dt class="col-sm-4">編曲</dt>
           <dd class="col-sm-8">{{ score.arranger }}</dd>
           {% endif %}
+          {% if score.version_note %}
+          <dt class="col-sm-4">版本說明</dt>
+          <dd class="col-sm-8">{{ score.version_note }}</dd>
+          {% endif %}
           <dt class="col-sm-4">版權</dt>
-          <dd class="col-sm-8">
-            {% if score.copyright_status == 'public_domain' %}<span class="badge bg-success">公版</span>
-            {% elif score.copyright_status == 'licensed' %}<span class="badge bg-info text-dark">已授權</span>
-            {% else %}<span class="badge bg-warning text-dark">有版權</span>{% endif %}
-          </dd>
+          <dd class="col-sm-8">{{ score.get_copyright_status_display|default:"—" }}</dd>
           {% if score.publisher %}
           <dt class="col-sm-4">出版商</dt>
           <dd class="col-sm-8">{{ score.publisher }}</dd>
           {% endif %}
           <dt class="col-sm-4">來源</dt>
           <dd class="col-sm-8">{{ score.get_source_display|default:"—" }}</dd>
-          <dt class="col-sm-4">實體數量</dt>
-          <dd class="col-sm-8">{{ score.physical_quantity }} 本</dd>
-          <dt class="col-sm-4">樂譜</dt>
-          <dd class="col-sm-8">
-            {% if score.drive_url %}
-              <a href="{{ score.drive_url }}" target="_blank" rel="noopener noreferrer">在 Google Drive 開啟</a>
-            {% else %}
-              <span class="text-muted">無數位版本</span>
-            {% endif %}
-          </dd>
         </dl>
       </div>
     </div>
   </div>
 
-  {% if score.score_type == 'full' %}
-  <div class="col-12 mt-2">
+  <div class="col-12">
     <div class="card">
-      <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
-        分譜清單
-        {% if user.is_officer %}
-        <a href="{% url 'scores:score_parts_manage' score.pk %}" class="btn btn-outline-primary btn-sm">
-          <i class="bi bi-pencil"></i> 管理
-        </a>
-        {% endif %}
-      </div>
+      <div class="card-header fw-semibold">演出紀錄</div>
       <div class="card-body">
-        {% if not score.parts.all %}
-        <p class="text-muted mb-0">尚未登錄任何分譜連結。{% if user.is_officer %}可從上方「管理」貼上各樂器的 Google Drive 連結。{% endif %}</p>
-        {% endif %}
-        <div class="d-flex flex-wrap gap-2">
-          {% for part in score.parts.all %}
-          <div class="border rounded px-3 py-2 small">
-            <div class="fw-medium">{{ part.instrument_label }}</div>
-            <div class="d-flex gap-2 mt-1">
-              {% if part.drive_url %}
-              <a href="{{ part.drive_url }}" target="_blank" rel="noopener noreferrer" class="text-success">
-                <i class="bi bi-download"></i> 下載
-              </a>
-              {% else %}
-              <span class="text-muted">尚無連結</span>
-              {% endif %}
-              {% comment %} #13-4 之後這裡是進入分譜詳情的唯一入口。沒有這個連結，
-                 分譜就編輯不到也刪不掉——庫存清單已經不列分譜了。 {% endcomment %}
-              <a href="{% url 'scores:score_detail' part.pk %}" class="text-secondary">詳細</a>
-            </div>
-          </div>
-          {% endfor %}
-        </div>
+        {% include "scores/_performance_tags.html" %}
       </div>
     </div>
   </div>
-  {% endif %}
-
-  {% if score.parent_score or versions %}
-  <div class="col-md-6">
-    <div class="card">
-      <div class="card-header fw-semibold">版本資訊</div>
-      <div class="card-body">
-        {% if score.parent_score %}
-        <p class="mb-2 small text-muted">改版自：
-          <a href="{% url 'scores:score_detail' score.parent_score.pk %}">{{ score.parent_score.title }}</a>
-        </p>
-        {% endif %}
-        {% if score.version_note %}
-        <p class="small mb-2">{{ score.version_note }}</p>
-        {% endif %}
-        {% if versions %}
-        <p class="mb-1 small fw-semibold">衍生版本：</p>
-        <ul class="list-unstyled mb-0">
-          {% for v in versions %}
-          <li class="small">
-            <a href="{% url 'scores:score_detail' v.pk %}">{{ v }}</a>
-          </li>
-          {% endfor %}
-        </ul>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-  {% endif %}
 </div>
 {% endblock %}
