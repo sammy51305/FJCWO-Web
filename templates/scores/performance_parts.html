@@ -29,6 +29,17 @@
 <p class="text-muted small mb-3">
   同族群的各樂器分譜都會列出，請依你實際演奏的樂器自行選擇下載。
 </p>
+{% if download_urls %}
+<div class="mb-3">
+  <button type="button" class="btn btn-success" id="open-all-parts">
+    <i class="bi bi-cloud-download"></i> 一鍵開啟全部分譜（{{ download_urls|length }} 份）
+  </button>
+  <div class="form-text">
+    會在新分頁一次打開以下所有有連結的分譜。若瀏覽器擋住彈出視窗，請選「允許」後再按一次。
+  </div>
+</div>
+{{ download_urls|json_script:"part-urls" }}
+{% endif %}
 {% for group in groups %}
 <div class="card mb-3">
   <div class="card-header fw-semibold">{{ group.full_score.title }}</div>
@@ -50,5 +61,17 @@
   </div>
 </div>
 {% endfor %}
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if download_urls %}
+<script>
+  document.getElementById('open-all-parts').addEventListener('click', function () {
+    JSON.parse(document.getElementById('part-urls').textContent).forEach(function (url) {
+      window.open(url, '_blank', 'noopener');
+    });
+  });
+</script>
 {% endif %}
 {% endblock %}

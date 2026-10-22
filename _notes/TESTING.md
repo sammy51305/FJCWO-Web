@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-10-15（共 593 個測試）
+> 最後更新：2026-10-22（共 599 個測試）
 
 ---
 
@@ -134,20 +134,20 @@ python manage.py test --noinput
 | `EventDeleteTest` | 團員/幹部無法刪除、GET 不刪除、管理員 POST 刪除並導回列表、刪除 cascade 排練、刪除按鈕在列表頁與詳情頁皆出現（管理員可見/幹部不可見）|
 | `RehearsalManageTest` | 存取控制（未登入/團員/幹部）、新增排練成功、重複 sequence 被擋、空日期被擋、編輯排練更新 sequence |
 
-### `apps/scores/tests.py`（102 個）
+### `apps/scores/tests.py`（108 個）
 
 | Class | 測試內容 |
 |-------|---------|
 | `ScoreModelValidationTest` | `clean()` 驗證：總譜不可有樂器／手填名稱／full_score、分譜的 full_score 必須指向總譜；「其他（手填）」必須填名稱、一般樂器不可手填；`__str__`／`instrument_label` 格式（一般、手填、總譜）；`drive_url` 只收 https 的 Google 網域（http、外站、偽裝網域一律拒絕）|
 | `NormalizeDriveUrlTest` | 連結整理：拿掉 `/u/數字/`（資料夾、文件、多位數帳號編號）、保留查詢參數、不誤刪檔案 id 裡的 u、去頭尾空白、非 Google 網址原樣留給驗證擋、`save()` 安全網 |
-| `ScoreListViewTest` | 存取控制、只列總譜（#13-4：分譜不出現、舊 `?type=part` 網址失效）、分譜份數欄、`instrument` 篩選改篩「有此樂器分譜的總譜」（含去重、排除、份數不受篩選影響）、關鍵字搜尋、無結果空狀態、未綁總譜分譜的幹部限定警告區、刪除按鈕限管理員可見 |
-| `ScoreDetailViewTest` | 存取控制、曲名/作曲顯示、404、無 PDF 顯示提示、麵包屑帶/不帶篩選條件連回列表、總譜詳情頁連到每份分譜（#13-4 後分譜的唯一入口）、管理員可刪單一分譜、刪分譜導回所屬總譜、刪總譜仍導回清單、幹部不可刪 |
+| `ScoreListViewTest` | 存取控制、只列總譜（#13-4：分譜不出現、舊 `?type=part` 網址失效）、分譜份數欄、`instrument` 篩選改篩「有此樂器分譜的總譜」（含去重、排除、份數不受篩選影響）、關鍵字搜尋、無結果空狀態、未綁總譜分譜的幹部限定警告區、刪除按鈕限管理員可見、團員只看得到已排進演出的曲目（幹部看全部） |
+| `ScoreDetailViewTest` | 存取控制、曲名/作曲顯示、404、無 PDF 顯示提示、麵包屑帶/不帶篩選條件連回列表、總譜詳情頁連到每份分譜（#13-4 後分譜的唯一入口）、管理員可刪單一分譜、刪分譜導回所屬總譜、刪總譜仍導回清單、幹部不可刪、團員直接輸入網址看未排定曲目回 404（分譜看所屬總譜） |
 | `ScoreCreateViewTest` | 存取控制（未登入/一般團員/幹部）、POST 新增總譜成功並導向詳情頁、POST 新增分譜（含樂器）成功、空曲名不建立記錄、分譜缺樂器不建立記錄、新增分譜時指定 full_score 正確綁定、總譜忽略殘留的 full_score 值 |
 | `ScoreEditViewTest` | 存取控制（未登入/一般團員/幹部）、GET 既有資料預先帶入欄位、404、POST 更新成功、空曲名不更新、沒送 drive_url 保留原連結、送新連結取代、非 Google 連結被擋下且原連結不變、貼帶 /u/1/ 的連結存成整理後的版本、編輯分譜綁定總譜 |
 | `ScoreDeleteViewTest` | 一般幹部無法刪除、管理員可刪除並導向列表、刪除總譜連帶刪除分譜（CASCADE）、被 Setlist 或 ScoreExchangeItem 引用（PROTECT）時即使管理員也無法刪除 |
 | `ScoreDriveLinkDisplayTest` | 詳情頁有 Drive 連結就直接連過去（新分頁、`noopener noreferrer`）、沒連結顯示「無數位版本」、舊 `/download/` 路由已移除（404）|
 | `ScorePartsManageTest` | 存取控制（未登入／團員 GET 與 POST／幹部）、分譜／無效 pk 回 404、每種樂器一格輸入框且不含「其他（手填）」、只填的樂器建分譜（繼承曲名與版權）、再送出更新不重複、貼帶 /u/1/ 的連結存成整理後版本（樂器格與手填列）、清空格子移除分譜、全部留白被擋、非 Google 連結整批不存並帶回填的值、手填列（多列、名稱與連結缺一不可、沒帶上的手填列被移除、GET 回填）|
-| `PerformancePartsViewTest` | 演出分譜下載入口：存取控制（未登入/登入）、無效演出 pk 回 404、依登入者樂器族群篩選（列出同族群、排除他族群）、非本場曲目的分譜排除、未設族群顯示提示、無對應分譜顯示空狀態 |
+| `PerformancePartsViewTest` | 演出分譜下載入口：存取控制（未登入/登入）、無效演出 pk 回 404、依登入者樂器族群篩選（列出同族群、排除他族群）、非本場曲目的分譜排除、未設族群顯示提示、無對應分譜顯示空狀態、「一鍵開啟全部」按鈕只含自己族群的連結／無連結時不顯示 |
 
 ### `apps/assets/tests.py`（9 個）
 
@@ -326,6 +326,7 @@ def test_invalid_state_raises(self):
 |-----|------|------|
 | `public` | `about_manage` / `about_create` / `about_edit` / `about_delete` | 關於百韻內容管理，尚無自動測試 |
 | `scores` | 分譜管理頁「批次貼上」的名稱→樂器自動配對（前端 JS） | Django 測試碰不到瀏覽器 JS；2026-10-15 以 node 對真實樂器清單手動驗證過配對規則，後端不信任前端、只驗收最後送出的欄位（見 DESIGN §分譜連結管理）|
+| `scores` | 分譜下載頁「一鍵開啟全部」的 `window.open` 行為與彈出視窗攔截 | Django 測試碰不到瀏覽器 JS；後端只驗證按鈕與連結清單 |
 | `scores` | 首頁／分譜管理頁在真實瀏覽器的版面 | 無瀏覽器自動化測試；雲端環境連不到 CDN、Bootstrap 沒載入，只能看結構 |
 | `meetings` | 所有功能 | Phase 3，尚未實作 |
 | `notifications` | Admin 觸發通知的整合測試 | 需要 mock Admin save_model，目前僅覆蓋 utils 層 |

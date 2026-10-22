@@ -1596,6 +1596,13 @@ available_scores = Score.objects.filter(score_type=Score.ScoreType.FULL)
 
 **登入者可用**，一般團員與幹部皆可瀏覽。
 
+#### 團員只看得到已排進演出的曲目（2026-10-22）
+
+`score_list`、`score_detail` 對一般團員只開放「已排進任一場演出曲目單（Setlist）」的總譜：
+列表加 `filter(setlists__isnull=False).distinct()`；詳情頁若所屬總譜（分譜看 `full_score`）沒排進演出就回 404，
+避免直接輸入網址繞過。幹部／管理員不受限，仍看得到全部（含尚未排定、孤兒分譜）。
+團員要拿自己的分譜，走 `performance_parts`（§4.19）。
+
 #### score_list：只列總譜（#13-4）
 
 清單**固定只列總譜，分譜完全不出現**——要看分譜一律從總譜詳情頁進去：
@@ -1909,6 +1916,13 @@ parts = Score.objects.filter(
 
 同族群底下各具體樂器的分譜全部列出（例：薩克斯風族會同時出現中音、次中音…各樂器），
 有 Drive 連結的顯示下載按鈕，沒連結的顯示「尚無連結」。
+
+#### 一鍵開啟全部
+
+頁面上方有「一鍵開啟全部分譜（N 份）」按鈕：view 把所有有 `drive_url` 的分譜連結組成 `download_urls`
+（以 `json_script` 交給前端），點擊時 JS 逐一 `window.open(url, '_blank', 'noopener')`。
+樂譜檔案在 Google Drive、系統只存連結，伺服器無法代為打包 zip，所以用「一次開多個分頁」取代一個一個點。
+同族群的各樂器分譜都會開（與列表一致）；沒有任何連結時不顯示按鈕。瀏覽器可能擋彈出視窗，頁面已提示使用者選「允許」。
 
 #### 設計選擇：不強制指定聲部
 
