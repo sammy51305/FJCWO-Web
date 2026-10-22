@@ -471,8 +471,16 @@ def performance_parts(request, pk):
             )['parts'].append(part)
         groups = list(grouped.values())
 
+    # 「一鍵開啟全部」用：所有有 Drive 連結的分譜（檔案在 Google Drive，系統無法代為打包）
+    download_urls = [
+        part.drive_url
+        for group in groups for part in group['parts']
+        if part.drive_url
+    ]
+
     return render(request, 'scores/performance_parts.html', {
         'event': event,
         'groups': groups,
         'user_family': user_family,
+        'download_urls': download_urls,
     })

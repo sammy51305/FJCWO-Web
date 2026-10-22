@@ -1251,3 +1251,21 @@ class PerformancePartsViewTest(TestCase):
         self.client.force_login(self.member)
         r = self.client.get(self.url)
         self.assertContains(r, '沒有')
+        self.assertNotContains(r, 'open-all-parts')
+
+    # ── T04 一鍵開啟全部 ─────────────────────────────────────
+
+    def test_open_all_button_lists_only_own_family_links(self):
+        """有連結的分譜出現「一鍵開啟全部」按鈕，且只含自己族群、不含他族群"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertContains(r, 'open-all-parts')
+        self.assertEqual(r.context['download_urls'], [DRIVE])
+
+    def test_open_all_button_hidden_when_no_links(self):
+        """分譜都還沒貼連結時，不顯示一鍵按鈕"""
+        self.flute_part.drive_url = ''
+        self.flute_part.save()
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertNotContains(r, 'open-all-parts')
