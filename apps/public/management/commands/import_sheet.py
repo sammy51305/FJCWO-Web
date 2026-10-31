@@ -18,6 +18,7 @@ manage.py import_sheet
 | 請假紀錄 | `LeaveRequest`（核准者同步出席為請假） | 團員 × 排練日期 |
 | 團費期別 | `FeePeriod` | 年份 × 期 |
 | 團費收繳 | `MembershipFee`（已繳者同步收支明細收入） | 團員 × 期別 |
+| 支出紀錄 | `FinanceRecord`（支出） | 日期 × 金額 × 說明 |
 
 **不直接建帳號**：DESIGN §4.2 訂了「Registration 是帳號怎麼來的唯一紀錄」，所以名冊裡
 沒有帳號的人只會變成待審核的入團申請，由幹部在「入團申請審核」頁批次核准（會寄臨時密碼信）。
@@ -32,6 +33,7 @@ manage.py import_sheet
 
 import datetime as dt
 import re
+from collections import Counter
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
@@ -43,7 +45,7 @@ from apps.accounts.views import _import_registration_rows
 from apps.events.models import (
     LeaveRequest, PerformanceEvent, Rehearsal, RehearsalAttendance,
 )
-from apps.finance.models import FeePeriod, MembershipFee
+from apps.finance.models import FeePeriod, FinanceRecord, MembershipFee
 from apps.finance.views import _sync_fee_income
 from apps.public.models import Venue
 
@@ -53,6 +55,7 @@ SHEET_ATTENDANCE = '出席紀錄'
 SHEET_LEAVES = '請假紀錄'
 SHEET_PERIODS = '團費期別'
 SHEET_FEES = '團費收繳'
+SHEET_EXPENSES = '支出紀錄'
 
 # 各分頁必須有的標題。試算表範本改了欄位名稱就整份拒絕，不要猜著對位
 _REQUIRED_HEADERS = {
@@ -61,6 +64,22 @@ _REQUIRED_HEADERS = {
     SHEET_LEAVES: ('申請時間', '姓名', '排練日期', '請假原因', '審核狀態', '審核幹部', '審核時間'),
     SHEET_PERIODS: ('年份', '期', '團費金額', '繳費開始日', '繳費截止日'),
     SHEET_FEES: ('姓名', '期別', '實收金額', '繳費方式', '帳號末五碼', '繳費日期', '收款幹部', '狀態'),
+    SHEET_EXPENSES: ('日期', '項目', '金額', '說明', '經手人'),
+}
+
+# 試算表「收支」分頁的預算項目 → 系統收支明細的分類。系統分類比較粗（團練室與場地費同屬
+# 場地費），所以描述一律寫成「項目：說明」，原本的預算項目不會因此消失。
+# 對不上的項目歸「其他」並列入報告，不擋匯入——錢確實花了，帳不能漏。
+_EXPENSE_CATEGORY = {
+    '場地費': FinanceRecord.Category.VENUE,
+    '團練室': FinanceRecord.Category.VENUE,
+    '指揮費用': FinanceRecord.Category.INSTRUCTOR,
+    '樂譜': FinanceRecord.Category.SCORE,
+    '開發網站': FinanceRecord.Category.OTHER,
+    '宣傳': FinanceRecord.Category.OTHER,
+    '音樂會錄音錄影': FinanceRecord.Category.OTHER,
+    '工作人員': FinanceRecord.Category.OTHER,
+    '大型樂器': FinanceRecord.Category.OTHER,
 }
 
 # 出席紀錄是矩陣：第 1 列從 G 欄起是排練日期，第 5 列起每列一位團員（A 欄姓名）
@@ -177,7 +196,9 @@ def _read_table(ws):
         return [], []
     table = []
     for row_no, values in enumerate(rows, start=2):
-        if not any(_text(v) for v in values):
+        # 勾選框欄位（如支出紀錄的「收據」）沒勾也有值 FALSE，整片空白列都會帶著它，
+        # 所以 False 視同空白，否則每一列空白都會被當成資料、報一堆「日期無法辨識」
+        if not any(v is not False and _text(v) for v in values):
             continue
         table.append((row_no, {h: values[i] if i < len(values) else None
                                for i, h in enumerate(header) if h}))
@@ -221,7 +242,7 @@ class Command(BaseCommand):
 
         self.sheets = {}
         for name in (SHEET_ROSTER, SHEET_REHEARSALS, SHEET_ATTENDANCE,
-                     SHEET_LEAVES, SHEET_PERIODS, SHEET_FEES):
+                     SHEET_LEAVES, SHEET_PERIODS, SHEET_FEES, SHEET_EXPENSES):
             if name in wb.sheetnames:
                 self.sheets[name] = wb[name]
             else:
@@ -254,6 +275,7 @@ class Command(BaseCommand):
         self._import_leaves()
         self.periods = self._import_periods()
         self._import_fees()
+        self._import_expenses()
 
     # ── 共用查詢 ───────────────────────────────────────────────
 
@@ -400,10 +422,14 @@ class Command(BaseCommand):
             return
         problems, created, existing = [], 0, 0
 
+        member_rows = grid[_ATTENDANCE_FIRST_MEMBER_ROW - 1:]
         columns = []        # [(欄索引, Rehearsal)]
         for col in range(_ATTENDANCE_FIRST_DATE_COL - 1, len(grid[0])):
             cell = grid[0][col]
             if cell in (None, ''):
+                continue
+            # 日期欄通常整季先排好、還沒點名；沒有任何點名的欄位不必對照，也不該報錯
+            if not any(col < len(v) and _text(v[col]) for v in member_rows):
                 continue
             day = _to_date(cell)
             if day is None:
@@ -415,7 +441,7 @@ class Command(BaseCommand):
                 continue
             columns.append((col, rehearsal))
 
-        for row_no, values in enumerate(grid[_ATTENDANCE_FIRST_MEMBER_ROW - 1:],
+        for row_no, values in enumerate(member_rows,
                                         start=_ATTENDANCE_FIRST_MEMBER_ROW):
             name = _text(values[0]) if values else ''
             marks = [(r, _text(values[c])) for c, r in columns if c < len(values) and _text(values[c])]
@@ -555,7 +581,13 @@ class Command(BaseCommand):
         # 同一人同一期可能有一筆作廢、一筆有效（記錯重記）。系統一人一期只有一筆，
         # 所以先處理有效的那筆，作廢的排最後、遇到已存在就自然略過。
         table.sort(key=lambda item: _text(item[1].get('狀態')) == '作廢')
+        unpaid = 0
         for row_no, row in table:
+            # 每期開始時會先替每位團員預填一列（姓名＋期別），狀態空白＝還沒繳。
+            # 系統的「應繳未繳」是由團員 × 期別導出、不建紀錄（FeePeriod docstring），所以這種列不匯入
+            if not _text(row.get('狀態')):
+                unpaid += 1
+                continue
             member, reason = self._member(row.get('姓名'))
             if member is None:
                 problems.append(f'第 {row_no} 列：{reason}')
@@ -598,7 +630,61 @@ class Command(BaseCommand):
                 continue
             created += 1
             _sync_fee_income(fee, self.operator)   # 已繳 → 產生收支明細收入，與系統操作一致
-        self.report.append((SHEET_FEES, created, existing, problems))
+        label = f'{SHEET_FEES}（狀態空白＝尚未繳費 {unpaid} 列，不匯入）' if unpaid else SHEET_FEES
+        self.report.append((label, created, existing, problems))
+
+    def _import_expenses(self):
+        """支出紀錄 → FinanceRecord（支出）。
+
+        支出沒有天然的唯一鍵，以「日期 × 金額 × 描述」對照。試算表裡可能真的有兩筆一模一樣的支出
+        （同一天付兩次同樣的場地費），所以不是「有就略過」，而是**數量對齊**：
+        試算表有 N 筆、系統已有 M 筆，就補建 N−M 筆。重跑時 M 追上 N，自然不再新增。
+        """
+        if SHEET_EXPENSES not in self.sheets:
+            return
+        _, table = _read_table(self.sheets[SHEET_EXPENSES])
+        problems = []
+        wanted = Counter()        # (日期, 金額, 描述) → 試算表裡的筆數
+        categories = {}
+        for row_no, row in table:
+            day = _to_date(row.get('日期'))
+            if day is None:
+                problems.append(f'第 {row_no} 列：日期無法辨識')
+                continue
+            amount = _to_amount(row.get('金額'))
+            if amount is None:
+                problems.append(f'第 {row_no} 列：金額要是正整數')
+                continue
+            item = _text(row.get('項目'))
+            if not item:
+                problems.append(f'第 {row_no} 列：缺項目')
+                continue
+            category = _EXPENSE_CATEGORY.get(item)
+            if category is None:
+                problems.append(f'第 {row_no} 列：項目「{item}」不在預算項目裡，歸為「其他」')
+                category = FinanceRecord.Category.OTHER
+            note = _text(row.get('說明'))
+            handler = _text(row.get('經手人'))
+            description = f'{item}：{note}' if note else item
+            if handler:
+                description += f'（經手人：{handler}）'
+            key = (day, amount, description)
+            wanted[key] += 1
+            categories[key] = category
+
+        created = existing = 0
+        for (day, amount, description), count in wanted.items():
+            have = FinanceRecord.objects.filter(
+                type=FinanceRecord.Type.EXPENSE, date=day, amount=amount, description=description,
+            ).count()
+            existing += min(have, count)
+            for _ in range(count - have):
+                FinanceRecord.objects.create(
+                    type=FinanceRecord.Type.EXPENSE, category=categories[(day, amount, description)],
+                    amount=amount, date=day, description=description, created_by=self.operator,
+                )
+                created += 1
+        self.report.append((SHEET_EXPENSES, created, existing, problems))
 
     # ── 報告 ───────────────────────────────────────────────────
 

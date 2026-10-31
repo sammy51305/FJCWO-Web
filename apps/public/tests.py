@@ -940,7 +940,8 @@ class ImportSheetCommandTest(TestCase):
                    '考試', '待審核', '', None, ''])
 
         ws = wb.create_sheet('出席紀錄')
-        header = ['姓名', '樂器', '出席', '請假', '缺席', '出席率', dt.datetime(2026, 11, 7)]
+        # 12/05 這欄還沒點名、系統也沒有這場排練：不該被報錯
+        header = ['姓名', '樂器', '出席', '請假', '缺席', '出席率', dt.datetime(2026, 11, 7), dt.datetime(2026, 12, 5)]
         ws.append(header)
         for label in ('本次出席人數', '本次請假人數', '本次缺席人數'):
             ws.append([label])
@@ -956,6 +957,17 @@ class ImportSheetCommandTest(TestCase):
                    '繳費日期', '收款幹部', '狀態', '備註'])
         ws.append(['已有帳號', '2026 下期', 4500, 4500, '轉帳', '01234',
                    dt.datetime(2026, 11, 2), '匯入幹部', '已繳', ''])
+        # 每期預填的列：狀態空白＝還沒繳，連還沒帳號的人也不該報錯
+        ws.append(['新團員', '2026 下期', 4500, None, None, None, None, None, None, ''])
+
+        ws = wb.create_sheet('支出紀錄')
+        ws.append(['日期', '項目', '金額', '說明', '經手人', '收據'])
+        ws.append([dt.datetime(2026, 11, 1), '團練室', 3000, '11/1 團練', '匯入幹部', True])
+        ws.append([dt.datetime(2026, 11, 1), '團練室', 3000, '11/1 團練', '匯入幹部', True])
+        ws.append([dt.datetime(2026, 11, 3), '指揮費用', 3000, '', '', False])
+        ws.append([dt.datetime(2026, 11, 4), '茶水', 200, '', '', False])
+        for _ in range(3):      # 真實試算表：空白列的勾選框是 FALSE，不能被當成資料
+            ws.append([None, None, None, None, None, False])
 
         path = Path(self.tmpdir.name) / 'sheet.xlsx'
         wb.save(path)
@@ -1015,7 +1027,7 @@ class ImportSheetCommandTest(TestCase):
         self.assertIn('所屬演出「沒這場」在系統找不到', out.getvalue())
 
     def test_attendance_and_leaves(self):
-        """出席照矩陣寫入；核准的請假同步出席為請假；還沒帳號的人略過並提示核准後重跑"""
+        """出席照矩陣寫入；核准的請假同步出席為請假；還沒帳號的人略過並提示核准後重跑；尚未點名的日期欄不報錯"""
         from apps.events.models import LeaveRequest, RehearsalAttendance
 
         output = self._run('--commit')
@@ -1030,22 +1042,47 @@ class ImportSheetCommandTest(TestCase):
         self.assertEqual(leave.reviewed_by, self.officer)
         self.assertEqual(timezone.localtime(leave.created_at).date(), dt.date(2026, 11, 10))
         self.assertIn('新團員 尚無系統帳號（入團申請核准後再匯入一次）', output)
+        self.assertNotIn('12/05', output)     # 尚未點名的日期欄不對照、不報錯
 
     def test_paid_fee_creates_income_record(self):
-        """團費：建立期別；已繳的那筆比照系統操作產生收支明細收入，登記者是 --operator"""
+        """團費：建立期別；已繳的那筆比照系統操作產生收支明細收入，登記者是 --operator；狀態空白的預填列不匯入、不報錯"""
         from apps.finance.models import FeePeriod, FinanceRecord, MembershipFee
 
-        self._run('--commit')
+        output = self._run('--commit')
         period = FeePeriod.objects.get()
         self.assertEqual((period.year, period.term, period.amount), (2026, 'second', 4500))
         fee = MembershipFee.objects.get()
         self.assertEqual((fee.status, fee.payment_method, fee.account_last5),
                          ('paid', 'transfer', '01234'))
         self.assertEqual(fee.collected_by, self.officer)
-        record = FinanceRecord.objects.get()
+        record = FinanceRecord.objects.get(type=FinanceRecord.Type.INCOME)
         self.assertEqual((record.amount, record.date, record.created_by),
                          (4500, dt.date(2026, 11, 2), self.officer))
         self.assertEqual(fee.finance_record, record)
+        self.assertIn('狀態空白＝尚未繳費 1 列', output)
+        self.assertNotIn('新團員 尚無系統帳號', output.split('■ 團費收繳')[1].split('■')[0])
+
+    def test_expenses_become_finance_records(self):
+        """支出紀錄：預算項目對到系統分類、描述保留原項目；兩筆一模一樣的支出各建一筆；對不上的項目歸其他並報告"""
+        from apps.finance.models import FinanceRecord
+
+        output = self._run('--commit')
+        expenses = list(
+            FinanceRecord.objects.filter(type=FinanceRecord.Type.EXPENSE)
+            .order_by('date', 'id').values_list('date', 'category', 'amount', 'description')
+        )
+        self.assertEqual(expenses, [
+            (dt.date(2026, 11, 1), 'venue', 3000, '團練室：11/1 團練（經手人：匯入幹部）'),
+            (dt.date(2026, 11, 1), 'venue', 3000, '團練室：11/1 團練（經手人：匯入幹部）'),
+            (dt.date(2026, 11, 3), 'instructor', 3000, '指揮費用'),
+            (dt.date(2026, 11, 4), 'other', 200, '茶水'),
+        ])
+        self.assertTrue(all(
+            r.created_by == self.officer
+            for r in FinanceRecord.objects.filter(type=FinanceRecord.Type.EXPENSE)
+        ))
+        self.assertIn('項目「茶水」不在預算項目裡，歸為「其他」', output)
+        self.assertNotIn('日期無法辨識', output)     # 只有未勾選勾選框的空白列要被略過
 
     def test_rerun_is_idempotent(self):
         """重跑不會產生重複資料，已存在的一律略過"""
