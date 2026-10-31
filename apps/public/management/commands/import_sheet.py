@@ -583,7 +583,7 @@ class Command(BaseCommand):
         table.sort(key=lambda item: _text(item[1].get('狀態')) == '作廢')
         unpaid = 0
         for row_no, row in table:
-            # 每期開始時會先替每位團員預填一列（姓名＋期別），狀態空白＝還沒繳。
+            # 試算表的做法是收到錢才記一列，但幹部可能先填了姓名、期別還沒收錢——狀態空白＝還沒繳。
             # 系統的「應繳未繳」是由團員 × 期別導出、不建紀錄（FeePeriod docstring），所以這種列不匯入
             if not _text(row.get('狀態')):
                 unpaid += 1

@@ -957,7 +957,7 @@ class ImportSheetCommandTest(TestCase):
                    '繳費日期', '收款幹部', '狀態', '備註'])
         ws.append(['已有帳號', '2026 下期', 4500, 4500, '轉帳', '01234',
                    dt.datetime(2026, 11, 2), '匯入幹部', '已繳', ''])
-        # 每期預填的列：狀態空白＝還沒繳，連還沒帳號的人也不該報錯
+        # 先填了姓名、還沒收錢的列：狀態空白＝還沒繳，連還沒帳號的人也不該報錯
         ws.append(['新團員', '2026 下期', 4500, None, None, None, None, None, None, ''])
 
         ws = wb.create_sheet('支出紀錄')
@@ -1045,7 +1045,7 @@ class ImportSheetCommandTest(TestCase):
         self.assertNotIn('12/05', output)     # 尚未點名的日期欄不對照、不報錯
 
     def test_paid_fee_creates_income_record(self):
-        """團費：建立期別；已繳的那筆比照系統操作產生收支明細收入，登記者是 --operator；狀態空白的預填列不匯入、不報錯"""
+        """團費：建立期別；已繳的那筆比照系統操作產生收支明細收入，登記者是 --operator；狀態空白的列不匯入、不報錯"""
         from apps.finance.models import FeePeriod, FinanceRecord, MembershipFee
 
         output = self._run('--commit')
