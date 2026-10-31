@@ -75,7 +75,8 @@ _EXPENSE_CATEGORY = {
     '團練室': FinanceRecord.Category.VENUE,
     '指揮費用': FinanceRecord.Category.INSTRUCTOR,
     '樂譜': FinanceRecord.Category.SCORE,
-    '開發網站': FinanceRecord.Category.OTHER,
+    '架站與伺服器費': FinanceRecord.Category.OTHER,
+    '開發網站': FinanceRecord.Category.OTHER,      # 舊名，改名前填的支出紀錄仍認得
     '宣傳': FinanceRecord.Category.OTHER,
     '音樂會錄音錄影': FinanceRecord.Category.OTHER,
     '工作人員': FinanceRecord.Category.OTHER,
