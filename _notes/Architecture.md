@@ -649,7 +649,7 @@ FJCWO-Web/
 │   ├── meetings/           # 會議紀錄、AI 摘要
 │   ├── announcements/      # 公告
 │   └── public/             # 公開頁面、場地主檔
-│       └── management/commands/   # test_report、seed_demo、clear_demo
+│       └── management/commands/   # test_report、seed_demo、clear_demo、import_sheet
 ├── templates/              # HTML 模板
 │   ├── base.html
 │   ├── accounts/

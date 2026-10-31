@@ -3,6 +3,7 @@ psycopg2-binary>=2.9
 pillow>=10.0
 python-dotenv>=1.0
 qrcode[pil]>=8.0
+openpyxl>=3.1      # 讀團練紀錄試算表（manage.py import_sheet）
 
 # ---- 部署用（本機開發不需要，但裝了也無妨）----
 gunicorn>=23.0        # WSGI 伺服器（Linux 專用；Windows 自架請改用 waitress）
