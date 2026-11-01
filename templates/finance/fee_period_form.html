@@ -39,7 +39,14 @@
         <label class="form-label fw-semibold">團費金額 <span class="text-danger">*</span></label>
         <input type="number" name="amount" class="form-control" min="1" step="1"
                value="{{ form_data.amount }}" required>
-        <div class="form-text">全團固定金額（元），登記繳費時自動帶入。</div>
+        <div class="form-text">一般團員的金額（元），登記繳費時自動帶入。</div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">學生團費</label>
+        <input type="number" name="student_amount" class="form-control" min="1" step="1"
+               value="{{ form_data.student_amount }}">
+        <div class="form-text">團員資料勾選「學生」的人適用；留空＝學生也繳一般金額。</div>
       </div>
 
       <div class="row">

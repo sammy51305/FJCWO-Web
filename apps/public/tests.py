@@ -1102,6 +1102,29 @@ class ImportSheetCommandTest(TestCase):
         self.assertIn('項目「茶水」不在預算項目裡，歸為「其他」', output)
         self.assertNotIn('日期無法辨識', output)     # 只有未勾選勾選框的空白列要被略過
 
+    def test_student_flag_and_student_amount_imported(self):
+        """名冊勾「學生」→ 已有帳號者標為學生；團費期別「學生團費」→ FeePeriod.student_amount"""
+        import openpyxl
+        from django.core.management import call_command
+
+        from apps.finance.models import FeePeriod
+
+        path = self._workbook()
+        wb = openpyxl.load_workbook(path)
+        roster = wb['團員名冊']
+        roster.cell(row=1, column=10, value='學生')
+        roster.cell(row=2, column=10, value=True)       # 已有帳號
+        periods = wb['團費期別']
+        periods.cell(row=1, column=7, value='學生團費')
+        periods.cell(row=2, column=7, value=1000)
+        wb.save(path)
+        out = io.StringIO()
+        call_command('import_sheet', path, '--operator', 'sheet_officer', '--commit', stdout=out)
+        self.member.refresh_from_db()
+        self.assertTrue(self.member.is_student)
+        self.assertIn('已將 1 人標為學生：已有帳號', out.getvalue())
+        self.assertEqual(FeePeriod.objects.get().student_amount, 1000)
+
     def test_rerun_is_idempotent(self):
         """重跑不會產生重複資料，已存在的一律略過"""
         from apps.accounts.models import Registration
