@@ -90,9 +90,9 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **609 個測試**，分布在 8 個 app。
+共 **610 個測試**，分布在 8 個 app。
 
-> 最近一次全站測試：2026-10-31 執行 `python manage.py test`，**609/609 全數通過、無 regression**（System check 亦無問題）。
+> 最近一次全站測試：2026-10-31 執行 `python manage.py test`，**610/610 全數通過、無 regression**（System check 亦無問題）。
 
 ### `apps/accounts/tests.py`（158 個）
 
@@ -187,7 +187,7 @@ python manage.py test --noinput
 |-------|---------|
 | `PushLineMessageTest` | credentials 齊全時發出 API 請求、TOKEN 缺少時略過、GROUP_ID 缺少時略過、API 失敗時 silent fail |
 
-### `apps/public/tests.py`（78 個）
+### `apps/public/tests.py`（79 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -201,7 +201,7 @@ python manage.py test --noinput
 | `RobotsTxtTest` | robots.txt：掛在網站根目錄回純文字、未登入可讀、noindex 模式整站禁止、正常模式只擋內部路徑（公開頁不受影響）、noindex 模式每個回應帶 X-Robots-Tag、正常模式不帶 |
 | `LoggingConfigTest` | `LOGGING` 設定：console handler 沒有 `require_debug_true` 過濾器（那正是 Django 預設值會讓線上站看不到錯誤的原因）、`DEBUG=False` 時未捕捉的例外連 traceback一起寫進 stderr |
 | `TemplateCommentSyntaxTest` | 全掃 `templates/`，禁止多行 `{# #}`——Django 的 `{# #}` 只支援單行，中間有換行就不是註解、會整段印在頁面上（一般 view 測試抓不到：頁面照樣 200、元素也都在）|
-| `ImportSheetCommandTest` | 團練紀錄試算表匯入（`import_sheet`）：試跑不寫入、名冊只替沒帳號者建待審入團申請（Email 不分大小寫、不直接建帳號、缺 Email 列入報告）、排練預設時間與自動接續次數、演出活動或場地找不到時報告不建立、出席矩陣寫入且核准請假同步出席為請假、尚未點名的日期欄不報錯、還沒帳號的人略過並提示、已繳團費產生收支明細收入、狀態空白的團費列不匯入、支出紀錄轉為收支明細支出（分類對照、描述保留項目、相同支出各建一筆、未勾選勾選框的空白列略過）、重跑不產生重複、`--operator` 必須是幹部、欄位標題被改過整份拒絕 |
+| `ImportSheetCommandTest` | 團練紀錄試算表匯入（`import_sheet`）：試跑不寫入、名冊只替沒帳號者建待審入團申請（Email 不分大小寫、不直接建帳號、缺 Email 列入報告）、排練預設時間與自動接續次數、演出活動或場地找不到時報告不建立、出席矩陣寫入且核准請假同步出席為請假、尚未點名的日期欄不報錯、還沒帳號的人略過並提示、已繳團費產生收支明細收入、狀態空白的團費列不匯入、學生團費沒填實收時取試算表的應繳金額（不被期別金額蓋掉）、支出紀錄轉為收支明細支出（分類對照、描述保留項目、相同支出各建一筆、未勾選勾選框的空白列略過）、重跑不產生重複、`--operator` 必須是幹部、欄位標題被改過整份拒絕 |
 | `DemoCommandTest` | demo 資料指令（`seed_demo` / `clear_demo`）：建立展示資料、重複執行不產生重複資料、`clear_demo` 完整清除且刪除順序能通過各處 PROTECT、只刪 demo 資料不動主檔與非 demo 帳號、`--dry-run` 不改動資料庫 |
 
 ---

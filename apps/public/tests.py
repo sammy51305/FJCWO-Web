@@ -1062,6 +1062,24 @@ class ImportSheetCommandTest(TestCase):
         self.assertIn('狀態空白＝尚未繳費 1 列', output)
         self.assertNotIn('新團員 尚無系統帳號', output.split('■ 團費收繳')[1].split('■')[0])
 
+    def test_student_fee_uses_sheet_amount_due(self):
+        """學生團費：沒填實收時用試算表算好的應繳金額（學生 1,000），不被期別金額 4,500 蓋掉"""
+        import openpyxl
+        from django.core.management import call_command
+
+        from apps.finance.models import FinanceRecord, MembershipFee
+
+        path = self._workbook()
+        wb = openpyxl.load_workbook(path)
+        wb['團費收繳'].append(['匯入幹部', '2026 下期', 1000, None, '現金', None,
+                              dt.datetime(2026, 11, 3), '匯入幹部', '已繳', ''])
+        wb.save(path)
+        call_command('import_sheet', path, '--operator', 'sheet_officer', '--commit', stdout=io.StringIO())
+        fee = MembershipFee.objects.get(member=self.officer)
+        self.assertEqual(fee.amount, 1000)
+        self.assertEqual(fee.finance_record.amount, 1000)
+        self.assertEqual(FinanceRecord.objects.filter(type=FinanceRecord.Type.INCOME).count(), 2)
+
     def test_expenses_become_finance_records(self):
         """支出紀錄：預算項目對到系統分類、描述保留原項目；兩筆一模一樣的支出各建一筆；對不上的項目歸其他並報告"""
         from apps.finance.models import FinanceRecord

@@ -621,7 +621,10 @@ class Command(BaseCommand):
 
             fee, was_created = MembershipFee.objects.get_or_create(
                 member=member, period=period,
-                defaults={'amount': _to_amount(row.get('實收金額')) or period.amount,
+                # 金額優先序：實收 → 試算表算好的應繳（學生團費在這裡反映，見名冊「學生」欄）→ 期別金額。
+                # 系統的 FeePeriod 只有一個金額、沒有學生價，所以不能直接用 period.amount 蓋過
+                defaults={'amount': (_to_amount(row.get('實收金額')) or _to_amount(row.get('應繳金額'))
+                                     or period.amount),
                           'status': status, 'payment_method': method,
                           'account_last5': last5, 'paid_at': paid_at,
                           'collected_by': collector},
