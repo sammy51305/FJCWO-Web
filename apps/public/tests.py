@@ -887,3 +887,255 @@ class TemplateCommentSyntaxTest(TestCase):
             '以下位置用了多行 {# #}，會直接印在頁面上，請改成 '
             '{% comment %}...{% endcomment %}：\n  ' + '\n  '.join(offenders)
         )
+
+
+class ImportSheetCommandTest(TestCase):
+    """manage.py import_sheet：團練紀錄試算表（.xlsx）匯入系統"""
+
+    def setUp(self):
+        import tempfile
+
+        from apps.events.models import PerformanceEvent
+
+        self.officer = User.objects.create_user(
+            username='sheet_officer', password='x', name='匯入幹部',
+            email='sheet_officer@test.local', role=User.Role.OFFICER,
+        )
+        self.member = User.objects.create_user(
+            username='sheet_member', password='x', name='已有帳號',
+            email='has_account@test.local', role=User.Role.MEMBER,
+        )
+        self.venue = Venue.objects.create(name='匯入測試場地', type=Venue.Type.REHEARSAL)
+        self.event = PerformanceEvent.objects.create(
+            name='匯入測試演出', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + dt.timedelta(days=60), performance_venue=self.venue,
+        )
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmpdir.cleanup)
+
+    def _workbook(self, *, rehearsal_event='匯入測試演出'):
+        """依試算表範本的欄位建一份 .xlsx，回傳路徑。"""
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        wb.remove(wb.active)
+
+        ws = wb.create_sheet('團員名冊')
+        ws.append(['姓名', '身分', '樂器', '聲部', '手機', 'Email', '狀態', 'LINE ID', '備註'])
+        ws.append(['已有帳號', '團員', '長笛', '', '', 'HAS_ACCOUNT@test.local', '在團', '', ''])
+        ws.append(['新團員', '團員', '小號', '', '0912000000', 'new_member@test.local', '在團', '', ''])
+        ws.append(['沒有信箱', '團員', '豎笛', '', '', '', '在團', '', ''])
+
+        ws = wb.create_sheet('排練日程')
+        ws.append(['排練日期', '開始時間', '場地', '所屬演出', '第幾次排練', '今日進度', '備註'])
+        ws.append([dt.datetime(2026, 11, 7), dt.time(19, 0), '匯入測試場地', rehearsal_event, 1, '', ''])
+        ws.append([dt.datetime(2026, 11, 14), None, '匯入測試場地', rehearsal_event, None, '', ''])
+        ws.append([dt.datetime(2026, 11, 21), dt.time(19, 0), '不存在的場地', rehearsal_event, None, '', ''])
+
+        ws = wb.create_sheet('請假紀錄')
+        ws.append(['申請時間', '姓名', '排練日期', '請假原因', '審核狀態', '審核幹部', '審核時間', '是否逾時'])
+        ws.append([dt.datetime(2026, 11, 10, 20, 0), '已有帳號', dt.datetime(2026, 11, 14),
+                   '出差', '核准', '匯入幹部', dt.datetime(2026, 11, 10, 21, 0), ''])
+        ws.append([dt.datetime(2026, 11, 6, 9, 0), '新團員', dt.datetime(2026, 11, 7),
+                   '考試', '待審核', '', None, ''])
+
+        ws = wb.create_sheet('出席紀錄')
+        # 12/05 這欄還沒點名、系統也沒有這場排練：不該被報錯
+        header = ['姓名', '樂器', '出席', '請假', '缺席', '出席率', dt.datetime(2026, 11, 7), dt.datetime(2026, 12, 5)]
+        ws.append(header)
+        for label in ('本次出席人數', '本次請假人數', '本次缺席人數'):
+            ws.append([label])
+        ws.append(['已有帳號', '長笛', 1, 0, 0, 1, '出席'])
+        ws.append(['新團員', '小號', 0, 0, 1, 0, '缺席'])
+
+        ws = wb.create_sheet('團費期別')
+        ws.append(['期別', '年份', '期', '團費金額', '繳費開始日', '繳費截止日'])
+        ws.append(['2026 下期', 2026, '下期', 4500, dt.datetime(2026, 11, 1), dt.datetime(2026, 12, 31)])
+
+        ws = wb.create_sheet('團費收繳')
+        ws.append(['姓名', '期別', '應繳金額', '實收金額', '繳費方式', '帳號末五碼',
+                   '繳費日期', '收款幹部', '狀態', '備註'])
+        ws.append(['已有帳號', '2026 下期', 4500, 4500, '轉帳', '01234',
+                   dt.datetime(2026, 11, 2), '匯入幹部', '已繳', ''])
+        # 先填了姓名、還沒收錢的列：狀態空白＝還沒繳，連還沒帳號的人也不該報錯
+        ws.append(['新團員', '2026 下期', 4500, None, None, None, None, None, None, ''])
+
+        ws = wb.create_sheet('支出紀錄')
+        ws.append(['日期', '項目', '金額', '說明', '經手人', '收據'])
+        ws.append([dt.datetime(2026, 11, 1), '團練室', 3000, '11/1 團練', '匯入幹部', True])
+        ws.append([dt.datetime(2026, 11, 1), '團練室', 3000, '11/1 團練', '匯入幹部', True])
+        ws.append([dt.datetime(2026, 11, 3), '指揮費用', 3000, '', '', False])
+        ws.append([dt.datetime(2026, 11, 4), '茶水', 200, '', '', False])
+        for _ in range(3):      # 真實試算表：空白列的勾選框是 FALSE，不能被當成資料
+            ws.append([None, None, None, None, None, False])
+
+        path = Path(self.tmpdir.name) / 'sheet.xlsx'
+        wb.save(path)
+        return str(path)
+
+    def _run(self, *extra):
+        from django.core.management import call_command
+
+        out = io.StringIO()
+        call_command('import_sheet', self._workbook(), '--operator', 'sheet_officer', *extra, stdout=out)
+        return out.getvalue()
+
+    def test_dry_run_writes_nothing(self):
+        """沒加 --commit 是試跑：報告照出，但資料庫完全不變"""
+        from apps.accounts.models import Registration
+        from apps.events.models import Rehearsal
+        from apps.finance.models import FeePeriod
+
+        output = self._run()
+        self.assertIn('這是試跑', output)
+        self.assertIn('新增 2 筆', output)       # 排練日程那段的報告照樣算得出來
+        self.assertFalse(Rehearsal.objects.exists())
+        self.assertFalse(Registration.objects.exists())
+        self.assertFalse(FeePeriod.objects.exists())
+
+    def test_roster_creates_registration_only_for_members_without_account(self):
+        """名冊：Email（不分大小寫）對到的人不動；沒帳號有 Email → 待審核入團申請；都沒有 → 列入報告"""
+        from apps.accounts.models import Registration
+
+        output = self._run('--commit')
+        regs = list(Registration.objects.values_list('email', 'status'))
+        self.assertEqual(regs, [('new_member@test.local', Registration.Status.PENDING)])
+        self.assertEqual(User.objects.count(), 2)       # 不直接建帳號（DESIGN §4.2）
+        self.assertIn('沒有信箱 沒有帳號也沒有 Email', output)
+
+    def test_rehearsals_created_with_default_time_and_sequence(self):
+        """排練：沒填時間用預設 19:00、沒填次數接在最後；場地找不到列入報告不建立"""
+        from apps.events.models import Rehearsal
+
+        output = self._run('--commit')
+        rehearsals = list(Rehearsal.objects.order_by('date'))
+        self.assertEqual([r.sequence for r in rehearsals], [1, 2])
+        second = timezone.localtime(rehearsals[1].date)
+        self.assertEqual((second.date(), second.hour), (dt.date(2026, 11, 14), 19))
+        self.assertIn('場地「不存在的場地」在系統找不到', output)
+
+    def test_missing_event_is_reported(self):
+        """所屬演出在系統找不到就不建排練，並指出要先建演出活動"""
+        from django.core.management import call_command
+
+        from apps.events.models import Rehearsal
+
+        out = io.StringIO()
+        call_command('import_sheet', self._workbook(rehearsal_event='沒這場'),
+                     '--operator', 'sheet_officer', '--commit', stdout=out)
+        self.assertFalse(Rehearsal.objects.exists())
+        self.assertIn('所屬演出「沒這場」在系統找不到', out.getvalue())
+
+    def test_attendance_and_leaves(self):
+        """出席照矩陣寫入；核准的請假同步出席為請假；還沒帳號的人略過並提示核准後重跑；尚未點名的日期欄不報錯"""
+        from apps.events.models import LeaveRequest, RehearsalAttendance
+
+        output = self._run('--commit')
+        att = {(timezone.localtime(a.rehearsal.date).date(), a.member.name): a.status
+               for a in RehearsalAttendance.objects.select_related('rehearsal', 'member')}
+        self.assertEqual(att, {
+            (dt.date(2026, 11, 7), '已有帳號'): RehearsalAttendance.Status.PRESENT,
+            (dt.date(2026, 11, 14), '已有帳號'): RehearsalAttendance.Status.LEAVE,
+        })
+        leave = LeaveRequest.objects.get()
+        self.assertEqual(leave.status, LeaveRequest.Status.APPROVED)
+        self.assertEqual(leave.reviewed_by, self.officer)
+        self.assertEqual(timezone.localtime(leave.created_at).date(), dt.date(2026, 11, 10))
+        self.assertIn('新團員 尚無系統帳號（入團申請核准後再匯入一次）', output)
+        self.assertNotIn('12/05', output)     # 尚未點名的日期欄不對照、不報錯
+
+    def test_paid_fee_creates_income_record(self):
+        """團費：建立期別；已繳的那筆比照系統操作產生收支明細收入，登記者是 --operator；狀態空白的列不匯入、不報錯"""
+        from apps.finance.models import FeePeriod, FinanceRecord, MembershipFee
+
+        output = self._run('--commit')
+        period = FeePeriod.objects.get()
+        self.assertEqual((period.year, period.term, period.amount), (2026, 'second', 4500))
+        fee = MembershipFee.objects.get()
+        self.assertEqual((fee.status, fee.payment_method, fee.account_last5),
+                         ('paid', 'transfer', '01234'))
+        self.assertEqual(fee.collected_by, self.officer)
+        record = FinanceRecord.objects.get(type=FinanceRecord.Type.INCOME)
+        self.assertEqual((record.amount, record.date, record.created_by),
+                         (4500, dt.date(2026, 11, 2), self.officer))
+        self.assertEqual(fee.finance_record, record)
+        self.assertIn('狀態空白＝尚未繳費 1 列', output)
+        self.assertNotIn('新團員 尚無系統帳號', output.split('■ 團費收繳')[1].split('■')[0])
+
+    def test_student_fee_uses_sheet_amount_due(self):
+        """學生團費：沒填實收時用試算表算好的應繳金額（學生 1,000），不被期別金額 4,500 蓋掉"""
+        import openpyxl
+        from django.core.management import call_command
+
+        from apps.finance.models import FinanceRecord, MembershipFee
+
+        path = self._workbook()
+        wb = openpyxl.load_workbook(path)
+        wb['團費收繳'].append(['匯入幹部', '2026 下期', 1000, None, '現金', None,
+                              dt.datetime(2026, 11, 3), '匯入幹部', '已繳', ''])
+        wb.save(path)
+        call_command('import_sheet', path, '--operator', 'sheet_officer', '--commit', stdout=io.StringIO())
+        fee = MembershipFee.objects.get(member=self.officer)
+        self.assertEqual(fee.amount, 1000)
+        self.assertEqual(fee.finance_record.amount, 1000)
+        self.assertEqual(FinanceRecord.objects.filter(type=FinanceRecord.Type.INCOME).count(), 2)
+
+    def test_expenses_become_finance_records(self):
+        """支出紀錄：預算項目對到系統分類、描述保留原項目；兩筆一模一樣的支出各建一筆；對不上的項目歸其他並報告"""
+        from apps.finance.models import FinanceRecord
+
+        output = self._run('--commit')
+        expenses = list(
+            FinanceRecord.objects.filter(type=FinanceRecord.Type.EXPENSE)
+            .order_by('date', 'id').values_list('date', 'category', 'amount', 'description')
+        )
+        self.assertEqual(expenses, [
+            (dt.date(2026, 11, 1), 'venue', 3000, '團練室：11/1 團練（經手人：匯入幹部）'),
+            (dt.date(2026, 11, 1), 'venue', 3000, '團練室：11/1 團練（經手人：匯入幹部）'),
+            (dt.date(2026, 11, 3), 'instructor', 3000, '指揮費用'),
+            (dt.date(2026, 11, 4), 'other', 200, '茶水'),
+        ])
+        self.assertTrue(all(
+            r.created_by == self.officer
+            for r in FinanceRecord.objects.filter(type=FinanceRecord.Type.EXPENSE)
+        ))
+        self.assertIn('項目「茶水」不在預算項目裡，歸為「其他」', output)
+        self.assertNotIn('日期無法辨識', output)     # 只有未勾選勾選框的空白列要被略過
+
+    def test_rerun_is_idempotent(self):
+        """重跑不會產生重複資料，已存在的一律略過"""
+        from apps.accounts.models import Registration
+        from apps.events.models import LeaveRequest, Rehearsal, RehearsalAttendance
+        from apps.finance.models import FinanceRecord, MembershipFee
+
+        self._run('--commit')
+        counts = [m.objects.count() for m in (Registration, Rehearsal, RehearsalAttendance,
+                                              LeaveRequest, MembershipFee, FinanceRecord)]
+        self._run('--commit')
+        self.assertEqual(
+            [m.objects.count() for m in (Registration, Rehearsal, RehearsalAttendance,
+                                         LeaveRequest, MembershipFee, FinanceRecord)],
+            counts,
+        )
+
+    def test_operator_must_be_officer(self):
+        """--operator 必須是幹部，一般團員帳號直接拒絕"""
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command('import_sheet', self._workbook(), '--operator', 'sheet_member',
+                         stdout=io.StringIO())
+
+    def test_changed_headers_rejected(self):
+        """欄位名稱被改過就整份拒絕，不猜著對位"""
+        import openpyxl
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        path = self._workbook()
+        wb = openpyxl.load_workbook(path)
+        wb['團費收繳']['B1'] = '期數'
+        wb.save(path)
+        with self.assertRaises(CommandError):
+            call_command('import_sheet', path, '--operator', 'sheet_officer', stdout=io.StringIO())
