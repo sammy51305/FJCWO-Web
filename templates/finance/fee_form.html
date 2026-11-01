@@ -35,7 +35,7 @@
           <option value="">請選擇</option>
           {% for p in periods %}
           <option value="{{ p.pk }}" {% if form_data.period == p.pk|stringformat:"s" %}selected{% endif %}>
-            {{ p }}（團費 {{ p.amount|floatformat:"0" }} 元）
+            {{ p }}（團費 {{ p.amount|floatformat:"0" }} 元{% if p.student_amount %}・學生 {{ p.student_amount|floatformat:"0" }} 元{% endif %}）
           </option>
           {% endfor %}
         </select>

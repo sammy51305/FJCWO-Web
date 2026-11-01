@@ -12,11 +12,11 @@ manage.py import_sheet
 
 | 分頁 | 寫入 | 對照依據 |
 |------|------|---------|
-| 團員名冊 | 沒有帳號的人 → `Registration`（待審核） | Email，其次姓名 |
+| 團員名冊 | 沒有帳號的人 → `Registration`（待審核）；已有帳號且勾「學生」→ `User.is_student` | Email，其次姓名 |
 | 排練日程 | `Rehearsal` | 排練日期（一天一場） |
 | 出席紀錄 | `RehearsalAttendance` | 團員 × 排練日期 |
 | 請假紀錄 | `LeaveRequest`（核准者同步出席為請假） | 團員 × 排練日期 |
-| 團費期別 | `FeePeriod` | 年份 × 期 |
+| 團費期別 | `FeePeriod`（含學生團費） | 年份 × 期 |
 | 團費收繳 | `MembershipFee`（已繳者同步收支明細收入） | 團員 × 期別 |
 | 支出紀錄 | `FinanceRecord`（支出） | 日期 × 金額 × 說明 |
 
@@ -315,7 +315,7 @@ class Command(BaseCommand):
         if SHEET_ROSTER not in self.sheets:
             return members
         _, table = _read_table(self.sheets[SHEET_ROSTER])
-        problems, matched, to_register = [], 0, []
+        problems, matched, to_register, students_flagged = [], 0, [], []
         by_email = {
             u.email.lower(): u for u in User.objects.exclude(email=None).exclude(email='')
         }
@@ -335,6 +335,11 @@ class Command(BaseCommand):
             members[name] = user
             if user:
                 matched += 1
+                # 名冊勾「學生」→ 系統帳號標為學生（只加不減：系統裡取消勾選的不被試算表改回來）
+                if row.get('學生') is True and not user.is_student:
+                    user.is_student = True
+                    user.save(update_fields=['is_student'])
+                    students_flagged.append(name)
             elif email:
                 to_register.append({
                     'name': name, 'email': email,
@@ -350,6 +355,8 @@ class Command(BaseCommand):
                 problems.append(f'{label}：已建入團申請，但{note}')
         for label, reason in result['skipped']:
             problems.append(f'{label}：未建入團申請（{reason}）')
+        if students_flagged:
+            problems.append(f'已將 {len(students_flagged)} 人標為學生：{"、".join(students_flagged)}')
         self.report.append((
             f'{SHEET_ROSTER}（新增＝新建的入團申請，請到「入團申請審核」核准；已存在＝已有帳號）',
             len(result['created']), matched, problems,
@@ -546,9 +553,10 @@ class Command(BaseCommand):
             if amount is None:
                 problems.append(f'第 {row_no} 列：團費金額要是正整數')
                 continue
+            student_amount = _to_amount(row.get('學生團費'))     # 舊版試算表沒有這欄 → None
             period, was_created = FeePeriod.objects.get_or_create(
                 year=int(year_text), term=term,
-                defaults={'amount': amount,
+                defaults={'amount': amount, 'student_amount': student_amount,
                           'start_date': _to_date(row.get('繳費開始日')),
                           'end_date': _to_date(row.get('繳費截止日')),
                           'created_by': self.operator},
@@ -561,6 +569,11 @@ class Command(BaseCommand):
                 if period.amount != amount:
                     problems.append(
                         f'第 {row_no} 列：系統的「{period}」金額是 {period.amount:,}，試算表是 {amount:,}，未覆蓋'
+                    )
+                if student_amount and period.student_amount != student_amount:
+                    have = f'{period.student_amount:,}' if period.student_amount else '未設定'
+                    problems.append(
+                        f'第 {row_no} 列：系統的「{period}」學生團費是 {have}，試算表是 {student_amount:,}，未覆蓋'
                     )
         self.report.append((SHEET_PERIODS, created, existing, problems))
         return periods
@@ -621,10 +634,10 @@ class Command(BaseCommand):
 
             fee, was_created = MembershipFee.objects.get_or_create(
                 member=member, period=period,
-                # 金額優先序：實收 → 試算表算好的應繳（學生團費在這裡反映，見名冊「學生」欄）→ 期別金額。
-                # 系統的 FeePeriod 只有一個金額、沒有學生價，所以不能直接用 period.amount 蓋過
+                # 金額優先序：實收 → 試算表算好的應繳（學生團費在這裡反映，見名冊「學生」欄）
+                # → 系統依期別與學生身分算的金額（FeePeriod.amount_for）
                 defaults={'amount': (_to_amount(row.get('實收金額')) or _to_amount(row.get('應繳金額'))
-                                     or period.amount),
+                                     or period.amount_for(member)),
                           'status': status, 'payment_method': method,
                           'account_last5': last5, 'paid_at': paid_at,
                           'collected_by': collector},

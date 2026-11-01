@@ -863,3 +863,82 @@ class PaymentConfigTest(TestCase):
                 config = PaymentConfig.objects.first()
                 self.assertTrue(config.qrcode.name)
                 self.assertTrue(config.qrcode.name.startswith('payment/'))
+
+
+class StudentFeeTest(TestCase):
+    """學生團費：期別可另訂學生金額，學生在登記、申報、確認各步驟的金額快照都取學生團費"""
+
+    def setUp(self):
+        self.officer = User.objects.create_user(
+            username='sf_officer', email='sf_officer@test.local', password='x',
+            name='學生費幹部', role=User.Role.OFFICER,
+        )
+        self.student = User.objects.create_user(
+            username='sf_student', email='sf_student@test.local', password='x',
+            name='學生團員', role=User.Role.MEMBER, is_student=True,
+        )
+        self.adult = User.objects.create_user(
+            username='sf_adult', email='sf_adult@test.local', password='x',
+            name='一般團員', role=User.Role.MEMBER,
+        )
+        self.period = FeePeriod.objects.create(
+            year=2026, term='second', amount=4500, student_amount=1000, created_by=self.officer,
+        )
+
+    def test_amount_for(self):
+        """學生取學生團費、非學生取一般金額；期別沒訂學生團費時學生也繳一般金額"""
+        self.assertEqual(self.period.amount_for(self.student), 1000)
+        self.assertEqual(self.period.amount_for(self.adult), 4500)
+        no_student_price = FeePeriod.objects.create(year=2027, term='first', amount=4500)
+        self.assertEqual(no_student_price.amount_for(self.student), 4500)
+
+    def test_period_form_saves_student_amount(self):
+        """期別表單：學生團費選填，留空存成 None，填 0 被擋下"""
+        self.client.force_login(self.officer)
+        url = reverse('finance:fee_period_create')
+        self.client.post(url, {'year': '2027', 'term': 'first', 'amount': '4500', 'student_amount': '1000'})
+        self.assertEqual(FeePeriod.objects.get(year=2027).student_amount, 1000)
+        self.client.post(url, {'year': '2028', 'term': 'first', 'amount': '4500', 'student_amount': ''})
+        self.assertIsNone(FeePeriod.objects.get(year=2028).student_amount)
+        self.client.post(url, {'year': '2029', 'term': 'first', 'amount': '4500', 'student_amount': '0'})
+        self.assertFalse(FeePeriod.objects.filter(year=2029).exists())
+
+    def test_officer_fee_edit_uses_student_amount(self):
+        """幹部登記學生已繳：金額與自動產生的收支明細收入都是 1,000，不被期別金額蓋回 4,500"""
+        self.client.force_login(self.officer)
+        self.client.post(reverse('finance:fee_edit'), {
+            'member': self.student.pk, 'period': self.period.pk, 'paid': 'on', 'paid_at': '2026-11-02',
+        })
+        fee = MembershipFee.objects.get(member=self.student)
+        self.assertEqual(fee.amount, 1000)
+        self.assertEqual(fee.finance_record.amount, 1000)
+
+    def test_self_report_and_confirm_keep_student_amount(self):
+        """學生自行申報 → 金額 1,000；幹部確認時重新快照仍是 1,000"""
+        self.client.force_login(self.student)
+        self.client.post(reverse('finance:fee_report_create', args=[self.period.pk]), {
+            'payment_method': 'transfer', 'account_last5': '01234',
+        })
+        fee = MembershipFee.objects.get(member=self.student)
+        self.assertEqual((fee.status, fee.amount), (MembershipFee.Status.REPORTED, 1000))
+
+        self.client.force_login(self.officer)
+        self.client.post(reverse('finance:fee_review_list'), {'fee_id': fee.pk, 'action': 'confirm'})
+        fee.refresh_from_db()
+        self.assertEqual((fee.status, fee.amount), (MembershipFee.Status.PAID, 1000))
+
+    def test_my_fees_and_report_form_show_student_amount(self):
+        """「我的會費」與申報頁顯示學生應繳的 1,000"""
+        self.client.force_login(self.student)
+        r = self.client.get(reverse('finance:my_fees'))
+        self.assertEqual(r.context['rows'][0]['amount_due'], 1000)
+        r = self.client.get(reverse('finance:fee_report_create', args=[self.period.pk]))
+        self.assertEqual(r.context['amount_due'], 1000)
+        self.assertContains(r, '學生團費')
+
+    def test_report_marks_students(self):
+        """會費繳納狀況：表頭列出學生團費、學生名字旁標「學生」"""
+        self.client.force_login(self.officer)
+        r = self.client.get(reverse('finance:membership_fee_report'), {'period': self.period.pk})
+        self.assertContains(r, '學生 1000 元')
+        self.assertContains(r, 'badge bg-info text-dark">學生</span>')

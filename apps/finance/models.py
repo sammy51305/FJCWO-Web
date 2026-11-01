@@ -58,6 +58,11 @@ class FeePeriod(models.Model):
                                  validators=[MinValueValidator(1)])
     start_date = models.DateField('繳費開始日', null=True, blank=True)
     end_date = models.DateField('繳費截止日', null=True, blank=True)
+    student_amount = models.DecimalField(
+        '學生團費', max_digits=8, decimal_places=0, null=True, blank=True,
+        validators=[MinValueValidator(1)],
+        help_text='學生（User.is_student）適用的金額；留空＝學生也繳一般金額'
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='created_fee_periods', verbose_name='建立者'
@@ -71,6 +76,13 @@ class FeePeriod(models.Model):
 
     def __str__(self):
         return f'{self.year} {self.get_term_display()}'
+
+    def amount_for(self, member):
+        """這位團員這期應繳多少。全系統「金額快照」一律走這裡，不要直接取 self.amount——
+        否則學生的金額會在幹部登記、團員申報、幹部確認任一步被蓋回一般金額。"""
+        if self.student_amount and getattr(member, 'is_student', False):
+            return self.student_amount
+        return self.amount
 
 
 class MembershipFee(models.Model):

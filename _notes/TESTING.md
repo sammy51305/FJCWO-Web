@@ -90,11 +90,11 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **610 個測試**，分布在 8 個 app。
+共 **621 個測試**，分布在 8 個 app。
 
-> 最近一次全站測試：2026-10-31 執行 `python manage.py test`，**610/610 全數通過、無 regression**（System check 亦無問題）。
+> 最近一次全站測試：2026-11-01 執行 `python manage.py test`，**621/621 全數通過、無 regression**（System check 亦無問題）。
 
-### `apps/accounts/tests.py`（158 個）
+### `apps/accounts/tests.py`（162 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -110,6 +110,7 @@ python manage.py test --noinput
 | `UserRoleTest` | `is_officer` 各角色行為（member/officer/admin/superuser）、`is_staff` 與 `is_superuser` 自動設定 |
 | `RegistrationTest` | 顯示名稱為「入團申請」（#13-2）、申請（公開存取、重複申請防止、送出建立紀錄）、狀態查詢（用 email 查）、幹部審核（核准/拒絕）、核准同步建立 User 帳號（含 must_change_password）、寄送臨時密碼信件、Email 重複時擋下不建立重複帳號 |
 | `RegistrationManageTest` | 依姓名/Email 搜尋、依狀態篩選、拒絕可重新開放審核（核准不行）、新增申請紀錄（幹部限定）、編輯基本資料（不影響審核狀態）、刪除申請紀錄（限管理員：幹部與團員都不可、按鈕也不顯示；已核准者可刪；刪紀錄不會刪掉核准時建立的帳號）|
+| `StudentFlagTest` | 團員「學生」標記：預設否、幹部編輯時勾選／取消勾選（並預先帶入表單）、學生與角色互不影響（幹部也可以是學生）、新增團員時勾選 |
 | `MemberCreateTest` | 存取控制（未登入/一般團員/幹部）、POST 新增團員成功（角色固定 member）、帳號依 Email 自動產生、Email 重複不建立記錄、寄送臨時密碼信件 |
 | `ForcePasswordChangeTest` | `must_change_password` 使用者任何頁面都被導向設定密碼頁、一般使用者不受影響、設定密碼頁本身不被攔截、成功設定後清除 flag 並可用新密碼登入、密碼不一致/太弱被擋、臨時密碼登入後仍被導向設定密碼頁（含錯誤密碼登入失敗的驗證）|
 | `MemberDirectoryReportTest` | 通訊錄列印報表：存取控制（未登入/一般團員無權限含電話Email→導回通訊錄/幹部可看）、顯示姓名電話Email、依樂器族群分組、列印按鈕、status 篩選（預設在團排除退團、inactive、all）|
@@ -155,11 +156,12 @@ python manage.py test --noinput
 |-------|---------|
 | `BorrowStatusReportTest` | 存取控制、空狀態訊息、借出中財產顯示、已還財產不顯示、逾期標記（overdue flag）、未到期不標記、overdue_count 正確計算 |
 
-### `apps/finance/tests.py`（75 個）
+### `apps/finance/tests.py`（81 個）
 
 | Class | 測試內容 |
 |-------|---------|
 | `MembershipFeeReportTest` | 存取控制、無期別時提示新增期別、預設最新期別、GET（期別 pk）切換、已繳/待確認/未繳/作廢(視為無紀錄)/無紀錄分類計數、rows 涵蓋活躍非 admin 團員、槍手排除 |
+| `StudentFeeTest` | 學生團費：`amount_for` 學生取學生團費、非學生取一般金額、期別沒訂學生團費時學生繳一般金額；期別表單學生團費選填（留空存 None、0 被擋）；幹部登記、團員申報、幹部確認三處金額快照都取 1,000（收支明細收入同步）；「我的會費」與申報頁顯示學生應繳金額；繳納狀況表頭列學生團費並標示學生 |
 | `FeePeriodTest` | 會費期別主檔 CRUD：存取控制（團員無權限/幹部可看）、新增、同年份+期別重複被擋、金額 0 被擋、編輯、刪除限管理員（幹部擋下/管理員可刪）、已有繳費紀錄時 PROTECT 擋下 |
 | `FeeReportTest` | 團員自助申報（S2 現金 / S4 轉帳）：我的會費列期別/可申報、現金申報建 reported（記收款幹部、金額快照）、缺收款幹部被擋、轉帳申報記末五碼(無收款幹部)、末五碼非 5 位數字被擋、已申報/已繳不可重複、作廢後可重新申報、撤回自己的待確認、不可撤回已繳/他人 |
 | `PaymentConfigTest` | 轉帳收款設定（S4）：存取控制（團員無權限/幹部可看）、儲存結構化欄位（代號/名稱/戶名/帳號）到單例設定、帳號存檔自動去除 dash 與空白、上傳 QR Code 圖檔保存 |
@@ -187,7 +189,7 @@ python manage.py test --noinput
 |-------|---------|
 | `PushLineMessageTest` | credentials 齊全時發出 API 請求、TOKEN 缺少時略過、GROUP_ID 缺少時略過、API 失敗時 silent fail |
 
-### `apps/public/tests.py`（79 個）
+### `apps/public/tests.py`（80 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -201,7 +203,7 @@ python manage.py test --noinput
 | `RobotsTxtTest` | robots.txt：掛在網站根目錄回純文字、未登入可讀、noindex 模式整站禁止、正常模式只擋內部路徑（公開頁不受影響）、noindex 模式每個回應帶 X-Robots-Tag、正常模式不帶 |
 | `LoggingConfigTest` | `LOGGING` 設定：console handler 沒有 `require_debug_true` 過濾器（那正是 Django 預設值會讓線上站看不到錯誤的原因）、`DEBUG=False` 時未捕捉的例外連 traceback一起寫進 stderr |
 | `TemplateCommentSyntaxTest` | 全掃 `templates/`，禁止多行 `{# #}`——Django 的 `{# #}` 只支援單行，中間有換行就不是註解、會整段印在頁面上（一般 view 測試抓不到：頁面照樣 200、元素也都在）|
-| `ImportSheetCommandTest` | 團練紀錄試算表匯入（`import_sheet`）：試跑不寫入、名冊只替沒帳號者建待審入團申請（Email 不分大小寫、不直接建帳號、缺 Email 列入報告）、排練預設時間與自動接續次數、演出活動或場地找不到時報告不建立、出席矩陣寫入且核准請假同步出席為請假、尚未點名的日期欄不報錯、還沒帳號的人略過並提示、已繳團費產生收支明細收入、狀態空白的團費列不匯入、學生團費沒填實收時取試算表的應繳金額（不被期別金額蓋掉）、支出紀錄轉為收支明細支出（分類對照、描述保留項目、相同支出各建一筆、未勾選勾選框的空白列略過）、重跑不產生重複、`--operator` 必須是幹部、欄位標題被改過整份拒絕 |
+| `ImportSheetCommandTest` | 團練紀錄試算表匯入（`import_sheet`）：試跑不寫入、名冊只替沒帳號者建待審入團申請（Email 不分大小寫、不直接建帳號、缺 Email 列入報告）、排練預設時間與自動接續次數、演出活動或場地找不到時報告不建立、出席矩陣寫入且核准請假同步出席為請假、尚未點名的日期欄不報錯、還沒帳號的人略過並提示、已繳團費產生收支明細收入、狀態空白的團費列不匯入、學生團費沒填實收時取試算表的應繳金額（不被期別金額蓋掉）、支出紀錄轉為收支明細支出（分類對照、描述保留項目、相同支出各建一筆、未勾選勾選框的空白列略過）、名冊勾「學生」標到已有帳號、團費期別「學生團費」帶入期別、重跑不產生重複、`--operator` 必須是幹部、欄位標題被改過整份拒絕 |
 | `DemoCommandTest` | demo 資料指令（`seed_demo` / `clear_demo`）：建立展示資料、重複執行不產生重複資料、`clear_demo` 完整清除且刪除順序能通過各處 PROTECT、只刪 demo 資料不動主檔與非 demo 帳號、`--dry-run` 不改動資料庫 |
 
 ---

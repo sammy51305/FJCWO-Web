@@ -24,7 +24,7 @@
       <tr>
         <td class="fw-semibold">{{ fee.member.name }}</td>
         <td>{{ fee.period }}</td>
-        <td>{{ fee.period.amount|floatformat:"0" }} 元</td>
+        <td>{{ fee.amount|floatformat:"0" }} 元{% if fee.member.is_student and fee.period.student_amount %} <span class="badge bg-info text-dark">學生</span>{% endif %}</td>
         <td>{{ fee.get_payment_method_display }}</td>
         <td class="text-muted small">
           {% if fee.payment_method == 'transfer' %}
