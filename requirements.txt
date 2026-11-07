@@ -7,6 +7,7 @@ openpyxl>=3.1      # 讀團練紀錄試算表（manage.py import_sheet）
 
 # ---- 部署用（本機開發不需要，但裝了也無妨）----
 gunicorn>=23.0        # WSGI 伺服器（Linux 專用；Windows 自架請改用 waitress）
+waitress>=3.0         # Windows 自架用的 WSGI 伺服器（見 _notes/DEPLOY-WINDOWS.md）
 whitenoise>=6.7       # 由 Django 自己供應 static 檔案，PaaS 上沒有 Nginx
 dj-database-url>=2.2  # 解析託管資料庫給的 DATABASE_URL 連線字串
 cryptography>=43.0    # 敏感個資欄位加密（見 apps/accounts/fields.py）

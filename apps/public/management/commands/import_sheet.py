@@ -254,6 +254,7 @@ class Command(BaseCommand):
             header, _ = _read_table(self.sheets[name])
             missing = [h for h in required if h not in header]
             if missing:
+                wb.close()
                 raise CommandError(
                     f'「{name}」分頁缺少欄位：{"、".join(missing)}。請確認用的是原本的試算表範本、沒有改過欄位名稱。'
                 )
@@ -266,6 +267,8 @@ class Command(BaseCommand):
                     raise _Rollback
         except _Rollback:
             pass
+        finally:
+            wb.close()      # read_only 模式會一直佔著檔案；Windows 上不關就無法刪除／覆蓋這個 xlsx
         self._print_report(committed=opts['commit'])
 
     def _run(self):
