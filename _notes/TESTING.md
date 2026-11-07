@@ -92,7 +92,7 @@ python manage.py test --noinput
 
 共 **575 個測試**，分布在 8 個 app。
 
-> 最近一次全站測試：2026-11-07 執行 `python manage.py test`（藏譜改版合併 main 後），結果見 PR。
+> 最近一次全站測試：2026-11-07 執行 `python manage.py test`（藏譜改版合併 main 後），**575/575 全數通過、無 regression**（System check 亦無問題）。
 
 ### `apps/accounts/tests.py`（162 個）
 
