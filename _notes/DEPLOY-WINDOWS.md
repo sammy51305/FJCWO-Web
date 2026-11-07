@@ -82,21 +82,25 @@ winget install Python.Python.3.13 Git.Git
 git clone https://github.com/sammy51305/FJCWO-Web.git C:\FJCWO-Web
 cd C:\FJCWO-Web
 python -m venv venv
-venv\Scripts\python.exe -m pip install -r requirements.txt waitress
+venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-> `waitress` 若尚未列入 `requirements.txt`，請 Claude 一併加進去。
+> `waitress` 已列在 `requirements.txt`（Windows 用它取代 gunicorn）。
 
 建立 `C:\FJCWO-Web\.env`（**不進 git**）。變數名稱以 `render.yaml`、[SETUP.md](SETUP.md) 情境 E
 與 `config/settings.py` 為準，Claude 請先讀過再協助填，不要憑空猜名稱。需要設定的有：
 
 - 新的 `DJANGO_SECRET_KEY`（不要沿用本機或測試站那把）
 - `DJANGO_DEBUG=False`
-- 資料庫連線，例如 `DATABASE_URL=postgresql://fjcwo:密碼@localhost:5432/fjcwo`
+- 資料庫連線：用 `DB_NAME=fjcwo`、`DB_USER=fjcwo`、`DB_PASSWORD=…`、`DB_HOST=localhost`、`DB_PORT=5432`。
+  **不要設 `DATABASE_URL`**：設了它，`settings.py` 會強制 `ssl_require=True`（給 Neon 等託管資料庫用），
+  本機 PostgreSQL 預設沒開 SSL，會連不上（`server does not support SSL`）。
 - `DJANGO_ALLOWED_HOSTS`（不含 `https://`）與 `DJANGO_CSRF_TRUSTED_ORIGINS`（含 `https://`），填最終對外網域
 - `DJANGO_FIELD_ENCRYPTION_KEY`（**遺失就解不開個資，另存密碼管理器**）
 - Gmail SMTP 設定，沿用測試站那組
-- 強制 https、secure cookie 等安全開關，照 `render.yaml` 的做法開啟
+- 強制 https 與 secure cookie：`DJANGO_SECURE_SSL_REDIRECT=True`、`DJANGO_SECURE_COOKIES=True`（同 `render.yaml`）。
+  前者也會開啟 `SECURE_PROXY_SSL_HEADER`，靠反向代理送的 `X-Forwarded-Proto` 判斷 https——Waitress 要另外設定才會轉交這個 header，見第 3 步。
+- **不要**設 `DJANGO_ROBOTS_NOINDEX=True`（那是測試站用的，正式站要讓公開頁被搜尋到）
 
 初始化：
 
@@ -113,11 +117,16 @@ venv\Scripts\python.exe manage.py migrate
 ## 6. 第 3 步：試跑
 
 ```powershell
-venv\Scripts\python.exe -m waitress --listen=127.0.0.1:8000 config.wsgi:application
+venv\Scripts\python.exe -m waitress --listen=127.0.0.1:8000 --trusted-proxy=127.0.0.1 --trusted-proxy-headers=x-forwarded-proto config.wsgi:application
 ```
 
 在筆電瀏覽器開 `http://127.0.0.1:8000`，確認首頁、登入、一個幹部頁面、static 都正常。
-（`config.wsgi` 這個路徑請 Claude 先對照專案確認。）
+（`config.wsgi` 即專案的 `config/wsgi.py`。）
+
+> ⚠️ `--trusted-proxy`／`--trusted-proxy-headers` 不能省：Waitress 3 預設會**丟掉** `X-Forwarded-Proto`，
+> Django 會一直以為是 http，在 `DJANGO_SECURE_SSL_REDIRECT=True` 下無限轉址。Cloudflare Tunnel／Tailscale 都從本機（127.0.0.1）連進來，
+> 所以信任 127.0.0.1 即可。（2026-11-07 以 waitress 3.0.2 實測：不加時 header 被清掉，加了才收得到。）
+> 本機試跑時直接開 `http://127.0.0.1:8000` 若被轉到 https，是因為已設 `DJANGO_SECURE_SSL_REDIRECT=True`；試跑階段可先設 False，對外連線接好再打開。
 
 ## 7. 第 4 步：包成開機自動啟動的服務
 
@@ -131,7 +140,7 @@ C:\nssm\nssm.exe install FJCWO-Web
 3. 在視窗中填：
    - Path：`C:\FJCWO-Web\venv\Scripts\python.exe`
    - Startup directory：`C:\FJCWO-Web`
-   - Arguments：`-m waitress --listen=127.0.0.1:8000 config.wsgi:application`
+   - Arguments：`-m waitress --listen=127.0.0.1:8000 --trusted-proxy=127.0.0.1 --trusted-proxy-headers=x-forwarded-proto config.wsgi:application`
 4. I/O 分頁：stdout、stderr 都導到 `C:\FJCWO-Web\logs\web.log`。
 5. 啟動類型保持「自動」。
 6. 重開機一次，確認網站自己回來。
@@ -149,7 +158,7 @@ C:\nssm\nssm.exe install FJCWO-Web
    （會註冊成 Windows 服務）。
 3. Public Hostname：`fjcwo.你的網域` → `http://localhost:8000`。
 4. 家裡 IP 不曝光、路由器不用開 port，HTTPS 由 Cloudflare 處理。
-5. Django 要能辨識 https 轉發，設定照 `render.yaml` 的 `SECURE_PROXY_SSL_HEADER` 做法。
+5. Django 靠 `X-Forwarded-Proto` 辨識 https：`.env` 設 `DJANGO_SECURE_SSL_REDIRECT=True`，Waitress 帶 `--trusted-proxy` 參數（第 3 步）。
 
 ### 選項 B：Tailscale Funnel（免網域）
 
@@ -157,6 +166,8 @@ C:\nssm\nssm.exe install FJCWO-Web
 2. 啟用 Funnel，把 8000 port 公開成 `https://機器名.tailnet名.ts.net`。
 3. 網址較長，但免費、設定快。
 4. 同樣要把這個網址填進 `DJANGO_ALLOWED_HOSTS` 與 `DJANGO_CSRF_TRUSTED_ORIGINS`。
+5. 接好後用 `curl -I https://機器名.tailnet名.ts.net/` 確認回 200 而不是一直 301 轉址；
+   若一直轉址，代表 Funnel 沒送 `X-Forwarded-Proto`，請 Claude 協助排查（尚未實測過 Funnel 的 header 行為）。
 
 ## 9. 第 6 步：備份（最重要）
 
