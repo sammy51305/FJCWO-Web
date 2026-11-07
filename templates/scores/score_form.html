@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{% if action == 'edit' %}編輯樂譜{% else %}新增樂譜{% endif %} — 百韻管樂團{% endblock %}
+{% block title %}{% if action == 'edit' %}編輯藏譜{% else %}新增藏譜{% endif %} — 百韻管樂團{% endblock %}
 
 {% block content %}
 <nav aria-label="breadcrumb" class="mb-3">
@@ -10,90 +10,50 @@
     <li class="breadcrumb-item"><a href="{% url 'scores:score_detail' score.pk %}">{{ score.title }}</a></li>
     <li class="breadcrumb-item active">編輯</li>
     {% else %}
-    <li class="breadcrumb-item active">新增樂譜</li>
+    <li class="breadcrumb-item active">新增藏譜</li>
     {% endif %}
   </ol>
 </nav>
 
 <div class="row justify-content-center">
   <div class="col-lg-7">
-    <h2 class="mb-4">{% if action == 'edit' %}編輯樂譜{% else %}新增樂譜{% endif %}</h2>
+    <h2 class="mb-4">{% if action == 'edit' %}編輯藏譜{% else %}新增藏譜{% endif %}</h2>
 
     <form method="post">
       {% csrf_token %}
 
       <div class="mb-3">
         <label class="form-label fw-semibold">曲名 <span class="text-danger">*</span></label>
-        <input type="text" name="title" class="form-control" value="{{ form_data.title }}" required>
+        <input type="text" name="title" class="form-control" maxlength="200" value="{{ form_data.title }}" required>
       </div>
 
       <div class="row">
         <div class="col-sm-6 mb-3">
           <label class="form-label fw-semibold">作曲家</label>
-          <input type="text" name="composer" class="form-control" value="{{ form_data.composer }}">
+          <input type="text" name="composer" class="form-control" maxlength="100" value="{{ form_data.composer }}">
         </div>
         <div class="col-sm-6 mb-3">
           <label class="form-label fw-semibold">編曲者</label>
-          <input type="text" name="arranger" class="form-control" value="{{ form_data.arranger }}">
+          <input type="text" name="arranger" class="form-control" maxlength="100" value="{{ form_data.arranger }}">
         </div>
       </div>
 
       <div class="mb-3">
-        <label class="form-label fw-semibold">譜種 <span class="text-danger">*</span></label>
-        <select name="score_type" id="id_score_type" class="form-select" required>
-          <option value="">請選擇</option>
-          {% for value, label in score_type_choices %}
-          <option value="{{ value }}" {% if form_data.score_type == value %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <div id="part-fields" class="row" style="display:none">
-        <div class="col-sm-6 mb-3">
-          <label class="form-label fw-semibold">樂器 <span class="text-danger">*</span></label>
-          <select name="instrument" id="id_instrument" class="form-select">
-            <option value="">請選擇</option>
-            {% for inst in instruments %}
-            <option value="{{ inst.pk }}" {% if form_data.instrument == inst.pk|stringformat:"s" %}selected{% endif %}>
-              {{ inst.family.name }} － {{ inst.name }}
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-sm-6 mb-3" id="custom-instrument-field" style="display:none">
-          <label class="form-label fw-semibold">樂器名稱（手填） <span class="text-danger">*</span></label>
-          <input type="text" name="custom_instrument_name" class="form-control" maxlength="100"
-                 value="{{ form_data.custom_instrument_name }}" placeholder="例如：手搖鈴">
-        </div>
-        <div class="col-sm-12 mb-3">
-          <label class="form-label fw-semibold">所屬總譜 <span class="text-muted small">（選填，讓這份分譜出現在該總譜的分譜清單裡）</span></label>
-          <select name="full_score" class="form-select">
-            <option value="">不指定</option>
-            {% for fs in full_scores %}
-            <option value="{{ fs.pk }}" {% if form_data.full_score == fs.pk|stringformat:"s" %}selected{% endif %}>
-              {{ fs.title }}
-            </option>
-            {% endfor %}
-          </select>
-          <div class="form-text">若總譜已存在，也可以改用該總譜詳情頁的「管理分譜」一次貼上各樂器的連結。</div>
-        </div>
-      </div>
-
-      <div class="mb-3">
-        <label class="form-label fw-semibold">版權狀態 <span class="text-danger">*</span></label>
-        <select name="copyright_status" class="form-select" required>
-          <option value="">請選擇</option>
-          {% for value, label in copyright_choices %}
-          <option value="{{ value }}" {% if form_data.copyright_status == value %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
+        <label class="form-label fw-semibold">版本說明 <span class="text-muted small">（選填）</span></label>
+        <input type="text" name="version_note" class="form-control" maxlength="100"
+               value="{{ form_data.version_note }}" placeholder="例如：縮編版、2020 新版">
+        <div class="form-text">同一首曲名有多個版本時，各建一筆藏譜，用編曲者與這欄區分。</div>
       </div>
 
       <div class="row">
         <div class="col-sm-4 mb-3">
-          <label class="form-label fw-semibold">實體紙本數量</label>
-          <input type="number" name="physical_quantity" class="form-control" min="0"
-                 value="{{ form_data.physical_quantity|default:'0' }}">
+          <label class="form-label fw-semibold">版權狀態</label>
+          <select name="copyright_status" class="form-select">
+            <option value="">未指定</option>
+            {% for value, label in copyright_choices %}
+            <option value="{{ value }}" {% if form_data.copyright_status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
         </div>
         <div class="col-sm-4 mb-3">
           <label class="form-label fw-semibold">來源</label>
@@ -117,35 +77,25 @@
 
       <div class="mb-3">
         <label class="form-label fw-semibold">出版商 <span class="text-muted small">（選填）</span></label>
-        <input type="text" name="publisher" class="form-control" value="{{ form_data.publisher }}">
+        <input type="text" name="publisher" class="form-control" maxlength="100" value="{{ form_data.publisher }}">
       </div>
 
       <div class="mb-3">
-        <label class="form-label fw-semibold">改版自 <span class="text-muted small">（選填，用於版本鏈）</span></label>
-        <select name="parent_score" class="form-select">
-          <option value="">原版（無）</option>
-          {% for s in scores_for_parent %}
-          <option value="{{ s.pk }}" {% if form_data.parent_score == s.pk|stringformat:"s" %}selected{% endif %}>
-            {{ s }}
-          </option>
-          {% endfor %}
-        </select>
+        <label class="form-label fw-semibold">藏譜資料夾連結 <span class="text-danger">*</span></label>
+        <input type="url" name="drive_url" class="form-control" maxlength="500" required
+               value="{{ form_data.drive_url }}" placeholder="https://drive.google.com/drive/folders/…">
+        <div class="form-text">帳號 1 的「根目錄/藏譜/&lt;樂曲名&gt;」資料夾，裡面放總譜（A）與未切割譜（B）。</div>
       </div>
 
       <div class="mb-4">
-        <label class="form-label fw-semibold">改版說明 <span class="text-muted small">（選填）</span></label>
-        <textarea name="version_note" class="form-control" rows="2">{{ form_data.version_note }}</textarea>
-      </div>
-
-      <div class="mb-4">
-        <label class="form-label fw-semibold">Google Drive 連結 <span class="text-muted small">（選填）</span></label>
-        <input type="url" name="drive_url" class="form-control" maxlength="500"
-               value="{{ form_data.drive_url }}" placeholder="https://drive.google.com/…">
-        <div class="form-text">樂譜檔案放在樂團的 Google Drive，這裡貼分享連結，團員由此下載。系統不再自己存檔。</div>
+        <label class="form-label fw-semibold">分譜資料夾連結 <span class="text-muted small">（選填）</span></label>
+        <input type="url" name="parts_url" class="form-control" maxlength="500"
+               value="{{ form_data.parts_url }}" placeholder="https://drive.google.com/drive/folders/…">
+        <div class="form-text">演出後整理回藏譜的切割分譜（C），通常是「&lt;樂曲名&gt;/分譜」。尚未切割就留空。</div>
       </div>
 
       <div class="d-flex gap-2">
-        <button type="submit" class="btn btn-primary">{% if action == 'edit' %}儲存變更{% else %}新增樂譜{% endif %}</button>
+        <button type="submit" class="btn btn-primary">{% if action == 'edit' %}儲存變更{% else %}新增藏譜{% endif %}</button>
         {% if action == 'edit' %}
         <a href="{% url 'scores:score_detail' score.pk %}" class="btn btn-outline-secondary">取消</a>
         {% else %}
@@ -155,26 +105,4 @@
     </form>
   </div>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-(function () {
-  var typeSelect = document.getElementById('id_score_type');
-  var partFields = document.getElementById('part-fields');
-  var instrumentSelect = document.getElementById('id_instrument');
-  var customField = document.getElementById('custom-instrument-field');
-  var customId = '{{ custom_instrument_id|default_if_none:"" }}';
-
-  function syncPartFields() {
-    partFields.style.display = typeSelect.value === 'part' ? '' : 'none';
-    // 選到「其他（手填）」才出現名稱欄位
-    customField.style.display = (customId && instrumentSelect.value === customId) ? '' : 'none';
-  }
-
-  typeSelect.addEventListener('change', syncPartFields);
-  instrumentSelect.addEventListener('change', syncPartFields);
-  syncPartFields();
-})();
-</script>
 {% endblock %}

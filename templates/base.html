@@ -31,7 +31,6 @@
             <ul class="dropdown-menu">
               <li><a class="dropdown-item" href="{% url 'events:checkin_entry' %}">簽到</a></li>
               <li><a class="dropdown-item" href="{% url 'events:rehearsal_journal' %}">團練日誌</a></li>
-              <li><a class="dropdown-item" href="{% url 'scores:score_list' %}">樂譜庫存</a></li>
               <li><a class="dropdown-item" href="{% url 'events:my_leave_requests' %}">我的請假</a></li>
               <li><a class="dropdown-item" href="{% url 'finance:my_fees' %}">我的會費</a></li>
             </ul>
@@ -49,6 +48,7 @@
             </ul>
           </li>
           <li class="nav-item"><a class="nav-link" href="{% url 'public:venue_list' %}">場地管理</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'scores:score_list' %}">樂譜庫存</a></li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">財務</a>
             <ul class="dropdown-menu">

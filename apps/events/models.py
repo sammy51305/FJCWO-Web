@@ -7,6 +7,7 @@ from django.db import models
 from django.utils import timezone
 
 from apps.public.models import Venue
+from apps.scores.models import normalize_drive_url, validate_drive_url
 
 
 def day_end(moment):
@@ -47,14 +48,36 @@ class PerformanceEvent(models.Model):
         related_name='performance_events', verbose_name='演出場地'
     )
     status = models.CharField('狀態', max_length=20, choices=Status, default=Status.PLANNING)
+    # 樂譜資料夾（檔案在 Google Drive，系統只記連結；族群資料夾見 EventPartFolder）
+    archive_folder_url = models.URLField(
+        '典藏資料夾連結', max_length=500, blank=True, validators=[validate_drive_url],
+        help_text='帳號 1 的「根目錄/音樂會專用/<年月日音樂會名稱>」，幹部限定。'
+    )
+    conductor_folder_url = models.URLField(
+        '總譜資料夾連結', max_length=500, blank=True, validators=[validate_drive_url],
+        help_text='帳號 2 的「…/<年月日音樂會名稱>/總譜」（A），只分享給幹部，幹部限定。'
+    )
 
     class Meta:
         verbose_name = '演出活動'
         verbose_name_plural = '演出活動列表'
         ordering = ['-performance_date']
 
+    def save(self, *args, **kwargs):
+        self.archive_folder_url = normalize_drive_url(self.archive_folder_url)
+        self.conductor_folder_url = normalize_drive_url(self.conductor_folder_url)
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.name
+
+    @property
+    def tag(self):
+        """
+        演出標籤，例如「20270124輔韻之聲」：藏譜上的演出紀錄、Drive 場次資料夾名稱都用這個字串。
+        日期取本地時區（資料庫存 UTC，直接取 .date() 在台灣清晨會差一天）。
+        """
+        return f'{timezone.localtime(self.performance_date):%Y%m%d}{self.name}'
 
     @property
     def intent_deadline(self):
@@ -205,14 +228,55 @@ class PerformanceAttendance(models.Model):
         return f'{self.event.name} - {self.member.name}'
 
 
+class EventPartFolder(models.Model):
+    """
+    演出的族群分譜資料夾（C）：帳號 2「根目錄/音樂會專用/<年月日音樂會名稱>/<族群>」。
+    族群資料夾底下再分各樂器；團員下載整個族群資料夾即可拿到所有樂器的分譜。
+    團員只看得到自己族群（User.instrument）的這一筆，幹部看全部。
+    """
+    event = models.ForeignKey(
+        PerformanceEvent, on_delete=models.CASCADE,
+        related_name='part_folders', verbose_name='演出活動'
+    )
+    family = models.ForeignKey(
+        'accounts.InstrumentFamily', on_delete=models.PROTECT,
+        related_name='event_part_folders', verbose_name='樂器族群'
+    )
+    drive_url = models.URLField('族群資料夾連結', max_length=500, validators=[validate_drive_url])
+
+    class Meta:
+        verbose_name = '演出族群分譜資料夾'
+        verbose_name_plural = '演出族群分譜資料夾列表'
+        unique_together = [['event', 'family']]
+
+    def save(self, *args, **kwargs):
+        self.drive_url = normalize_drive_url(self.drive_url)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.event.name} - {self.family.name}'
+
+
 class Setlist(models.Model):
+    """
+    演出曲目單。一般曲目指向藏譜（score），也就是「這場演出演了藏譜裡的這首」，
+    藏譜上的演出標籤與次數都從這裡算。
+
+    特例：借來演一次、不入藏的曲目，score 留空，改填 unarchived_title 與原因，
+    曲目單仍完整；樂譜庫存頁會列給幹部追蹤，之後補建藏譜可再連回去。
+    """
     event = models.ForeignKey(
         PerformanceEvent, on_delete=models.CASCADE,
         related_name='setlists', verbose_name='演出活動'
     )
     score = models.ForeignKey(
-        'scores.Score', on_delete=models.PROTECT,
-        related_name='setlists', verbose_name='曲目'
+        'scores.Score', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='setlists', verbose_name='曲目（藏譜）'
+    )
+    unarchived_title = models.CharField('未入藏曲名', max_length=200, blank=True)
+    unarchived_reason = models.CharField(
+        '未入藏原因', max_length=200, blank=True,
+        help_text='例如：向某團借譜，演完歸還。'
     )
     order = models.PositiveSmallIntegerField('演出順序')
 
@@ -222,8 +286,20 @@ class Setlist(models.Model):
         ordering = ['event', 'order']
         unique_together = [['event', 'order']]
 
+    def clean(self):
+        if self.score_id and self.unarchived_title:
+            raise ValidationError('曲目已連到藏譜時，不需填未入藏曲名。')
+        if not self.score_id and not self.unarchived_title.strip():
+            raise ValidationError('請選擇藏譜，或填寫未入藏曲名。')
+        if not self.score_id and not self.unarchived_reason.strip():
+            raise ValidationError('未入藏的曲目請填寫原因。')
+
+    @property
+    def display_title(self):
+        return str(self.score) if self.score_id else self.unarchived_title
+
     def __str__(self):
-        return f'{self.event.name} #{self.order} {self.score.title}'
+        return f'{self.event.name} #{self.order} {self.display_title}'
 
 
 class PartAssignment(models.Model):
@@ -240,10 +316,6 @@ class PartAssignment(models.Model):
     )
     section = models.ForeignKey(
         'accounts.SectionType', on_delete=models.PROTECT, verbose_name='聲部'
-    )
-    score_part = models.ForeignKey(
-        'scores.Score', on_delete=models.SET_NULL,
-        null=True, blank=True, related_name='assigned_parts', verbose_name='對應分譜'
     )
 
     class Meta:

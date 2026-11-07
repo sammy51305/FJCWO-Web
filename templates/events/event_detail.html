@@ -70,11 +70,9 @@
       <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
         演出曲目
         <div class="d-flex gap-2 d-print-none">
-          {% if setlists %}
           <a href="{% url 'scores:performance_parts' event.pk %}" class="btn btn-outline-success btn-sm">
-            <i class="bi bi-file-earmark-music"></i> 我的分譜
+            <i class="bi bi-file-earmark-music"></i> {% if user.is_officer %}樂譜資料夾{% else %}我的分譜{% endif %}
           </a>
-          {% endif %}
           {% if user.is_officer %}
           <a href="{% url 'events:setlist_manage' event.pk %}" class="btn btn-outline-primary btn-sm">
             <i class="bi bi-pencil"></i> 管理曲目
@@ -86,7 +84,7 @@
         {% for item in setlists %}
         <li class="list-group-item d-flex align-items-center gap-2">
           <span class="badge bg-secondary">{{ item.order }}</span>
-          <span>{{ item.score.title }}</span>
+          <span>{% if item.score %}{{ item.score.title }}{% else %}{{ item.unarchived_title }}{% endif %}</span>
           {% if item.score.composer %}<small class="text-muted ms-1">{{ item.score.composer }}</small>{% endif %}
         </li>
         {% endfor %}

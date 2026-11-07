@@ -8,10 +8,6 @@ from django.db import models
 # 系統不再自己存檔，只記連結。限定 Google 網域，避免把團員導到任意外站。
 DRIVE_HOSTS = {'drive.google.com', 'docs.google.com'}
 
-# 「其他」族群裡的固定樂器：選它代表「特殊樂器，由譜務在 custom_instrument_name 手填名稱」。
-CUSTOM_INSTRUMENT_NAME = '其他（手填）'
-
-
 def normalize_drive_url(value):
     """
     去頭尾空白，並拿掉網址裡的瀏覽器帳號編號 `/u/數字/`。
@@ -35,9 +31,14 @@ def validate_drive_url(value):
 
 
 class Score(models.Model):
-    class ScoreType(models.TextChoices):
-        FULL = 'full', '總譜'
-        PART = 'part', '分譜'
+    """
+    藏譜：一首曲子（的一個版本）一筆。
+
+    檔案放在帳號 1 的 Google Drive「根目錄/藏譜/<樂曲名>」，內含指揮總譜（A）與未切割譜（B）；
+    演出過後，譜務把切割好的分譜（C）從音樂會資料夾整理回「<樂曲名>/分譜」，填進 parts_url。
+    同一首曲名的不同版本（編曲、縮編…）各建一筆，以編曲者與版本說明區分。
+    演出用的分譜不在這裡，而是掛在演出活動的族群資料夾（events.EventPartFolder）。
+    """
 
     class CopyrightStatus(models.TextChoices):
         PUBLIC_DOMAIN = 'public_domain', '公版'
@@ -57,76 +58,43 @@ class Score(models.Model):
     title = models.CharField('曲名', max_length=200)
     composer = models.CharField('作曲家', max_length=100, blank=True)
     arranger = models.CharField('編曲者', max_length=100, blank=True)
-    score_type = models.CharField('譜種', max_length=10, choices=ScoreType)
-    instrument = models.ForeignKey(
-        'accounts.InstrumentType', on_delete=models.SET_NULL,
-        null=True, blank=True, verbose_name='樂器'
+    version_note = models.CharField(
+        '版本說明', max_length=100, blank=True,
+        help_text='同一首曲名有多個版本時用來區分，例如：縮編版、2020 新版。'
     )
-    custom_instrument_name = models.CharField(
-        '樂器名稱（手填）', max_length=100, blank=True,
-        help_text=f'樂器選「{CUSTOM_INSTRUMENT_NAME}」時必填，例如：手搖鈴。'
-    )
-    copyright_status = models.CharField('版權狀態', max_length=20, choices=CopyrightStatus)
-    physical_quantity = models.PositiveSmallIntegerField('實體紙本數量', default=0)
-    drive_url = models.URLField(
-        'Google Drive 連結', max_length=500, blank=True, validators=[validate_drive_url],
-        help_text='樂譜放在樂團的 Google Drive，這裡貼分享連結，團員由此下載。'
-    )
-    full_score = models.ForeignKey(
-        'self', on_delete=models.CASCADE,
-        null=True, blank=True, related_name='parts', verbose_name='所屬總譜',
-        limit_choices_to={'score_type': 'full'}
-    )
-    parent_score = models.ForeignKey(
-        'self', on_delete=models.SET_NULL,
-        null=True, blank=True, related_name='versions', verbose_name='基於版本'
-    )
-    version_note = models.TextField('改版說明', blank=True)
+    copyright_status = models.CharField('版權狀態', max_length=20, choices=CopyrightStatus, blank=True)
     source = models.CharField('來源', max_length=20, choices=Source, blank=True)
     publisher = models.CharField('出版商', max_length=100, blank=True)
     difficulty = models.CharField('難度', max_length=20, choices=Difficulty, blank=True)
+    drive_url = models.URLField(
+        '藏譜資料夾連結', max_length=500, validators=[validate_drive_url],
+        help_text='帳號 1 的「根目錄/藏譜/<樂曲名>」資料夾，內含總譜（A）與未切割譜（B）。'
+    )
+    parts_url = models.URLField(
+        '分譜資料夾連結', max_length=500, blank=True, validators=[validate_drive_url],
+        help_text='演出後整理回藏譜的切割分譜（C），通常是「<樂曲名>/分譜」。尚未切割就留空。'
+    )
 
     class Meta:
-        verbose_name = '樂譜'
-        verbose_name_plural = '樂譜列表'
-        ordering = ['title']
-
-    @property
-    def is_custom_instrument(self):
-        return bool(self.instrument_id) and self.instrument.name == CUSTOM_INSTRUMENT_NAME
-
-    @property
-    def instrument_label(self):
-        """畫面上顯示的樂器名：手填樂器顯示手填的名稱，其餘顯示樂器主檔名稱。"""
-        if self.is_custom_instrument and self.custom_instrument_name:
-            return self.custom_instrument_name
-        return self.instrument.name if self.instrument_id else ''
+        verbose_name = '藏譜'
+        verbose_name_plural = '藏譜列表'
+        ordering = ['title', 'arranger', 'version_note']
 
     def save(self, *args, **kwargs):
-        # 不論從哪條路進來（表單、分譜管理頁、Admin、批次），存進去的連結都是整理過的版本
+        # 不論從哪條路進來（表單、Admin、批次），存進去的連結都是整理過的版本
         self.drive_url = normalize_drive_url(self.drive_url)
+        self.parts_url = normalize_drive_url(self.parts_url)
         super().save(*args, **kwargs)
 
-    def clean(self):
-        if self.score_type == self.ScoreType.FULL:
-            if self.instrument or self.custom_instrument_name:
-                raise ValidationError('總譜不應指定樂器。')
-            if self.full_score:
-                raise ValidationError('總譜不應指定所屬總譜。')
-        elif self.score_type == self.ScoreType.PART:
-            if not self.instrument:
-                raise ValidationError('分譜必須指定樂器。')
-            if self.full_score and self.full_score.score_type != self.ScoreType.FULL:
-                raise ValidationError('所屬總譜必須是總譜類型。')
-            if self.is_custom_instrument and not self.custom_instrument_name.strip():
-                raise ValidationError(f'樂器選「{CUSTOM_INSTRUMENT_NAME}」時，請填寫樂器名稱。')
-            if not self.is_custom_instrument and self.custom_instrument_name:
-                raise ValidationError(f'只有樂器選「{CUSTOM_INSTRUMENT_NAME}」時才能手填樂器名稱。')
+    @property
+    def is_cut(self):
+        """已有切割好的分譜（C）。"""
+        return bool(self.parts_url)
 
     def __str__(self):
-        if self.score_type == self.ScoreType.PART and self.instrument:
-            return f'{self.title}（{self.instrument_label}）'
-        return self.title
+        extra = '、'.join(x for x in (
+            f'{self.arranger} 編' if self.arranger else '', self.version_note) if x)
+        return f'{self.title}（{extra}）' if extra else self.title
 
 
 class ScoreExchange(models.Model):

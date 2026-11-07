@@ -1,0 +1,13 @@
+{% comment %} 藏譜的演出紀錄標籤：每場未取消的演出一個（例如 20270124輔韻之聲），可點進該場活動。
+   已演出的實心、即將演出的空心；次數只算已演出的場次（同一場重複列只算一次）。
+   需要 score.active_setlists（views._setlist_prefetch）與 score.performance_count。 {% endcomment %}
+{% if score.performance_count %}<span class="small text-muted me-1">演出 {{ score.performance_count }} 次</span>{% endif %}
+{% for item in score.active_setlists %}
+  {% ifchanged item.event_id %}
+  <a href="{% url 'events:event_detail' item.event.pk %}"
+     class="badge text-decoration-none {% if item.event.performance_date < now %}bg-primary{% else %}bg-light text-primary border border-primary{% endif %}"
+     title="{% if item.event.performance_date < now %}已演出{% else %}即將演出{% endif %}">{{ item.event.tag }}</a>
+  {% endifchanged %}
+{% empty %}
+  <span class="text-muted small">—</span>
+{% endfor %}

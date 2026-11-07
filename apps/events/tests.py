@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from apps.accounts.models import SectionType, User
 from apps.public.models import Venue
@@ -681,7 +681,7 @@ class QRCodeTest(TestCase):
 
 
 class SetlistManageTest(TestCase):
-    """演出曲目管理"""
+    """演出曲目管理：從藏譜加入、未入藏特例曲目、移除"""
 
     def setUp(self):
         from apps.scores.models import Score
@@ -706,20 +706,8 @@ class SetlistManageTest(TestCase):
             performance_date=timezone.now() + timedelta(days=30),
             performance_venue=self.venue,
         )
-        self.full_score = Score.objects.create(
-            title='測試總譜', score_type=Score.ScoreType.FULL
-        )
-        from apps.accounts.models import InstrumentFamily, InstrumentType
-        family = InstrumentFamily.objects.create(
-            name='長笛族2', category=InstrumentFamily.Category.WOODWIND
-        )
-        self.instrument = InstrumentType.objects.create(
-            name='長笛2', family=family
-        )
-        self.part_score = Score.objects.create(
-            title='測試分譜',
-            score_type=Score.ScoreType.PART,
-            instrument=self.instrument,
+        self.score = Score.objects.create(
+            title='測試藏譜', drive_url='https://drive.google.com/drive/folders/sl'
         )
         self.url = reverse('events:setlist_manage', args=[self.event.pk])
 
@@ -739,44 +727,190 @@ class SetlistManageTest(TestCase):
 
     # ── T02 新增曲目 ─────────────────────────────────────────
 
-    def test_add_full_score_succeeds(self):
-        """新增總譜應成功建立 Setlist"""
+    def test_add_score_succeeds(self):
+        """從藏譜加入應成功建立 Setlist"""
         from .models import Setlist
         self.client.force_login(self.officer)
-        self.client.post(self.url, {
-            'action': 'add', 'score_id': self.full_score.pk, 'order': 1
-        })
-        self.assertTrue(Setlist.objects.filter(event=self.event, score=self.full_score).exists())
+        self.client.post(self.url, {'action': 'add', 'score_id': self.score.pk, 'order': 1})
+        self.assertTrue(Setlist.objects.filter(event=self.event, score=self.score).exists())
 
-    def test_add_part_score_blocked(self):
-        """嘗試新增分譜應被擋下（404），不建立 Setlist"""
+    def test_add_nonexistent_score_404(self):
+        """不存在的藏譜 pk 回 404，不建立 Setlist"""
         from .models import Setlist
         self.client.force_login(self.officer)
-        r = self.client.post(self.url, {
-            'action': 'add', 'score_id': self.part_score.pk, 'order': 1
-        })
+        r = self.client.post(self.url, {'action': 'add', 'score_id': 99999, 'order': 1})
         self.assertEqual(r.status_code, 404)
         self.assertFalse(Setlist.objects.filter(event=self.event).exists())
 
     def test_duplicate_order_blocked(self):
         """演出順序重複時應顯示錯誤，不建立第二筆"""
         from .models import Setlist
+        from apps.scores.models import Score
         self.client.force_login(self.officer)
-        self.client.post(self.url, {'action': 'add', 'score_id': self.full_score.pk, 'order': 1})
-        from apps.scores.models import Score as ScoreModel
-        score2 = ScoreModel.objects.create(title='另一首', score_type=ScoreModel.ScoreType.FULL)
+        self.client.post(self.url, {'action': 'add', 'score_id': self.score.pk, 'order': 1})
+        score2 = Score.objects.create(title='另一首', drive_url='https://drive.google.com/drive/folders/x')
         self.client.post(self.url, {'action': 'add', 'score_id': score2.pk, 'order': 1})
         self.assertEqual(Setlist.objects.filter(event=self.event).count(), 1)
+
+    def test_add_unarchived_with_reason(self):
+        """未入藏特例：只填曲名＋原因即可加入，score 為空"""
+        from .models import Setlist
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'action': 'add_unarchived', 'unarchived_title': '借來的曲子',
+            'unarchived_reason': '向友團借譜', 'order': 1,
+        })
+        item = Setlist.objects.get(event=self.event)
+        self.assertIsNone(item.score)
+        self.assertEqual(item.display_title, '借來的曲子')
+
+    def test_add_unarchived_requires_reason(self):
+        """未入藏曲目沒填原因被擋下"""
+        from .models import Setlist
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'action': 'add_unarchived', 'unarchived_title': '借來的曲子',
+            'unarchived_reason': '', 'order': 1,
+        })
+        self.assertFalse(Setlist.objects.filter(event=self.event).exists())
+
+    def test_unarchived_listed_with_badge(self):
+        """曲目單頁顯示未入藏曲目與「未入藏」標記"""
+        from .models import Setlist
+        Setlist.objects.create(event=self.event, unarchived_title='借來的曲子',
+                               unarchived_reason='向友團借譜', order=1)
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertContains(r, '借來的曲子')
+        self.assertContains(r, '未入藏')
 
     # ── T03 移除曲目 ─────────────────────────────────────────
 
     def test_remove_score_deletes_setlist(self):
         """移除曲目應刪除對應 Setlist"""
         from .models import Setlist
-        item = Setlist.objects.create(event=self.event, score=self.full_score, order=1)
+        item = Setlist.objects.create(event=self.event, score=self.score, order=1)
         self.client.force_login(self.officer)
         self.client.post(self.url, {'action': 'remove', 'item_id': item.pk})
         self.assertFalse(Setlist.objects.filter(pk=item.pk).exists())
+
+
+class SetlistModelTest(TestCase):
+    """Setlist.clean()：藏譜與未入藏曲名二擇一，未入藏需填原因；演出標籤格式"""
+
+    def setUp(self):
+        from apps.scores.models import Score
+        venue = Venue.objects.create(name='曲目模型場地', type='performance')
+        self.event = PerformanceEvent.objects.create(
+            name='輔韻之聲', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.make_aware(datetime(2027, 1, 24, 19, 30)),
+            performance_venue=venue,
+        )
+        self.score = Score.objects.create(title='藏譜曲', drive_url='https://drive.google.com/drive/folders/m')
+
+    def _clean(self, **kw):
+        from django.core.exceptions import ValidationError
+        from .models import Setlist
+        item = Setlist(event=self.event, order=1, **kw)
+        try:
+            item.full_clean()
+            return None
+        except ValidationError as e:
+            return e
+
+    def test_score_only_passes(self):
+        self.assertIsNone(self._clean(score=self.score))
+
+    def test_neither_fails(self):
+        self.assertIsNotNone(self._clean())
+
+    def test_both_fails(self):
+        self.assertIsNotNone(self._clean(score=self.score, unarchived_title='x', unarchived_reason='y'))
+
+    def test_unarchived_without_reason_fails(self):
+        self.assertIsNotNone(self._clean(unarchived_title='借來的'))
+
+    def test_event_tag_uses_local_date_and_name(self):
+        """演出標籤 = 本地日期（年月日）＋活動名稱，例如 20270124輔韻之聲"""
+        self.assertEqual(self.event.tag, '20270124輔韻之聲')
+
+
+class ScoreFoldersManageTest(TestCase):
+    """演出樂譜資料夾設定（幹部）：總譜／典藏／族群資料夾連結"""
+
+    DRIVE = 'https://drive.google.com/drive/folders/'
+
+    def setUp(self):
+        from apps.accounts.models import InstrumentFamily
+        self.officer = User.objects.create_user(
+            username='sf_officer', email='sf_officer@test.local', password='x',
+            name='資料夾幹部', role=User.Role.OFFICER,
+        )
+        self.member = User.objects.create_user(
+            username='sf_member', email='sf_member@test.local', password='x',
+            name='資料夾團員', role=User.Role.MEMBER,
+        )
+        venue = Venue.objects.create(name='資料夾場地', type='performance')
+        self.event = PerformanceEvent.objects.create(
+            name='資料夾音樂會', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + timedelta(days=30), performance_venue=venue,
+        )
+        self.flute = InstrumentFamily.objects.create(name='長笛族', category='woodwind')
+        self.brass = InstrumentFamily.objects.create(name='小號族', category='brass')
+        self.url = reverse('events:score_folders_manage', args=[self.event.pk])
+
+    def test_member_cannot_access(self):
+        """一般團員被導回活動詳情頁"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.url)
+        self.assertRedirects(r, reverse('events:event_detail', args=[self.event.pk]), fetch_redirect_response=False)
+
+    def test_officer_get_groups_families_by_category(self):
+        """幹部 GET：每個族群一格，依類別分組，並提示 Drive 資料夾命名"""
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url)
+        self.assertContains(r, f'name="family_{self.flute.pk}"')
+        self.assertContains(r, '木管')
+        self.assertContains(r, self.event.tag)
+
+    def test_post_saves_folders_and_normalizes(self):
+        """POST 儲存總譜／典藏與族群連結；/u/1/ 帳號編號會被拿掉"""
+        from .models import EventPartFolder
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'conductor_folder_url': 'https://drive.google.com/drive/u/1/folders/cond',
+            'archive_folder_url': self.DRIVE + 'arch',
+            f'family_{self.flute.pk}': self.DRIVE + 'flute',
+            f'family_{self.brass.pk}': '',
+        })
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.conductor_folder_url, self.DRIVE + 'cond')
+        self.assertEqual(self.event.archive_folder_url, self.DRIVE + 'arch')
+        self.assertEqual(EventPartFolder.objects.get(event=self.event, family=self.flute).drive_url,
+                         self.DRIVE + 'flute')
+        self.assertFalse(EventPartFolder.objects.filter(event=self.event, family=self.brass).exists())
+
+    def test_clearing_removes_family_folder(self):
+        """再次送出時清空的族群格子會移除該族群資料夾"""
+        from .models import EventPartFolder
+        EventPartFolder.objects.create(event=self.event, family=self.flute, drive_url=self.DRIVE + 'old')
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {f'family_{self.flute.pk}': ''})
+        self.assertFalse(EventPartFolder.objects.filter(event=self.event).exists())
+
+    def test_non_google_url_rejected_nothing_saved(self):
+        """任一格不是 Google 連結就整批不存，並帶回已填的值"""
+        from .models import EventPartFolder
+        self.client.force_login(self.officer)
+        r = self.client.post(self.url, {
+            'conductor_folder_url': 'https://example.com/x',
+            f'family_{self.flute.pk}': self.DRIVE + 'flute',
+        })
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, self.DRIVE + 'flute')
+        self.assertFalse(EventPartFolder.objects.exists())
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.conductor_folder_url, '')
 
 
 class AttendanceReportTest(TestCase):
@@ -1732,12 +1866,14 @@ class PracticeMenuTest(TestCase):
         )
 
     def test_menu_visible_to_member_with_all_entries(self):
-        """登入團員的導覽列有「團練」下拉，含簽到／團練日誌／樂譜庫存／我的請假／我的會費"""
+        """登入團員的導覽列有「團練」下拉，含簽到／團練日誌／我的請假／我的會費；
+        樂譜庫存（藏譜）幹部限定，團員導覽列不出現"""
         self.client.force_login(self.member)
         r = self.client.get(reverse('public:index'))
         for url_name in ('events:checkin_entry', 'events:rehearsal_journal',
-                         'scores:score_list', 'events:my_leave_requests', 'finance:my_fees'):
+                         'events:my_leave_requests', 'finance:my_fees'):
             self.assertContains(r, f'href="{reverse(url_name)}"')
+        self.assertNotContains(r, f'href="{reverse("scores:score_list")}"')
 
     def test_journal_requires_login(self):
         """未登入看團練日誌導向登入頁"""

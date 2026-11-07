@@ -11,9 +11,9 @@ class ScoreExchangeItemInline(admin.TabularInline):
 
 @admin.register(Score)
 class ScoreAdmin(admin.ModelAdmin):
-    list_display = ['title', 'composer', 'score_type', 'instrument', 'difficulty', 'physical_quantity']
-    list_filter = ['score_type', 'difficulty', 'copyright_status', 'source', 'instrument__family__category']
-    search_fields = ['title', 'composer', 'arranger']
+    list_display = ['title', 'arranger', 'version_note', 'composer', 'difficulty', 'copyright_status']
+    list_filter = ['difficulty', 'copyright_status', 'source']
+    search_fields = ['title', 'composer', 'arranger', 'version_note']
 
 
 @admin.register(ScoreExchange)
