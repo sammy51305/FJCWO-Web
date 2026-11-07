@@ -21,7 +21,7 @@
       {% for row in rows %}
       <tr>
         <td class="fw-semibold">{{ row.period }}</td>
-        <td>{{ row.period.amount|floatformat:"0" }} 元</td>
+        <td>{% if row.fee and row.fee.status != 'void' %}{{ row.fee.amount|floatformat:"0" }}{% else %}{{ row.amount_due|floatformat:"0" }}{% endif %} 元</td>
         <td>
           {% if row.fee and row.fee.status == 'reported' %}
             <span class="badge bg-warning text-dark">待幹部確認</span>

@@ -104,8 +104,19 @@ def _parse_fee_period_form(request):
         amount = None
         errors.append('團費金額必須是數字。')
 
+    # 學生團費選填：留空＝學生也繳一般金額
+    student_amount_raw = request.POST.get('student_amount', '').strip()
+    student_amount = None
+    if student_amount_raw:
+        try:
+            student_amount = int(student_amount_raw)
+            if student_amount < 1:
+                errors.append('學生團費必須大於 0（不適用請留空）。')
+        except (ValueError, TypeError):
+            errors.append('學生團費必須是數字。')
+
     cleaned = {
-        'year': year, 'term': term, 'amount': amount,
+        'year': year, 'term': term, 'amount': amount, 'student_amount': student_amount,
         'start_date': parse_date(request.POST.get('start_date', '').strip() or ''),
         'end_date': parse_date(request.POST.get('end_date', '').strip() or ''),
     }
@@ -174,6 +185,7 @@ def fee_period_edit(request, pk):
 
     form_data = {
         'year': period.year, 'term': period.term, 'amount': period.amount,
+        'student_amount': period.student_amount if period.student_amount is not None else '',
         'start_date': period.start_date.isoformat() if period.start_date else '',
         'end_date': period.end_date.isoformat() if period.end_date else '',
     }
@@ -442,9 +454,9 @@ def fee_edit(request):
         paid_at = (parse_date(paid_at_raw) or timezone.localdate()) if paid else None
         S = MembershipFee.Status
         fee, _ = MembershipFee.objects.get_or_create(
-            member=member, period=period, defaults={'amount': period.amount},
+            member=member, period=period, defaults={'amount': period.amount_for(member)},
         )
-        fee.amount = period.amount   # 金額快照：以期別當下的固定金額為準
+        fee.amount = period.amount_for(member)   # 金額快照：以期別當下的金額為準（學生取學生團費）
         fee.status = S.PAID if paid else S.UNPAID
         fee.paid_at = paid_at
         fee.collected_by = request.user if paid else None
@@ -487,7 +499,7 @@ def my_fees(request):
     rows = []
     for period in periods:
         fee = fee_map.get(period.pk)
-        rows.append({'period': period, 'fee': fee})
+        rows.append({'period': period, 'fee': fee, 'amount_due': period.amount_for(request.user)})
     return render(request, 'finance/my_fees.html', {'rows': rows})
 
 
@@ -534,7 +546,7 @@ def fee_report_create(request, period_pk):
                 messages.error(request, e)
         else:
             fee = existing or MembershipFee(member=request.user, period=period)
-            fee.amount = period.amount
+            fee.amount = period.amount_for(request.user)
             fee.status = S.REPORTED
             fee.payment_method = method
             fee.paid_at = None
@@ -552,7 +564,8 @@ def fee_report_create(request, period_pk):
             return redirect('finance:my_fees')
 
     return render(request, 'finance/fee_report_form.html', {
-        'period': period, 'officers': officers, 'existing': existing, 'blocked': blocked,
+        'period': period, 'amount_due': period.amount_for(request.user),
+        'officers': officers, 'existing': existing, 'blocked': blocked,
         'payment_config': payment_config,
     })
 
@@ -594,7 +607,7 @@ def fee_review_list(request):
         if action == 'confirm':
             fee.status = S.PAID
             fee.paid_at = timezone.localdate()
-            fee.amount = fee.period.amount   # 確認當下再快照一次期別金額
+            fee.amount = fee.period.amount_for(fee.member)   # 確認當下再快照一次期別金額（學生取學生團費）
             fee.result_seen = False
             fee.save()
             _sync_fee_income(fee, request.user)   # 自動入帳（收支明細收入）

@@ -1965,3 +1965,50 @@ class RegistrationImportTest(TestCase):
         self.client.force_login(self.member)
         self.client.post(self.review_url, {'action': 'bulk_approve', 'reg_ids': [reg.pk]})
         self.assertFalse(User.objects.filter(email='bulk_perm@test.local').exists())
+
+
+class StudentFlagTest(TestCase):
+    """團員「學生」標記（學生團費適用）：幹部可在新增／編輯團員時勾選，與角色分開"""
+
+    def setUp(self):
+        self.officer = User.objects.create_user(
+            username='stu_officer', password='x', name='學生標記幹部',
+            email='stu_officer@test.local', role=User.Role.OFFICER,
+        )
+        self.member = User.objects.create_user(
+            username='stu_member', password='x', name='學生團員',
+            email='stu_member@test.local', role=User.Role.MEMBER,
+        )
+        self.client.force_login(self.officer)
+
+    def test_default_not_student(self):
+        """新帳號預設不是學生"""
+        self.assertFalse(self.member.is_student)
+
+    def test_edit_checks_and_unchecks_student(self):
+        """編輯團員：勾選設為學生、取消勾選設回非學生；勾選狀態會預先帶入表單"""
+        url = reverse('accounts:member_edit', args=[self.member.pk])
+        self.client.post(url, profile_post(name='學生團員', email='stu_member@test.local',
+                                           role='member', is_student='1'))
+        self.member.refresh_from_db()
+        self.assertTrue(self.member.is_student)
+        self.assertTrue(self.client.get(url).context['form_data']['is_student'])
+
+        self.client.post(url, profile_post(name='學生團員', email='stu_member@test.local', role='member'))
+        self.member.refresh_from_db()
+        self.assertFalse(self.member.is_student)
+
+    def test_student_can_also_be_officer(self):
+        """學生與角色互不影響：幹部也可以是學生"""
+        url = reverse('accounts:member_edit', args=[self.member.pk])
+        self.client.post(url, profile_post(name='學生團員', email='stu_member@test.local',
+                                           role='officer', is_student='1'))
+        self.member.refresh_from_db()
+        self.assertEqual((self.member.role, self.member.is_student), (User.Role.OFFICER, True))
+
+    def test_create_with_student(self):
+        """新增團員時勾選學生"""
+        self.client.post(reverse('accounts:member_create'), profile_post(
+            name='新學生', email='new_student@test.local', is_student='1',
+        ))
+        self.assertTrue(User.objects.get(email='new_student@test.local').is_student)

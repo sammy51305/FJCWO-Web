@@ -17,7 +17,7 @@
   </a>
 </div>
 
-<p class="text-muted">每一期團費為全團固定金額；建立後，每位在團團員對這期即為「應繳未繳」，於「會費繳納狀況」登記繳費。</p>
+<p class="text-muted">每一期團費為全團固定金額（學生可另訂學生團費）；建立後，每位在團團員對這期即為「應繳未繳」，於「會費繳納狀況」登記繳費。</p>
 
 {% if periods %}
 <div class="table-responsive">
@@ -26,6 +26,7 @@
       <tr>
         <th>期別</th>
         <th>團費金額</th>
+        <th>學生團費</th>
         <th>繳費起訖</th>
         <th></th>
       </tr>
@@ -35,6 +36,7 @@
       <tr>
         <td class="fw-semibold">{{ p }}</td>
         <td>{{ p.amount|floatformat:"0" }} 元</td>
+        <td>{% if p.student_amount %}{{ p.student_amount|floatformat:"0" }} 元{% else %}<span class="text-muted">同一般</span>{% endif %}</td>
         <td class="text-muted">
           {% if p.start_date or p.end_date %}
             {{ p.start_date|date:"Y/m/d"|default:"—" }} ～ {{ p.end_date|date:"Y/m/d"|default:"—" }}

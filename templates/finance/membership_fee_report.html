@@ -46,7 +46,7 @@
 </form>
 
 {% if selected_period %}
-<p class="text-muted d-print-block mb-3">期別：{{ selected_period }}・團費 {{ selected_period.amount|floatformat:"0" }} 元</p>
+<p class="text-muted d-print-block mb-3">期別：{{ selected_period }}・團費 {{ selected_period.amount|floatformat:"0" }} 元{% if selected_period.student_amount %}・學生 {{ selected_period.student_amount|floatformat:"0" }} 元{% endif %}</p>
 
 {# ── 摘要徽章 ─────────────────────────────────── #}
 <div class="d-flex flex-wrap gap-3 mb-4">
@@ -91,7 +91,7 @@
     <tbody>
       {% for row in rows %}
       <tr {% if row.status == 'unpaid' %}class="table-warning"{% elif row.status == 'no_record' %}class="table-light text-muted"{% endif %}>
-        <td class="fw-semibold">{{ row.member.name }}</td>
+        <td class="fw-semibold">{{ row.member.name }}{% if row.member.is_student %} <span class="badge bg-info text-dark">學生</span>{% endif %}</td>
         <td class="text-muted small">{{ row.member.instrument.name|default:"—" }}</td>
         <td>
           {% if row.status == 'paid' %}

@@ -36,6 +36,13 @@
 
       {% include "accounts/_profile_fields.html" with instrument_label="樂器族群" %}
 
+      <div class="form-check mb-4">
+        <input class="form-check-input" type="checkbox" name="is_student" id="is_student" value="1"
+               {% if form_data.is_student %}checked{% endif %}>
+        <label class="form-check-label fw-semibold" for="is_student">學生</label>
+        <div class="form-text">勾選後，會費以該期的「學生團費」計算（期別沒訂學生團費時仍繳一般金額）。</div>
+      </div>
+
       <div class="d-flex gap-2">
         <button type="submit" class="btn btn-primary">{% if action == 'edit' %}儲存變更{% else %}新增團員{% endif %}</button>
         <a href="{% url 'accounts:member_directory' %}" class="btn btn-outline-secondary">取消</a>

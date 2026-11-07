@@ -341,6 +341,7 @@ def member_edit(request, pk):
             for field, value in data.items():
                 setattr(member, field, value)
             member.role = role
+            member.is_student = request.POST.get('is_student') == '1'
             member.instrument = InstrumentFamily.objects.filter(pk=instrument_id).first() if instrument_id else None
             member.section = SectionType.objects.filter(pk=section_id).first() if section_id else None
             member.save()
@@ -355,6 +356,7 @@ def member_edit(request, pk):
         'name': member.name,
         'email': member.email,
         'role': member.role,
+        'is_student': member.is_student,
         'instrument': str(member.instrument_id or ''),
         'section': str(member.section_id or ''),
         'grad_year': member.grad_year or '',
@@ -469,6 +471,9 @@ def member_create(request):
                 section=SectionType.objects.filter(pk=section_id).first() if section_id else None,
                 **data,
             )
+            if request.POST.get('is_student') == '1':
+                user.is_student = True
+                user.save(update_fields=['is_student'])
             if email_sent:
                 messages.success(request, f'已新增團員 {data["name"]}，帳號密碼已寄送至 {data["email"]}。')
             else:
