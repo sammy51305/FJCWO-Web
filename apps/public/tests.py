@@ -1175,49 +1175,6 @@ class ImportSheetCommandTest(TestCase):
         self.assertFalse(Registration.objects.filter(email='left@test.local').exists())
         self.assertIn('已離團者 已離團且沒有帳號', out.getvalue())
 
-    def test_venues_and_events_imported_and_existing_reused(self):
-        """場地、演出活動分頁：沒有的建立、系統已有同名的沿用不覆蓋；排練日程可直接用新建的場地與演出"""
-        import openpyxl
-        from django.core.management import call_command
-
-        from apps.events.models import PerformanceEvent, Rehearsal
-
-        path = self._workbook(rehearsal_event='輔韻之聲')
-        wb = openpyxl.load_workbook(path)
-        ws = wb.create_sheet('場地')
-        ws.append(['場地名稱', '類別', '地址', '聯絡人', '聯絡電話', 'Google Maps 網址', '備註'])
-        ws.append(['新排練場', '排練場地', '新北市某路 1 號', '芊雅', '0222690229', 'https://maps.example/x', '團練室'])
-        ws.append(['匯入測試場地', '演出場地', '不該覆蓋的地址', '', '', '', ''])      # 系統已有同名：沿用
-        ws.append(['類別亂填', '舞台', '', '', '', '', ''])
-        ws = wb.create_sheet('演出活動')
-        ws.append(['演出名稱', '類型', '演出日期', '演出時間', '演出場地', '狀態', '備註'])
-        ws.append(['輔韻之聲', '音樂會', dt.datetime(2027, 1, 24), dt.time(19, 30), '新排練場', '籌備中', ''])
-        ws.append(['匯入測試演出', '音樂會', dt.datetime(2027, 3, 1), dt.time(19, 0), '新排練場', '確認', ''])
-        ws.append(['找不到場地的演出', '音樂會', dt.datetime(2027, 3, 1), None, '不存在的場地', '籌備中', ''])
-        wb.save(path)
-
-        out = io.StringIO()
-        call_command('import_sheet', path, '--operator', 'sheet_officer', '--commit', stdout=out)
-
-        venue = Venue.objects.get(name='新排練場')
-        self.assertEqual((venue.type, venue.address, venue.contact_person, venue.contact_phone),
-                         ('rehearsal', '新北市某路 1 號', '芊雅', '0222690229'))
-        old = Venue.objects.get(name='匯入測試場地')
-        self.assertEqual((old.type, old.address), ('rehearsal', ''))                   # 沒被覆蓋
-        self.assertFalse(Venue.objects.filter(name='類別亂填').exists())
-        self.assertIn('不是排練場地／演出場地', out.getvalue())
-
-        event = PerformanceEvent.objects.get(name='輔韻之聲')
-        self.assertEqual((event.type, event.status, event.performance_venue), ('concert', 'planning', venue))
-        self.assertEqual(timezone.localtime(event.performance_date).strftime('%Y-%m-%d %H:%M'),
-                         '2027-01-24 19:30')
-        self.assertEqual(PerformanceEvent.objects.filter(name='匯入測試演出').count(), 1)   # 沿用
-        self.assertEqual(PerformanceEvent.objects.get(name='匯入測試演出').status, 'planning')
-        self.assertFalse(PerformanceEvent.objects.filter(name='找不到場地的演出').exists())
-        self.assertIn('演出場地「不存在的場地」', out.getvalue())
-        # 排練日程用得到剛建的演出（11/7 這場的場地是 setUp 的舊場地，不受影響）
-        self.assertTrue(Rehearsal.objects.filter(event=event).exists())
-
     def test_officer_loans_become_officer_advance_records(self):
         """幹部借款：借入＝「幹部代墊／借款」收入、還款＝同分類支出；右側統計欄不混進資料；重跑不重複"""
         import openpyxl
@@ -1277,6 +1234,94 @@ class ImportSheetCommandTest(TestCase):
         self.assertTrue(self.member.is_student)
         self.assertIn('已將 1 人標為學生：已有帳號', out.getvalue())
         self.assertEqual(FeePeriod.objects.get().student_amount, 1000)
+
+    def _add_venue_event_sheets(self, path, venues, events, rehearsal_venue=None, rehearsal_event=None):
+        """在既有 xlsx 加上「場地」「演出活動」分頁；可選擇把排練日程改指向新的場地／演出。"""
+        import openpyxl
+
+        wb = openpyxl.load_workbook(path)
+        ws = wb.create_sheet('場地')
+        ws.append(['場地名稱', '類別', '地址', '聯絡人', '聯絡電話', 'Google Maps 網址', '備註'])
+        for row in venues:
+            ws.append(row)
+        ws = wb.create_sheet('演出活動')
+        ws.append(['演出名稱', '類型', '演出日期', '演出時間', '演出場地', '狀態', '備註'])
+        for row in events:
+            ws.append(row)
+        if rehearsal_venue or rehearsal_event:
+            for r in range(2, wb['排練日程'].max_row + 1):
+                if rehearsal_venue:
+                    wb['排練日程'].cell(row=r, column=3, value=rehearsal_venue)
+                if rehearsal_event:
+                    wb['排練日程'].cell(row=r, column=4, value=rehearsal_event)
+        wb.save(path)
+
+    def test_venues_and_events_created_from_sheet(self):
+        """場地、演出活動分頁 → 系統沒有的自動建立，排練日程以名稱對到剛建立的場地與演出"""
+        from django.core.management import call_command
+
+        from apps.events.models import PerformanceEvent, Rehearsal
+
+        path = self._workbook()
+        self._add_venue_event_sheets(
+            path,
+            venues=[['新團練室', '排練場地', '土城某處', '芊雅', '0222000000', 'https://maps.example/x', ''],
+                    ['新音樂廳', '演出場地', '蘆洲某處', '', '', '', '']],
+            events=[['新年音樂會', '音樂會', dt.datetime(2027, 1, 24), dt.time(19, 30), '新音樂廳', '籌備中', '']],
+            rehearsal_venue='新團練室', rehearsal_event='新年音樂會',
+        )
+        out = io.StringIO()
+        call_command('import_sheet', path, '--operator', 'sheet_officer', '--commit', stdout=out)
+
+        room = Venue.objects.get(name='新團練室')
+        self.assertEqual((room.type, room.address, room.contact_person), (Venue.Type.REHEARSAL, '土城某處', '芊雅'))
+        self.assertEqual(Venue.objects.get(name='新音樂廳').type, Venue.Type.PERFORMANCE)
+        event = PerformanceEvent.objects.get(name='新年音樂會')
+        moment = timezone.localtime(event.performance_date)
+        self.assertEqual((moment.date(), moment.hour, moment.minute), (dt.date(2027, 1, 24), 19, 30))
+        self.assertEqual((event.performance_venue.name, event.status), ('新音樂廳', 'planning'))
+        self.assertEqual(Rehearsal.objects.filter(event=event, venue=room).count(), 3)
+
+    def test_existing_venue_and_event_not_overwritten(self):
+        """系統已有的場地、演出活動以名稱對到，不重複建立、不覆蓋；類別或日期不同時列入報告"""
+        from django.core.management import call_command
+
+        from apps.events.models import PerformanceEvent
+
+        path = self._workbook()
+        self._add_venue_event_sheets(
+            path,
+            venues=[['匯入測試場地', '演出場地', '', '', '', '', '']],
+            events=[['匯入測試演出', '音樂會', dt.datetime(2030, 1, 1), None, '匯入測試場地', '', '']],
+        )
+        out = io.StringIO()
+        call_command('import_sheet', path, '--operator', 'sheet_officer', '--commit', stdout=out)
+        self.assertEqual(Venue.objects.filter(name='匯入測試場地').count(), 1)
+        self.assertEqual(Venue.objects.get(name='匯入測試場地').type, Venue.Type.REHEARSAL)
+        self.assertEqual(PerformanceEvent.objects.filter(name='匯入測試演出').count(), 1)
+        self.assertIn('系統的「匯入測試場地」是排練場地，試算表是演出場地，未覆蓋', out.getvalue())
+        self.assertIn('系統的「匯入測試演出」演出日期是', out.getvalue())
+
+    def test_invalid_venue_and_event_rows_reported(self):
+        """類別、類型打錯或演出場地找不到 → 不建立並列入報告"""
+        from django.core.management import call_command
+
+        from apps.events.models import PerformanceEvent
+
+        path = self._workbook()
+        self._add_venue_event_sheets(
+            path,
+            venues=[['怪場地', '練團室', '', '', '', '', '']],
+            events=[['怪演出', '晚會', dt.datetime(2027, 1, 1), None, '匯入測試場地', '', ''],
+                    ['沒場地的演出', '音樂會', dt.datetime(2027, 1, 1), None, '不存在', '', '']],
+        )
+        out = io.StringIO()
+        call_command('import_sheet', path, '--operator', 'sheet_officer', '--commit', stdout=out)
+        self.assertFalse(Venue.objects.filter(name='怪場地').exists())
+        self.assertFalse(PerformanceEvent.objects.filter(name__in=['怪演出', '沒場地的演出']).exists())
+        self.assertIn('類別「練團室」不是排練場地／演出場地', out.getvalue())
+        self.assertIn('類型「晚會」不是', out.getvalue())
+        self.assertIn('演出場地「不存在」找不到', out.getvalue())
 
     def test_rerun_is_idempotent(self):
         """重跑不會產生重複資料，已存在的一律略過"""

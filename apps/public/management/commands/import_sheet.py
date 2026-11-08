@@ -13,9 +13,9 @@ manage.py import_sheet
 | 分頁 | 寫入 | 對照依據 |
 |------|------|---------|
 | 團員名冊 | 沒有帳號的人 → `Registration`（待審核）；已有帳號且勾「學生」→ `User.is_student` | Email，其次姓名 |
-| 場地 | `Venue` | 場地名稱（系統已有同名的沿用、不覆蓋） |
-| 演出活動 | `PerformanceEvent` | 演出名稱（系統已有同名的沿用、不覆蓋） |
-| 排練日程 | `Rehearsal` | 排練日期（一天一場） |
+| 場地 | `Venue` | 場地名稱 |
+| 演出活動 | `PerformanceEvent` | 演出名稱 |
+| 排練日程 | `Rehearsal`（場地、演出活動以名稱對照上面兩個分頁或系統既有資料） | 排練日期（一天一場） |
 | 出席紀錄 | `RehearsalAttendance` | 團員 × 排練日期 |
 | 請假紀錄 | `LeaveRequest`（核准者同步出席為請假） | 團員 × 排練日期 |
 | 團費期別 | `FeePeriod`（含學生團費） | 年份 × 期 |
@@ -53,21 +53,21 @@ from apps.finance.views import _sync_fee_income
 from apps.public.models import Venue
 
 SHEET_ROSTER = '團員名冊'
+SHEET_VENUES = '場地'
+SHEET_EVENTS = '演出活動'
 SHEET_REHEARSALS = '排練日程'
 SHEET_ATTENDANCE = '出席紀錄'
 SHEET_LEAVES = '請假紀錄'
 SHEET_PERIODS = '團費期別'
 SHEET_FEES = '團費收繳'
 SHEET_EXPENSES = '支出紀錄'
-SHEET_VENUES = '場地'
-SHEET_EVENTS = '演出活動'
 SHEET_LOANS = '幹部借款'
 
 # 各分頁必須有的標題。試算表範本改了欄位名稱就整份拒絕，不要猜著對位
 _REQUIRED_HEADERS = {
     SHEET_ROSTER: ('姓名', 'Email'),
-    SHEET_VENUES: ('場地名稱', '類別', '地址', '聯絡人', '聯絡電話', 'Google Maps 網址', '備註'),
-    SHEET_EVENTS: ('演出名稱', '類型', '演出日期', '演出時間', '演出場地', '狀態'),
+    SHEET_VENUES: ('場地名稱', '類別'),
+    SHEET_EVENTS: ('演出名稱', '類型', '演出日期', '演出場地'),
     SHEET_LOANS: ('日期', '幹部', '類型', '金額', '說明', '經手人'),
     SHEET_REHEARSALS: ('排練日期', '開始時間', '場地', '所屬演出', '第幾次排練'),
     SHEET_LEAVES: ('申請時間', '姓名', '排練日期', '請假原因', '審核狀態', '審核幹部', '審核時間'),
@@ -96,10 +96,6 @@ _EXPENSE_CATEGORY = {
 # 幹部用自己的錢先墊付時，支出照記，再多記一筆這個分類的收入（墊進團帳）；歸墊時另記一筆支出
 _ADVANCE_CATEGORY = 'officer_advance'
 
-_VENUE_TYPE = {'排練場地': Venue.Type.REHEARSAL, '演出場地': Venue.Type.PERFORMANCE}
-_EVENT_TYPE = {label: value for value, label in PerformanceEvent.Type.choices}
-_EVENT_STATUS = {label: value for value, label in PerformanceEvent.Status.choices}
-
 # 出席紀錄是矩陣：第 1 列從 G 欄起是排練日期，第 5 列起每列一位團員（A 欄姓名）
 _ATTENDANCE_FIRST_DATE_COL = 7
 _ATTENDANCE_FIRST_MEMBER_ROW = 5
@@ -124,6 +120,9 @@ _PAYMENT_METHOD = {
     '轉帳': MembershipFee.PaymentMethod.TRANSFER,
 }
 _TERM = {'上期': FeePeriod.Term.FIRST, '下期': FeePeriod.Term.SECOND}
+_VENUE_TYPE = {'排練場地': Venue.Type.REHEARSAL, '演出場地': Venue.Type.PERFORMANCE}
+_EVENT_TYPE = {label: value for value, label in PerformanceEvent.Type.choices}       # 音樂會／比賽／錄音／聯演
+_EVENT_STATUS = {label: value for value, label in PerformanceEvent.Status.choices}   # 籌備中／確認／已結束／已取消
 _PERIOD_LABEL_RE = re.compile(r'^\s*(\d{4})\s*(上期|下期)\s*$')
 
 _DATE_FORMATS = ('%Y/%m/%d', '%Y-%m-%d', '%Y.%m.%d')
@@ -298,7 +297,7 @@ class Command(BaseCommand):
 
     def _run(self):
         self.members = self._import_roster()
-        # 場地、演出先於排練日程：排練日程的「場地」「所屬演出」是用名稱去系統找的
+        # 場地 → 演出活動 → 排練：後者以名稱指向前者，所以要先建好
         self._import_venues()
         self._import_events()
         self.rehearsals = self._import_rehearsals()
@@ -400,79 +399,88 @@ class Command(BaseCommand):
         return members
 
     def _import_venues(self):
-        """場地 → Venue。以名稱對照：系統已有同名的沿用、不覆蓋（上線後以系統為準）。"""
+        """場地 → Venue，以名稱對照。系統已有的（含 fixtures 內建的）一律不覆蓋，
+        類別不同時列入報告——同名卻一個是排練場地、一個是演出場地，多半是填錯，交給人判斷。"""
         if SHEET_VENUES not in self.sheets:
             return
         _, table = _read_table(self.sheets[SHEET_VENUES])
-        problems, created, existing, seen = [], 0, 0, set()
+        problems, created, existing = [], 0, 0
         for row_no, row in table:
             name = _text(row.get('場地名稱'))
             if not name:
                 problems.append(f'第 {row_no} 列：缺場地名稱')
                 continue
-            if name in seen:
-                problems.append(f'第 {row_no} 列：場地「{name}」重複，只取第一列')
-                continue
-            seen.add(name)
-            if Venue.objects.filter(name=name).exists():
-                existing += 1
-                continue
             type_text = _text(row.get('類別'))
             venue_type = _VENUE_TYPE.get(type_text)
             if venue_type is None:
-                problems.append(f'第 {row_no} 列：場地「{name}」的類別「{type_text}」不是排練場地／演出場地')
+                problems.append(f'第 {row_no} 列：類別「{type_text}」不是排練場地／演出場地')
                 continue
+            venue = Venue.objects.filter(name=name).first()
+            if venue:
+                existing += 1
+                if venue.type != venue_type:
+                    problems.append(
+                        f'第 {row_no} 列：系統的「{name}」是{venue.get_type_display()}，試算表是{type_text}，未覆蓋'
+                    )
+                continue
+            map_url = _text(row.get('Google Maps 網址'))
             Venue.objects.create(
-                name=name, type=venue_type, address=_text(row.get('地址')),
-                contact_person=_text(row.get('聯絡人')), contact_phone=_text(row.get('聯絡電話')),
-                google_map_url=_text(row.get('Google Maps 網址')), notes=_text(row.get('備註')),
+                name=name, type=venue_type,
+                address=_text(row.get('地址')),
+                contact_person=_text(row.get('聯絡人')),
+                contact_phone=_text(row.get('聯絡電話')),
+                google_map_url=map_url if map_url.startswith('http') else '',
+                notes=_text(row.get('備註')),
             )
             created += 1
         self.report.append((SHEET_VENUES, created, existing, problems))
 
     def _import_events(self):
-        """演出活動 → PerformanceEvent。以名稱對照：系統已有同名的沿用、不覆蓋。"""
+        """演出活動 → PerformanceEvent，以名稱對照；演出場地要在「場地」分頁或系統裡找得到。
+        系統已有的不覆蓋，演出日期不同時列入報告。"""
         if SHEET_EVENTS not in self.sheets:
             return
         _, table = _read_table(self.sheets[SHEET_EVENTS])
-        problems, created, existing, seen = [], 0, 0, set()
+        problems, created, existing = [], 0, 0
         for row_no, row in table:
             name = _text(row.get('演出名稱'))
             if not name:
                 problems.append(f'第 {row_no} 列：缺演出名稱')
                 continue
-            if name in seen:
-                problems.append(f'第 {row_no} 列：演出「{name}」重複，只取第一列')
-                continue
-            seen.add(name)
-            if PerformanceEvent.objects.filter(name=name).exists():
-                existing += 1
-                continue
-            type_text = _text(row.get('類型'))
-            event_type = _EVENT_TYPE.get(type_text)
-            if event_type is None:
-                problems.append(f'第 {row_no} 列：演出「{name}」的類型「{type_text}」不在系統的類型裡')
-                continue
-            status_text = _text(row.get('狀態')) or PerformanceEvent.Status.PLANNING.label
-            status = _EVENT_STATUS.get(status_text)
-            if status is None:
-                problems.append(f'第 {row_no} 列：演出「{name}」的狀態「{status_text}」不在系統的狀態裡')
-                continue
             day = _to_date(row.get('演出日期'))
             if day is None:
-                problems.append(f'第 {row_no} 列：演出「{name}」的演出日期無法辨識')
+                problems.append(f'第 {row_no} 列：演出日期無法辨識')
+                continue
+            moment = _aware(dt.datetime.combine(day, _to_time(row.get('演出時間')) or self.default_time))
+            event = PerformanceEvent.objects.filter(name=name).first()
+            if event:
+                existing += 1
+                if timezone.localtime(event.performance_date).date() != day:
+                    problems.append(
+                        f'第 {row_no} 列：系統的「{name}」演出日期是 '
+                        f'{timezone.localtime(event.performance_date):%Y/%m/%d}，試算表是 {day:%Y/%m/%d}，未覆蓋'
+                    )
+                continue
+            type_text = _text(row.get('類型')) or '音樂會'
+            event_type = _EVENT_TYPE.get(type_text)
+            if event_type is None:
+                problems.append(f'第 {row_no} 列：類型「{type_text}」不是{"／".join(_EVENT_TYPE)}')
+                continue
+            status_text = _text(row.get('狀態')) or '籌備中'
+            status = _EVENT_STATUS.get(status_text)
+            if status is None:
+                problems.append(f'第 {row_no} 列：狀態「{status_text}」不是{"／".join(_EVENT_STATUS)}')
                 continue
             venue_name = _text(row.get('演出場地'))
             venue = Venue.objects.filter(name=venue_name).first() if venue_name else None
             if venue is None:
                 problems.append(
-                    f'第 {row_no} 列：演出場地「{venue_name or "（空白）"}」在系統與「場地」分頁都找不到'
+                    f'第 {row_no} 列：演出場地「{venue_name or "（空白）"}」找不到，請先在「場地」分頁新增'
                 )
                 continue
-            start = _to_time(row.get('演出時間')) or self.default_time
             PerformanceEvent.objects.create(
-                name=name, type=event_type, status=status, performance_venue=venue,
-                performance_date=_aware(dt.datetime.combine(day, start)),
+                name=name, type=event_type, performance_date=moment,
+                performance_venue=venue, status=status,
             )
             created += 1
         self.report.append((SHEET_EVENTS, created, existing, problems))
@@ -502,14 +510,14 @@ class Command(BaseCommand):
             event = PerformanceEvent.objects.filter(name=event_name).first() if event_name else None
             if event is None:
                 problems.append(
-                    f'第 {row_no} 列：所屬演出「{event_name or "（空白）"}」在系統找不到，請先在系統建立演出活動'
+                    f'第 {row_no} 列：所屬演出「{event_name or "（空白）"}」在系統找不到，請先在「演出活動」分頁新增（或在系統建立）'
                 )
                 continue
             venue_name = _text(row.get('場地'))
             venue = Venue.objects.filter(name=venue_name).first() if venue_name else None
             if venue is None:
                 problems.append(
-                    f'第 {row_no} 列：場地「{venue_name or "（空白）"}」在系統找不到，請先在系統建立場地'
+                    f'第 {row_no} 列：場地「{venue_name or "（空白）"}」在系統找不到，請先在「場地」分頁新增（或在系統建立）'
                 )
                 continue
 
