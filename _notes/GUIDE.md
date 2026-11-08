@@ -35,7 +35,8 @@
 | 文件 | 什麼時候開 |
 |------|-----------|
 | [SETUP.md](SETUP.md) | 從零建置、換機接手、`git pull` 後要跑什麼（情境 F）、Render 測試站（情境 E）|
-| [DEPLOY-WINDOWS.md](DEPLOY-WINDOWS.md) | 用 Windows 筆電當正式站：PostgreSQL、Waitress 服務、Cloudflare Tunnel／Tailscale、備份、維運 |
+| [DEPLOY-WINDOWS.md](DEPLOY-WINDOWS.md) | 用 Windows 主機當正式站（與機器無關、可換機）：預檢、PostgreSQL、Waitress 服務、Cloudflare Tunnel／Tailscale、備份、維運 |
+| [SERVERS.md](SERVERS.md) | 每台 server 機器的規格、授權現況、已定案決定與部署進度 |
 
 ### 📣 介紹或展示系統（非技術）
 | 文件 | 什麼時候開 |
