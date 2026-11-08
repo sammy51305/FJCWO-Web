@@ -1,9 +1,80 @@
-# Windows 筆電正式站部署指南
+# Windows 主機正式站部署指南
 
 > 建立日期：2026-11-07
-> 用途：用一台閒置 Windows 筆電當正式站（BACKLOG #10 路線 B 的落地版本）。
+> 用途：用一台 Windows 主機（閒置筆電或桌機皆可，可隨時換機）當正式站（BACKLOG #10 路線 B 的落地版本）。
 > 讀者：**在那台筆電上開 Claude Code 的人與 Claude 本身**。Claude 請依本文件逐步協助，
 > 標「👤 使用者自己做」的步驟（金鑰、密碼、帳號登入）Claude 不代為處理，也不要把機密貼進對話。
+
+## 部署前準備（任何 Windows 主機都適用）
+
+**機器最低需求：**
+
+| 項目 | 需求 |
+|------|------|
+| 系統 | Windows 11 專業版（RDP 被連端、完整 BitLocker 需要專業版；Win10 已停止一般支援，不建議）|
+| 硬體 | TPM 2.0、Secure Boot、UEFI／GPT；RAM ≥ 8 GB；建議 SSD |
+| 授權 | 使用者自己合法持有，不使用啟用工具或破解 |
+| 管理 | 未被公司／學校網域或 MDM 管理（否則群組原則可能擋遠端桌面與 BitLocker）|
+| 狀態 | 空機，或資料已備份（重灌會清掉）|
+
+用下方「預檢指令」逐項驗證。**不合格就先補到合格再往下**（系統不合規 → 做 0-a 重灌）。
+
+**機器專屬資料（規格、授權現況、決定、進度）一律記在 [SERVERS.md](SERVERS.md)，不寫在本文件。**
+換 server 時：在 SERVERS.md 新增一節，本文件不用改。
+
+**開始前，Claude 一次問使用者這幾題（答案記進 SERVERS.md）：**
+
+| # | 問題 | 影響 |
+|---|------|------|
+| 1 | Windows 11 專業版序號？（沒有 → 先未啟用使用，之後補買）| 0-a 重灌 |
+| 2 | 對外連線：Cloudflare Tunnel（需網域）還是 Tailscale Funnel（免網域）？網域是哪個？ | 第 8 節、`.env` |
+| 3 | 異地備份放哪（Cloudflare R2／Google Drive）？外接硬碟備妥了嗎？ | 第 9 節 |
+| 4 | 是否接「系統寫入紀錄」到試算表？ | 第 10 節 |
+
+**Claude 的執行順序：**
+
+1. 讀本文件、[SERVERS.md](SERVERS.md)、`_notes/GUIDE.md`。
+2. 問上表 4 題；跑預檢指令確認機器合格。
+3. 依第 3～9 節照序進行；標 👤 的步驟交給使用者，機密一律不貼進對話。
+4. 每完成一節就更新 SERVERS.md 的進度與第 11 節檢查清單；最後 commit（走 Feature 分支＋PR，見 `WORKFLOW.md`）。
+
+## 預檢指令與參數說明
+
+> 在 server 筆電以**系統管理員 PowerShell** 執行。這些是「唯讀」查詢，不會改動系統。
+> 每個參數在查什麼見表；實測結果記在 [SERVERS.md](SERVERS.md)。
+
+| 指令 | 參數／片段的用途 | 在判斷什麼 |
+|------|-----------------|-----------|
+| `Get-CimInstance Win32_Processor \| Select Name` | `Win32_Processor` ＝ CPU 資訊類別；`Select Name` 只取型號 | 是否第 8 代以上（Win11 支援）|
+| `(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory/1GB` | `Win32_ComputerSystem` ＝ 整機資訊；`/1GB` 把位元組換成 GB | RAM 夠不夠跑資料庫＋網站（建議 ≥ 8 GB）|
+| `(Get-CimInstance Win32_ComputerSystem).Model` | 取機型名稱 | 查該機型是否 SSD、有無 TPM |
+| `Get-Disk \| Select FriendlyName,Size,PartitionStyle` | `Size` ＝ 容量（位元組）；`PartitionStyle` ＝ `GPT` 或 `MBR` | `GPT` 才是 UEFI 開機；`MBR` 要先轉換才能升 Win11 |
+| `Get-PhysicalDisk \| Select FriendlyName,MediaType,Size` | `MediaType` ＝ `SSD`／`HDD` | 硬碟是不是機械式（HDD 資料庫較慢、備份要更小心）。部分機器會空白，改用 `Get-Disk` |
+| `tpm.msc` | 開啟「TPM 管理」視窗，看「規格版本」 | 是否 TPM 2.0（Win11 必要、BitLocker 需要）|
+| `Confirm-SecureBootUEFI` | 回傳 `True`／`False`／錯誤 | `True` 才符合 Win11；`False` 進 BIOS 開啟；錯誤 ＝ 非 UEFI 開機 |
+| `slmgr /dli` | `/dli` ＝ 顯示授權資訊（跳出視窗，不改動）| 看「描述」：`RETAIL` ＝ 零售、`OEM` ＝ 隨機、`VOLUME_KMS／MAK` ＝ 組織批次授權；看「授權狀態」是否已啟用 |
+| `dsregcmd /status \| Select-String "AzureAdJoined\|DomainJoined\|MDMUrl"` | `/status` ＝ 顯示裝置註冊狀態；`Select-String` 只篩出三個欄位 | 是否被公司／學校網域或 MDM 管理（會有群組原則擋遠端桌面、BitLocker）|
+
+**重灌／設定完成後要驗證的指令：**
+
+| 指令 | 參數用途 | 在判斷什麼 |
+|------|---------|-----------|
+| `winver` | 開啟版本視窗 | 確認是 Windows 11 專業版 |
+| `slmgr /xpr` | `/xpr` ＝ 顯示啟用到期狀態 | 是否永久啟用 |
+| `manage-bde -status C:` | `manage-bde` ＝ BitLocker 管理工具；`-status` 查狀態；`C:` 為系統磁碟 | BitLocker 是否已加密、還原金鑰是否備份 |
+| `powercfg /requests` | 列出阻止睡眠的項目 | 確認不會自己睡眠 |
+| `powercfg /change standby-timeout-ac 0` | `standby-timeout-ac` ＝ 插電時的睡眠逾時；`0` ＝ 永不 | 設成永不睡眠（插電時）|
+| `powercfg /change monitor-timeout-ac 0` | 同上，對象是螢幕關閉逾時 | 螢幕不需要也可保持，視使用者偏好 |
+| `powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0` | `SUB_BUTTONS` ＝ 電源按鈕子群組；`LIDACTION` ＝ 闔蓋動作；`0` ＝ 不採取動作 | 闔蓋不睡眠；之後再跑 `powercfg /setactive SCHEME_CURRENT` 套用 |
+| `winget install Python.Python.3.13 Git.Git` | `winget` ＝ Windows 套件管理員；後面是套件 ID | 一次安裝 Python 與 Git |
+| `python -m venv venv` | `-m venv` ＝ 執行虛擬環境模組；最後的 `venv` 是資料夾名 | 建專案專用的 Python 環境 |
+| `pip install -r requirements.txt waitress` | `-r` ＝ 依檔案安裝；`waitress` ＝ 另外加裝的 WSGI 伺服器 | 安裝依賴與 Windows 用的網站伺服器 |
+| `manage.py collectstatic --noinput` | `--noinput` ＝ 不問是否覆蓋 | 把 static 檔集中，WhiteNoise 才找得到 |
+| `manage.py migrate` | 套用遷移檔到資料庫 | 建好資料表 |
+| `waitress --listen=127.0.0.1:8000 config.wsgi:application` | `--listen` ＝ 位址與埠；`127.0.0.1` ＝ 只讓本機連；最後是 WSGI 入口 | 只對本機開 8000，外部一律經過 Tunnel |
+| `nssm install／restart／status FJCWO-Web` | NSSM ＝ 把程式包成 Windows 服務的工具；後面是動作與服務名 | 開機自動啟動、重啟、查狀態 |
+| `pg_dump -U fjcwo -Fc fjcwo -f 檔案` | `-U` ＝ 使用者；`-Fc` ＝ custom 壓縮格式（可用 `pg_restore` 還原）；`-f` ＝ 輸出檔 | 每日備份 |
+| `pg_restore -U fjcwo -d 測試資料庫 檔案` | `-d` ＝ 還原到哪個資料庫 | 每月還原演練 |
 
 ## 目錄
 
@@ -31,7 +102,7 @@
 
 | 風險 | 後果 | 對策 |
 |------|------|------|
-| 只有一台筆電 | 硬碟壞、被偷、進水，資料全沒 | 第 6 步：外接硬碟＋雲端異地備份 |
+| 只有一台機器 | 硬碟壞、被偷、進水，資料全沒 | 第 6 步：外接硬碟＋雲端異地備份 |
 | 家裡斷電／斷網 | 網站暫時連不上 | 筆電電池當簡易 UPS；BIOS 設來電自動開機 |
 | 加密金鑰遺失 | 敏感個資永遠解不開 | `.env` 另存密碼管理器 |
 | 被偷或被入侵 | 個資外洩 | BitLocker、強密碼、不對外開任何 port |
@@ -51,6 +122,16 @@
 不用 Docker、不用 WSL2：筆電上少一層，出問題好排查。
 
 ## 3. 第 0 步：把筆電設成伺服器
+
+### 0-a　重灌 Windows 11 專業版（僅在預檢顯示系統或授權不合規時才做）
+
+1. 👤 在另一台電腦下載微軟官方「Windows 11 媒體建立工具」，用 8 GB 以上隨身碟製作安裝碟。
+2. 👤 插到 server 筆電，重開機連按 `Esc`（華碩開機選單），選隨身碟開機。
+3. 👤 選「自訂安裝」，刪除舊分割區後安裝；版本選**專業版**；沒有序號就選「我沒有產品金鑰」。
+4. 👤 建立**本機帳號**（不連 Microsoft 帳號），強密碼。
+5. 裝好後跑上方「重灌後要驗證的指令」確認版本、BitLocker、電源設定。
+
+### 0-b　系統設定
 
 👤 以下在 Windows 設定裡做：
 
