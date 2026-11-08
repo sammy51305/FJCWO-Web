@@ -1102,6 +1102,159 @@ class ImportSheetCommandTest(TestCase):
         self.assertIn('項目「茶水」不在預算項目裡，歸為「其他」', output)
         self.assertNotIn('日期無法辨識', output)     # 只有未勾選勾選框的空白列要被略過
 
+    def test_advanced_expenses_record_officer_advance(self):
+        """幹部先墊付：支出照記，再多記一筆「幹部代墊」收入；已歸墊再記一筆「歸還幹部代墊」支出；重跑不重複"""
+        import openpyxl
+        from django.core.management import call_command
+
+        from apps.finance.models import FinanceRecord
+
+        path = self._workbook()
+        wb = openpyxl.load_workbook(path)
+        del wb['支出紀錄']
+        ws = wb.create_sheet('支出紀錄')
+        ws.append(['日期', '項目', '金額', '說明', '經手人', '收據', '經手人先墊付', '已歸墊'])
+        ws.append([dt.datetime(2026, 3, 14), '創團行政費', 600, '租會議室', '匯入幹部', False, True, False])
+        ws.append([dt.datetime(2026, 3, 16), '創團行政費', 400, '社團章', '匯入幹部', False, True, True])
+        ws.append([dt.datetime(2026, 3, 20), '團練室', 100, '', '匯入幹部', False, False, True])
+        wb.save(path)
+
+        out = io.StringIO()
+        call_command('import_sheet', path, '--operator', 'sheet_officer', '--commit', stdout=out)
+        records = FinanceRecord.objects.exclude(category_id='membership')   # 範本裡另有一筆已繳會費
+        rows = sorted((t, c, d, int(a)) for t, c, d, a in
+                      records.values_list('type', 'category_id', 'date', 'amount'))
+        self.assertEqual(rows, sorted([
+            ('expense', 'other', dt.date(2026, 3, 14), 600),            # 創團行政費歸「其他」
+            ('income', 'officer_advance', dt.date(2026, 3, 14), 600),   # 墊進團帳
+            ('expense', 'other', dt.date(2026, 3, 16), 400),
+            ('income', 'officer_advance', dt.date(2026, 3, 16), 400),
+            ('expense', 'officer_advance', dt.date(2026, 3, 16), 400),  # 已歸墊：歸還
+            ('expense', 'venue', dt.date(2026, 3, 20), 100),            # 沒墊付就不產生代墊紀錄
+        ]))
+        self.assertNotIn('不在預算項目裡', out.getvalue())             # 創團行政費是認得的項目
+        self.assertIn('勾了「已歸墊」但沒勾「經手人先墊付」', out.getvalue())
+        self.assertTrue(FinanceRecord.objects.get(
+            type='income', category_id='officer_advance', amount=600).description.startswith('幹部代墊：'))
+
+        call_command('import_sheet', path, '--operator', 'sheet_officer', '--commit', stdout=io.StringIO())
+        self.assertEqual(records.count(), 6)                           # 重跑不重複
+
+    def test_repayment_date_column_is_optional_and_used(self):
+        """支出紀錄若有「歸墊日期」欄，歸還那筆用它的日期；沒填才用支出日期"""
+        import openpyxl
+        from django.core.management import call_command
+
+        from apps.finance.models import FinanceRecord
+
+        path = self._workbook()
+        wb = openpyxl.load_workbook(path)
+        del wb['支出紀錄']
+        ws = wb.create_sheet('支出紀錄')
+        ws.append(['日期', '項目', '金額', '說明', '經手人', '收據', '經手人先墊付', '已歸墊', '歸墊日期'])
+        ws.append([dt.datetime(2026, 3, 14), '創團行政費', 600, '租會議室', '匯入幹部',
+                   False, True, True, dt.datetime(2026, 11, 8)])
+        wb.save(path)
+        call_command('import_sheet', path, '--operator', 'sheet_officer', '--commit', stdout=io.StringIO())
+        repay = FinanceRecord.objects.get(type='expense', category_id='officer_advance')
+        self.assertEqual(repay.date, dt.date(2026, 11, 8))
+
+    def test_left_member_without_account_gets_no_registration(self):
+        """名冊狀態「離團」且沒有帳號的人：不建入團申請，報告說明原因"""
+        import openpyxl
+        from django.core.management import call_command
+
+        from apps.accounts.models import Registration
+
+        path = self._workbook()
+        wb = openpyxl.load_workbook(path)
+        wb['團員名冊'].append(['已離團者', '團員', '其他', '', '', 'left@test.local', '離團', '', ''])
+        wb.save(path)
+        out = io.StringIO()
+        call_command('import_sheet', path, '--operator', 'sheet_officer', '--commit', stdout=out)
+        self.assertFalse(Registration.objects.filter(email='left@test.local').exists())
+        self.assertIn('已離團者 已離團且沒有帳號', out.getvalue())
+
+    def test_venues_and_events_imported_and_existing_reused(self):
+        """場地、演出活動分頁：沒有的建立、系統已有同名的沿用不覆蓋；排練日程可直接用新建的場地與演出"""
+        import openpyxl
+        from django.core.management import call_command
+
+        from apps.events.models import PerformanceEvent, Rehearsal
+
+        path = self._workbook(rehearsal_event='輔韻之聲')
+        wb = openpyxl.load_workbook(path)
+        ws = wb.create_sheet('場地')
+        ws.append(['場地名稱', '類別', '地址', '聯絡人', '聯絡電話', 'Google Maps 網址', '備註'])
+        ws.append(['新排練場', '排練場地', '新北市某路 1 號', '芊雅', '0222690229', 'https://maps.example/x', '團練室'])
+        ws.append(['匯入測試場地', '演出場地', '不該覆蓋的地址', '', '', '', ''])      # 系統已有同名：沿用
+        ws.append(['類別亂填', '舞台', '', '', '', '', ''])
+        ws = wb.create_sheet('演出活動')
+        ws.append(['演出名稱', '類型', '演出日期', '演出時間', '演出場地', '狀態', '備註'])
+        ws.append(['輔韻之聲', '音樂會', dt.datetime(2027, 1, 24), dt.time(19, 30), '新排練場', '籌備中', ''])
+        ws.append(['匯入測試演出', '音樂會', dt.datetime(2027, 3, 1), dt.time(19, 0), '新排練場', '確認', ''])
+        ws.append(['找不到場地的演出', '音樂會', dt.datetime(2027, 3, 1), None, '不存在的場地', '籌備中', ''])
+        wb.save(path)
+
+        out = io.StringIO()
+        call_command('import_sheet', path, '--operator', 'sheet_officer', '--commit', stdout=out)
+
+        venue = Venue.objects.get(name='新排練場')
+        self.assertEqual((venue.type, venue.address, venue.contact_person, venue.contact_phone),
+                         ('rehearsal', '新北市某路 1 號', '芊雅', '0222690229'))
+        old = Venue.objects.get(name='匯入測試場地')
+        self.assertEqual((old.type, old.address), ('rehearsal', ''))                   # 沒被覆蓋
+        self.assertFalse(Venue.objects.filter(name='類別亂填').exists())
+        self.assertIn('不是排練場地／演出場地', out.getvalue())
+
+        event = PerformanceEvent.objects.get(name='輔韻之聲')
+        self.assertEqual((event.type, event.status, event.performance_venue), ('concert', 'planning', venue))
+        self.assertEqual(timezone.localtime(event.performance_date).strftime('%Y-%m-%d %H:%M'),
+                         '2027-01-24 19:30')
+        self.assertEqual(PerformanceEvent.objects.filter(name='匯入測試演出').count(), 1)   # 沿用
+        self.assertEqual(PerformanceEvent.objects.get(name='匯入測試演出').status, 'planning')
+        self.assertFalse(PerformanceEvent.objects.filter(name='找不到場地的演出').exists())
+        self.assertIn('演出場地「不存在的場地」', out.getvalue())
+        # 排練日程用得到剛建的演出（11/7 這場的場地是 setUp 的舊場地，不受影響）
+        self.assertTrue(Rehearsal.objects.filter(event=event).exists())
+
+    def test_officer_loans_become_officer_advance_records(self):
+        """幹部借款：借入＝「幹部代墊／借款」收入、還款＝同分類支出；右側統計欄不混進資料；重跑不重複"""
+        import openpyxl
+        from django.core.management import call_command
+
+        from apps.finance.models import FinanceRecord
+
+        path = self._workbook()
+        wb = openpyxl.load_workbook(path)
+        ws = wb.create_sheet('幹部借款')
+        ws.append(['日期', '幹部', '類型', '金額', '說明', '經手人', '備註', None,
+                   '幹部', '借給樂團', '已還', '還欠'])     # 右側有一欄也叫「幹部」
+        ws.append([dt.datetime(2026, 8, 19), '林怡君', '借入', 15000, '創團資金', '榮昕緯', '', None,
+                   '林怡君', 15000, 5000, 10000])
+        ws.append([dt.datetime(2026, 8, 24), '榮昕緯', '借入', 30000, '創團資金', '榮昕緯', '', None,
+                   '榮昕緯', 30000, 0, 30000])
+        ws.append([dt.datetime(2026, 11, 20), '林怡君', '還款', 5000, '第一次還款', '榮昕緯', '', None,
+                   '合計', 45000, 5000, 40000])
+        ws.append([None, '林怡君', '借入', 1000, '忘了填日期', '', '', None])
+        wb.save(path)
+
+        out = io.StringIO()
+        call_command('import_sheet', path, '--operator', 'sheet_officer', '--commit', stdout=out)
+        loans = FinanceRecord.objects.filter(category_id='officer_advance')
+        self.assertEqual(
+            sorted((r.type, int(r.amount), r.date.isoformat()) for r in loans),
+            [('expense', 5000, '2026-11-20'), ('income', 15000, '2026-08-19'),
+             ('income', 30000, '2026-08-24')],
+        )
+        self.assertIn('林怡君借給樂團', FinanceRecord.objects.get(amount=15000, category_id='officer_advance').description)
+        self.assertIn('歸還幹部借款：樂團還給林怡君', FinanceRecord.objects.get(type='expense', amount=5000).description)
+        self.assertIn('日期無法辨識', out.getvalue())               # 沒填日期的列不匯入、列入報告
+        self.assertNotIn('類型「', out.getvalue())                  # 統計欄沒被當成資料
+
+        call_command('import_sheet', path, '--operator', 'sheet_officer', '--commit', stdout=io.StringIO())
+        self.assertEqual(loans.count(), 3)
+
     def test_student_flag_and_student_amount_imported(self):
         """名冊勾「學生」→ 已有帳號者標為學生；團費期別「學生團費」→ FeePeriod.student_amount"""
         import openpyxl

@@ -414,7 +414,7 @@ class Command(BaseCommand):
         for t, cat, amt, d, desc in spec:
             _, created = FinanceRecord.objects.get_or_create(
                 description=desc,
-                defaults=dict(type=t, category=cat, amount=Decimal(amt), date=d,
+                defaults=dict(type=t, category_id=cat, amount=Decimal(amt), date=d,
                               created_by=officer,
                               related_event=event if '排練場地費' in desc else None),
             )
@@ -441,7 +441,7 @@ class Command(BaseCommand):
                 )
                 if c:
                     mf.finance_record = FinanceRecord.objects.create(
-                        type='income', category='membership', amount=p1.amount,
+                        type='income', category_id='membership', amount=p1.amount,
                         date=mf.paid_at, description=f'{u.name} 2026 上期會費',
                         created_by=officer)
                     mf.save()
@@ -467,7 +467,7 @@ class Command(BaseCommand):
             )
             if c:
                 mf.finance_record = FinanceRecord.objects.create(
-                    type='income', category='membership', amount=p2.amount,
+                    type='income', category_id='membership', amount=p2.amount,
                     date=mf.paid_at, description=f'{u.name} 2026 下期會費',
                     created_by=officer)
                 mf.save()
