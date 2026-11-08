@@ -30,6 +30,7 @@
 | 2 | 對外連線：Cloudflare Tunnel（需網域）還是 Tailscale Funnel（免網域）？網域是哪個？ | 第 8 節、`.env` |
 | 3 | 異地備份放哪（Cloudflare R2／Google Drive）？外接硬碟備妥了嗎？ | 第 9 節 |
 | 4 | 是否接「系統寫入紀錄」到試算表？ | 第 10 節 |
+| 5 | 部署方式：Windows 原生（預設）還是 Hyper-V ＋ Ubuntu VM（同機還要當 NAS 時考慮）？ | 走第 3～7 節，或走附錄 A |
 
 **Claude 的執行順序：**
 
@@ -37,6 +38,65 @@
 2. 問上表 4 題；跑預檢指令確認機器合格。
 3. 依第 3～9 節照序進行；標 👤 的步驟交給使用者，機密一律不貼進對話。
 4. 每完成一節就更新 SERVERS.md 的進度與第 11 節檢查清單；最後 commit（走 Feature 分支＋PR，見 `WORKFLOW.md`）。
+
+## 事前準備清單（開工前備齊，可省下大量來回）
+
+> Claude 開始前請先對照本清單，**逐項問使用者「備好了嗎」**，缺的先補，不要做到一半才發現。
+> 機密（密碼、金鑰、token、序號）一律由 👤 使用者自己存進**密碼管理器**，之後自己貼進 `.env` 或設定畫面，**不貼進對話**。
+
+### 一、要先決定的事
+
+| # | 項目 | 備註 |
+|---|------|------|
+| 1 | Windows 原生還是 Hyper-V ＋ Ubuntu VM | 同機還要當 NAS 才考慮 VM（附錄 A）|
+| 2 | 對外連線：Cloudflare Tunnel 還是 Tailscale Funnel | Tunnel 需要網域 |
+| 3 | 網域名稱（若用 Tunnel） | 例如 `fjcwo.你的網域` |
+| 4 | 異地備份放哪：Cloudflare R2 或 Google Drive | 影片等大檔不建議備份到雲端，只備份資料庫與上傳檔 |
+| 5 | 要不要接「系統寫入紀錄」到試算表 | 第 10 節，可以上線後再做 |
+| 6 | 資料搬遷：要不要把試算表的團練紀錄用 `import_sheet` 匯入 | 要的話先備好最新的 `.xlsx`（不進 git）|
+
+### 二、要先備好的帳號與硬體
+
+| 項目 | 用途 | 狀態 |
+|------|------|------|
+| Windows 11 專業版序號（或決定先未啟用）| 重灌 | ☐ |
+| 8 GB 以上隨身碟 | 製作 Windows 安裝碟（VM 版另需 Ubuntu ISO）| ☐ |
+| 外接硬碟（容量夠放 30 天資料庫備份）| 本地備份 | ☐ |
+| GitHub 帳號可 clone 專案 | 取得程式碼 | ☐ |
+| 密碼管理器 | 存所有機密 | ☐ |
+| Cloudflare 帳號＋網域（選 Tunnel）或 Tailscale 帳號（選 Funnel）| 對外連線 | ☐ |
+| Gmail 應用程式密碼（16 碼）| 寄臨時密碼信（沿用測試站那組即可）| ☐ |
+| 雲端備份的存取金鑰（R2 或 Google）| 異地備份 | ☐ |
+| Google 服務帳號金鑰（若接試算表寫入紀錄）| 第 10 節 | ☐ |
+
+### 三、要先產生並存好的機密（👤 自己做）
+
+| 項目 | 注意 |
+|------|------|
+| `DJANGO_SECRET_KEY` | 新產生，不要沿用本機或測試站那把 |
+| `DJANGO_FIELD_ENCRYPTION_KEY` | **遺失 ＝ 敏感個資永遠解不開**，存進密碼管理器並**另備一份**。正式站若要沿用測試站已加密的資料，要用同一把；全新資料庫則新產生 |
+| 資料庫密碼 | 建 `fjcwo` 資料庫帳號時用 |
+| Windows 本機帳號密碼、（VM 版）Ubuntu 帳號密碼與 SSH passphrase | 強密碼 |
+| BitLocker 還原金鑰 | 開啟 BitLocker 時產生，**不要只存在這台機器上** |
+| 超級管理員（幹部）帳號密碼 | `createsuperuser` 時自己輸入 |
+
+### 四、跟 Claude 合作的方式
+
+1. **一次做一節**：照第 3～9 節（或附錄 A）的順序，做完一節、驗證一節，再往下。不要叫它「全部做完」。
+2. **每節結束，要 Claude 更新 [SERVERS.md](SERVERS.md) 的進度表**，下一個 session 才接得上。
+3. **遇到需要重開機的步驟**（啟用 Hyper-V、Windows 更新）：Claude 的對話會中斷，重開後直接說「繼續，先讀 SERVERS.md 的進度」。
+4. **Claude 遇到標 👤 的步驟會停下來說明要你做什麼**，做完回報即可。
+5. **指令沒在實機驗證過的部分**（尤其附錄 A、Tailscale Funnel 的 header 行為）：Claude 要先看輸出再繼續，失敗時回報原文錯誤訊息，不要硬往下。
+6. **改動文件或程式**一律走 Feature 分支＋PR，見 `WORKFLOW.md`。
+
+### 五、預計要重開機或會中斷的步驟
+
+| 步驟 | 原因 |
+|------|------|
+| 0-a 重灌 Windows | 整台重裝，Claude 要重新安裝 |
+| 啟用 Hyper-V（附錄 A-1）| 要重開機 |
+| 電源設定、BitLocker | 部分設定需重開才生效 |
+| 重灌 Windows 後的第一次更新 | 可能連續重開幾次，先把更新跑完再往下 |
 
 ## 預檢指令與參數說明
 
@@ -90,6 +150,7 @@
 10. [第 7 步：試算表寫入紀錄（後續）](#10-第-7-步試算表寫入紀錄後續)
 11. [上線前檢查清單](#11-上線前檢查清單)
 12. [日常維運](#12-日常維運)
+13. [附錄 A：改用 Hyper-V 跑 Ubuntu（進階）](#附錄-a改用-hyper-v-跑-ubuntu進階非上線前提)
 
 ---
 
@@ -120,6 +181,7 @@
 | 備份 | 每日 `pg_dump` → 外接硬碟 ＋ 加密後上傳雲端 |
 
 不用 Docker、不用 WSL2：筆電上少一層，出問題好排查。
+同一台機器還要當 NAS、想把網站隔開時，改走 [附錄 A](#附錄-a改用-hyper-v-跑-ubuntu進階非上線前提)（Hyper-V ＋ Ubuntu VM）。附錄 A 取代第 3～7 節，不是疊加。
 
 ## 3. 第 0 步：把筆電設成伺服器
 
@@ -321,3 +383,316 @@ C:\nssm\nssm.exe restart FJCWO-Web
 | 重開機後起不來 | PostgreSQL 服務是否先啟動、NSSM 服務是否設為自動 |
 
 **每次大改動前先手動跑一次備份。**
+
+---
+
+## 附錄 A：改用 Hyper-V 跑 Ubuntu（進階，非上線前提）
+
+> 在 Windows 主機上用 Hyper-V 開一台 Ubuntu 虛擬機，網站與資料庫都裝在 Ubuntu 裡；Windows 本身只負責 NAS 與管理。
+> **這是替代第 3～7 節的另一條路，不是疊加**：選了 VM，就不要再在 Windows 上裝 PostgreSQL 與 Waitress 服務。
+> 第 0 步（Windows 重灌與電源設定）、第 8 節對外連線的觀念、第 9 節備份的原則、第 10 節、第 11 節仍適用，只是指令改成 Linux 版（本附錄已列出）。
+> 本附錄的指令尚未在實機驗證，Claude 執行時請先看輸出再繼續，遇到版本差異以官方文件為準。
+
+### A-0　何時用、何時不用
+
+| 適合用 VM | 不需要 VM |
+|-----------|-----------|
+| 同一台 Windows 還要當 NAS，想把網站隔開 | 這台只跑網站 |
+| 想讓環境與長期規劃的 Ubuntu 正式站一致，以後好搬家 | 想最快上線、不想多管一個 Linux |
+| 願意維護 Linux（更新、SSH、備份）| — |
+
+```
+Windows 主機（實體）
+├── 影片共用資料夾（NAS，SMB，只開給內網／Tailscale）
+└── Hyper-V 虛擬機：Ubuntu Server 24.04
+    ├── PostgreSQL（只聽 localhost）
+    ├── Gunicorn（systemd 服務，聽 127.0.0.1:8000）
+    └── cloudflared 或 Tailscale（對外連線）
+```
+
+**與 Windows 原生版的差異：**
+
+| 項目 | Windows 原生 | Ubuntu VM |
+|------|-------------|-----------|
+| WSGI 伺服器 | Waitress | Gunicorn（`requirements.txt` 已有）|
+| 開機自動啟動 | NSSM 服務 | systemd 服務 |
+| 資料庫 | PostgreSQL Windows 安裝版 | `apt install postgresql` |
+| 備份排程 | 工作排程器＋`pg_dump` | systemd timer／cron＋`pg_dump` |
+| 代理 header | Waitress 要加 `--trusted-proxy…` | Gunicorn 預設信任 127.0.0.1，不用加 |
+| 隔離 | 靠帳號權限與防火牆 | 網站被入侵也困在 VM 內 |
+
+### A-1　啟用 Hyper-V（需 Windows 11 專業版）
+
+👤 以**系統管理員 PowerShell** 執行，完成後重開機：
+
+```powershell
+Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
+```
+
+| 片段 | 用途 |
+|------|------|
+| `Enable-WindowsOptionalFeature` | 開啟一項 Windows 選用功能 |
+| `-Online` | 對目前正在跑的系統操作（不是對離線映像）|
+| `-FeatureName Microsoft-Hyper-V` | 要開的功能：Hyper-V |
+| `-All` | 連它相依的子功能一起開 |
+
+另外要在 BIOS 開啟虛擬化（Intel VT-x／AMD-V，常叫 Virtualization Technology）。
+驗證：`Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V` 的 `State` 為 `Enabled`。
+
+### A-2　建立虛擬機
+
+1. 👤 下載 **Ubuntu Server 24.04 LTS** 的 ISO（ubuntu.com/download/server）。
+2. 開「Hyper-V 管理員」→ 動作 → 新增 → 虛擬機器，照下表設定：
+
+| 項目 | 建議值 | 理由 |
+|------|--------|------|
+| 名稱 | `fjcwo` | 好認 |
+| 世代 | **第 2 代** | UEFI 開機，Ubuntu 24.04 支援 |
+| 啟動記憶體 | 4096 MB | 資料庫＋網站綽綽有餘；至少 2048 MB |
+| 網路 | **Default Switch** | NAT：VM 能上網、不直接暴露在家中區網；主機可用 `fjcwo.mshome.net` 連到 VM |
+| 虛擬硬碟 | 40 GB，**放在 SSD** | 資料庫要快；不要放在存影片的 HDD |
+| 安裝媒體 | 剛下載的 ISO | |
+
+3. 👤 **第 2 代 VM 要改安全開機範本**，否則 Ubuntu 開不了機（先別啟動 VM）：
+
+```powershell
+Set-VMFirmware -VMName fjcwo -SecureBootTemplate MicrosoftUEFICertificateAuthority
+Set-VM -Name fjcwo -AutomaticStartAction Start -AutomaticStopAction ShutDown -CheckpointType Disabled
+```
+
+| 指令／參數 | 用途 |
+|-----------|------|
+| `Set-VMFirmware -SecureBootTemplate MicrosoftUEFICertificateAuthority` | 改用適合 Linux 的安全開機憑證範本（預設是給 Windows 的）|
+| `-AutomaticStartAction Start` | Windows 開機時 VM 自動啟動 |
+| `-AutomaticStopAction ShutDown` | Windows 關機時 VM 正常關機（不是直接斷電），保護資料庫 |
+| `-CheckpointType Disabled` | 關掉檢查點。**檢查點不是備份**，回溯舊檢查點會讓資料庫回到過去，造成掉資料 |
+
+### A-3　安裝 Ubuntu Server
+
+啟動 VM、連線後，安裝程式依序選：
+
+1. 語言 English；鍵盤照實際。
+2. 安裝類型：**Ubuntu Server**（標準，不選 minimized）。
+3. 網路：維持 DHCP。
+4. 磁碟：整顆使用（Use an entire disk），其餘預設。
+5. 👤 設定使用者名稱、主機名 `fjcwo`、**強密碼**（存密碼管理器）。
+6. **勾選 Install OpenSSH server**（之後從 Windows 用 SSH 操作）。
+7. 不選任何 Featured Server Snaps。
+8. 安裝完成後重開機，退出 ISO。
+
+### A-4　SSH 登入與基本防護
+
+在 **Windows 主機**的 PowerShell：
+
+```powershell
+ssh 你的使用者名稱@fjcwo.mshome.net
+```
+
+進到 Ubuntu 後：
+
+```bash
+sudo apt update && sudo apt full-upgrade -y
+sudo apt install -y ufw unattended-upgrades
+sudo ufw allow OpenSSH
+sudo ufw enable
+```
+
+| 指令／參數 | 用途 |
+|-----------|------|
+| `apt update` | 更新套件清單 |
+| `apt full-upgrade -y` | 升級全部套件；`-y` ＝ 自動回答 yes |
+| `ufw allow OpenSSH` | 防火牆放行 SSH（**先放行再啟用**，否則會把自己鎖在外面）|
+| `ufw enable` | 啟用防火牆；之後除了 SSH，預設全部擋掉 |
+| `unattended-upgrades` | 自動安裝安全性更新 |
+
+之後**改用金鑰登入並關掉密碼登入**：
+
+```powershell
+# 在 Windows：產生金鑰（一路 Enter，建議設一組 passphrase）
+ssh-keygen -t ed25519
+# 把公鑰放到 VM
+type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh 你的使用者名稱@fjcwo.mshome.net "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+```
+
+先**開新視窗確認金鑰登入成功**，再到 VM 編輯 `/etc/ssh/sshd_config.d/99-hardening.conf`，寫入 `PasswordAuthentication no`，然後 `sudo systemctl restart ssh`。
+
+> 若 `fjcwo.mshome.net` 連不上，在 Windows 跑 `Get-VM fjcwo | Get-VMNetworkAdapter | Select IPAddresses` 取得 VM 的 IP 直接用。
+
+### A-5　安裝 PostgreSQL
+
+```bash
+sudo apt install -y postgresql
+sudo -u postgres psql
+```
+
+在 `psql` 裡（密碼 👤 由使用者自己決定，不要貼進對話）：
+
+```sql
+CREATE USER fjcwo WITH PASSWORD '換成強密碼';
+CREATE DATABASE fjcwo OWNER fjcwo;
+\q
+```
+
+| 片段 | 用途 |
+|------|------|
+| `sudo -u postgres psql` | 用系統帳號 `postgres` 進資料庫管理介面 |
+| `\q` | 離開 `psql` |
+
+Ubuntu 的 PostgreSQL 預設只聽 localhost，**不要改成對外**，`ufw` 也不要放行 5432。
+
+### A-6　放程式碼與 .env
+
+```bash
+sudo apt install -y git python3-venv
+sudo adduser --system --group --home /opt/fjcwo fjcwo
+sudo -u fjcwo git clone https://github.com/sammy51305/FJCWO-Web.git /opt/fjcwo/app
+cd /opt/fjcwo/app
+sudo -u fjcwo python3 -m venv venv
+sudo -u fjcwo venv/bin/pip install -r requirements.txt
+```
+
+| 片段 | 用途 |
+|------|------|
+| `adduser --system --group --home /opt/fjcwo fjcwo` | 建立一個**不能登入**的專用系統帳號 `fjcwo`，網站用它跑，被入侵時權限最小 |
+| `sudo -u fjcwo …` | 用這個帳號執行指令，確保檔案擁有者正確 |
+| `python3 -m venv venv` | 建專案專用的 Python 環境（Ubuntu 24.04 內建 Python 3.12，Django 6 支援）|
+
+建立 `/opt/fjcwo/app/.env`（**不進 git**），變數與第 5 節相同：資料庫用 `DB_NAME`、`DB_USER`、`DB_PASSWORD`、`DB_HOST=localhost`、`DB_PORT=5432`（**不要設 `DATABASE_URL`**，原因見第 5 節），再加上 `DJANGO_SECRET_KEY`、`DJANGO_DEBUG=False`、`DJANGO_ALLOWED_HOSTS`、`DJANGO_CSRF_TRUSTED_ORIGINS`、`DJANGO_FIELD_ENCRYPTION_KEY`、Gmail SMTP、`DJANGO_SECURE_SSL_REDIRECT=True`、`DJANGO_SECURE_COOKIES=True`。
+
+```bash
+sudo chown fjcwo:fjcwo /opt/fjcwo/app/.env
+sudo chmod 600 /opt/fjcwo/app/.env
+cd /opt/fjcwo/app
+sudo -u fjcwo venv/bin/python manage.py collectstatic --noinput
+sudo -u fjcwo venv/bin/python manage.py migrate
+```
+
+`chmod 600` ＝ 只有檔案擁有者能讀寫，其他帳號看不到金鑰。
+基礎資料（fixtures）、`import_sheet`、`createsuperuser` 同第 5 節，只是指令改成 `sudo -u fjcwo venv/bin/python manage.py …`；`createsuperuser` 的密碼 👤 由使用者自己輸入。
+
+### A-7　Gunicorn 開機服務（systemd）
+
+建立 `/etc/systemd/system/fjcwo.service`：
+
+```ini
+[Unit]
+Description=FJCWO Web (Gunicorn)
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+User=fjcwo
+Group=fjcwo
+WorkingDirectory=/opt/fjcwo/app
+ExecStart=/opt/fjcwo/app/venv/bin/gunicorn config.wsgi:application --bind 127.0.0.1:8000 --workers 3
+Restart=on-failure
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+| 設定 | 用途 |
+|------|------|
+| `After`／`Requires=postgresql.service` | 資料庫起來之後才啟動網站 |
+| `User=fjcwo` | 用低權限專用帳號跑 |
+| `--bind 127.0.0.1:8000` | 只聽本機，外部一律經 Tunnel 進來 |
+| `--workers 3` | 工作行程數，小站 2～3 個即可 |
+| `Restart=on-failure` | 當掉自動重啟 |
+| `NoNewPrivileges`／`PrivateTmp` | 禁止提權、獨立暫存目錄，降低被入侵後的影響 |
+| `WantedBy=multi-user.target` | 開機自動啟動 |
+
+> Gunicorn 預設信任來自 127.0.0.1 的 `X-Forwarded-Proto`，cloudflared／Tailscale 都在 VM 內連本機，所以**不需要**像 Waitress 那樣另加 `--trusted-proxy` 參數。
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now fjcwo
+sudo systemctl status fjcwo
+curl -I http://127.0.0.1:8000/
+```
+
+`enable --now` ＝ 設為開機自動啟動並立刻啟動。`DJANGO_SECURE_SSL_REDIRECT=True` 下，本機 `curl` 看到 301 轉 https 是正常的；對外連線接好後再用外部網址驗證。
+看 log：`sudo journalctl -u fjcwo -f`（`-u` ＝ 指定服務，`-f` ＝ 持續追蹤）。
+
+### A-8　對外連線（在 VM 裡裝）
+
+**不要在 ufw 開 80／443，也不要在路由器 port forward。** 兩種做法擇一，不要兩個都開：
+
+- **Cloudflare Tunnel**：👤 在 Cloudflare Zero Trust 建 Tunnel 時，選作業系統 **Debian／Ubuntu**，照畫面給的指令在 VM 安裝並註冊成服務（指令含一次性 token，不要貼進對話）。Public Hostname 指向 `http://localhost:8000`。
+- **Tailscale Funnel**：👤 `curl -fsSL https://tailscale.com/install.sh | sh` 安裝後 `sudo tailscale up` 登入，再依 Tailscale 官方文件啟用 Funnel 指向 8000。
+
+接好後驗證 https 網址回 200 而不是一直 301（同第 8 節）。
+
+### A-9　備份（VM 版）
+
+**VM 內的備份會隨 VM 一起消失，一定要把備份複製到 VM 之外。**
+
+`/usr/local/bin/fjcwo-backup.sh`（`chmod 750`，擁有者 root）：
+
+```bash
+#!/usr/bin/env bash
+set -o errexit
+DEST=/var/backups/fjcwo
+mkdir -p "$DEST"
+sudo -u postgres pg_dump -Fc fjcwo > "$DEST/fjcwo_$(date +%F).dump"
+tar -czf "$DEST/media_$(date +%F).tar.gz" -C /opt/fjcwo/app media 2>/dev/null || true
+find "$DEST" -type f -mtime +30 -delete
+```
+
+| 片段 | 用途 |
+|------|------|
+| `set -o errexit` | 任何一步失敗就中止 |
+| `pg_dump -Fc` | custom 壓縮格式，可用 `pg_restore` 還原 |
+| `tar -czf … media` | 備份使用者上傳的檔案（收據等）；`-c` 建立、`-z` 壓縮、`-f` 檔名、`-C` 先切到該目錄 |
+| `find … -mtime +30 -delete` | 刪除超過 30 天的舊備份 |
+
+排程：`sudo systemctl edit --force --full fjcwo-backup.timer` 設每天凌晨執行，或用 `sudo crontab -e` 加一行 `15 3 * * * /usr/local/bin/fjcwo-backup.sh`（每天 03:15）。
+
+**搬出 VM：**
+1. 在 Windows 排程用 `scp 使用者@fjcwo.mshome.net:/var/backups/fjcwo/* E:\backup\`，把備份拉到外接硬碟。
+2. 同第 9 節，再加密上傳一份到雲端。
+3. 另外偶爾 `Export-VM -Name fjcwo -Path E:\vm-export`（匯出整台 VM，需先關機）當整機保險。
+4. 每月做還原演練：`sudo -u postgres createdb fjcwo_restore_test` 後 `sudo -u postgres pg_restore -d fjcwo_restore_test 備份檔`，確認後 `dropdb` 刪掉。
+5. `.env` 另存密碼管理器，不與備份放一起。
+
+### A-10　與 NAS 隔離的注意事項
+
+- VM 用 **Default Switch（NAT）**，不橋接到區網，**不要**把 Windows 的影片共用資料夾掛進 VM。
+- Windows 的 SMB（445 埠）只開給內網或 Tailscale，**絕不 port forward、不經 Tunnel**。
+- VM 虛擬硬碟（`.vhdx`）放在 SSD；影片放另一顆 HDD。
+- 開 BitLocker 加密存放 `.vhdx` 的磁碟，機器被偷時 VM 內的個資不會外洩。
+
+### A-11　日常維運（VM 版）
+
+```bash
+cd /opt/fjcwo/app
+sudo -u fjcwo git pull
+sudo -u fjcwo venv/bin/pip install -r requirements.txt
+sudo -u fjcwo venv/bin/python manage.py migrate
+sudo -u fjcwo venv/bin/python manage.py collectstatic --noinput
+sudo systemctl restart fjcwo
+```
+
+系統更新：`sudo apt update && sudo apt full-upgrade -y`，核心更新後 `sudo reboot`。
+
+| 症狀 | 看哪裡 |
+|------|--------|
+| 網站打不開 | `sudo journalctl -u fjcwo -n 100`（`-n` ＝ 最後幾行）、`systemctl status fjcwo` |
+| 外網連不上、VM 內正常 | `systemctl status cloudflared`（或 `tailscale status`）|
+| `relation does not exist` | 跑 `migrate` |
+| `ModuleNotFoundError` | 跑 `pip install -r requirements.txt` |
+| 重開機後沒起來 | Hyper-V 的自動啟動設定（A-2）、`systemctl status postgresql fjcwo` |
+| SSH 連不上 | Windows 上 `Get-VM fjcwo` 看狀態；改用 IP 連（A-4 備註）|
+
+### A-12　上線前檢查清單（VM 版）
+
+- [ ] Hyper-V 已啟用；VM 設為 Windows 開機自動啟動、關機正常關閉、檢查點已停用
+- [ ] VM 使用 Default Switch；Windows 的影片共用沒有掛進 VM
+- [ ] `ufw` 已啟用，只放行 SSH；SSH 已改金鑰登入、關閉密碼登入
+- [ ] PostgreSQL 只聽 localhost；網站用 `fjcwo` 低權限帳號跑；`.env` 權限為 600
+- [ ] `DJANGO_DEBUG=False`，`DJANGO_SECRET_KEY` 是新的，`DJANGO_FIELD_ENCRYPTION_KEY` 已另存密碼管理器
+- [ ] 重開 Windows 後，VM、PostgreSQL、`fjcwo` 服務與 Tunnel 都自動恢復
+- [ ] 對外網址 https 可連，登入、幹部頁、static 正常，Email 寄得出去
+- [ ] 每日備份有跑，**已複製到 VM 之外**（外接硬碟＋雲端）
+- [ ] **已做過一次還原演練**

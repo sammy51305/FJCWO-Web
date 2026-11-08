@@ -90,7 +90,7 @@
 | [BACKLOG.md](BACKLOG.md) | 待辦清單：待開發功能構想與優先權表、待評估的資料完整性問題（原 DESIGN 附錄四、五）| 已實作系統的設計邏輯（在 DESIGN）|
 | [TESTING.md](TESTING.md) | 測試總數、各 class 說明、執行方式、未覆蓋功能 | 測試的具體程式碼 |
 | [SETUP.md](SETUP.md) | 從零建環境的步驟（含 fixtures 載入順序）、Render 測試站（情境 E）| 架構設計、Windows 正式站部署（在 DEPLOY-WINDOWS.md）|
-| [DEPLOY-WINDOWS.md](DEPLOY-WINDOWS.md) | 與機器無關的正式站部署步驟：機器最低需求與預檢指令（含參數說明）、PostgreSQL、Waitress 服務、對外連線、備份、日常維運 | 特定機器的規格、授權、進度（在 SERVERS.md）|
+| [DEPLOY-WINDOWS.md](DEPLOY-WINDOWS.md) | 與機器無關的正式站部署步驟：機器最低需求與預檢指令（含參數說明）、PostgreSQL、Waitress 服務、對外連線、備份、日常維運；附錄 A 是 Hyper-V ＋ Ubuntu VM 的替代做法 | 特定機器的規格、授權、進度（在 SERVERS.md）|
 | [SERVERS.md](SERVERS.md) | 每台 server 機器一節：規格、系統授權、已定案決定、待回答問題、部署進度 | 部署步驟（在 DEPLOY-WINDOWS.md）、機密（密碼、金鑰、序號一律不寫）|
 | [OVERVIEW.md](OVERVIEW.md) | 功能總覽與操作流程（非技術人員版）| 技術實作細節 |
 | [DEMO.md](DEMO.md) | Demo 動線、開場前檢查、demo 資料內容與陷阱 | 系統行為說明（在 OVERVIEW）|
