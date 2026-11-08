@@ -58,7 +58,7 @@
           <span class="badge bg-danger">支出</span>
           {% endif %}
         </td>
-        <td>{{ r.get_category_display }}</td>
+        <td>{{ r.category.name }}</td>
         <td class="text-end">{{ r.amount }}</td>
         <td class="small">{{ r.description }}</td>
         <td class="small text-muted">{{ r.related_event.name|default:"—" }}</td>

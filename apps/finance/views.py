@@ -2,6 +2,7 @@ from collections import defaultdict
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db.models import Q
 from django.db.models.deletion import ProtectedError
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -12,7 +13,7 @@ from django.utils.dateparse import parse_date
 from apps.accounts.models import User
 from apps.events.models import PerformanceEvent
 
-from .models import FeePeriod, FinanceRecord, MembershipFee, PaymentConfig
+from .models import FeePeriod, FinanceCategory, FinanceRecord, MembershipFee, PaymentConfig
 
 
 @login_required
@@ -228,8 +229,16 @@ def _apply_finance_form(request, record):
 
     if type_ not in FinanceRecord.Type.values:
         errors.append('請選擇收入或支出。')
-    if category not in FinanceRecord.Category.values:
+    # 分類要是啟用中的；唯一例外是編輯舊紀錄時沿用它原本（之後被停用）的分類
+    category_obj = FinanceCategory.objects.filter(code=category).first()
+    keeps_current = record.pk and record.category_id == category
+    if category_obj is None or not (category_obj.is_active or keeps_current):
         errors.append('請選擇分類。')
+        category_obj = None
+    elif type_ in FinanceRecord.Type.values and not category_obj.fits(type_):
+        errors.append(f'分類「{category_obj.name}」不能用在'
+                      f'{FinanceRecord.Type(type_).label}，請改選其他分類。')
+        category_obj = None
     if not description:
         errors.append('請填寫說明。')
 
@@ -248,7 +257,7 @@ def _apply_finance_form(request, record):
 
     if not errors:
         record.type = type_
-        record.category = category
+        record.category = category_obj
         record.description = description
         record.amount = amount
         record.date = date_val
@@ -262,13 +271,18 @@ def _apply_finance_form(request, record):
 
 
 def _finance_form_context(action, record=None, form_data=None):
+    categories = FinanceCategory.objects.filter(is_active=True)
+    if record is not None and record.pk:
+        # 編輯舊紀錄：它原本的分類即使已停用也要留在選單裡，不然一存檔就被改掉
+        categories = FinanceCategory.objects.filter(
+            Q(is_active=True) | Q(code=record.category_id))
     return {
         'action': action,
         'record': record,
         'form_data': form_data if form_data is not None else {},
         'events': PerformanceEvent.objects.order_by('-performance_date'),
         'type_choices': FinanceRecord.Type.choices,
-        'category_choices': FinanceRecord.Category.choices,
+        'categories': categories,
     }
 
 
@@ -278,7 +292,7 @@ def finance_list(request):
         messages.error(request, '權限不足。')
         return redirect('/')
 
-    records = FinanceRecord.objects.select_related('created_by', 'related_event')
+    records = FinanceRecord.objects.select_related('created_by', 'related_event', 'category')
     type_filter = request.GET.get('type', '')
     if type_filter in FinanceRecord.Type.values:
         records = records.filter(type=type_filter)
@@ -337,7 +351,7 @@ def finance_edit(request, pk):
 
     form_data = {
         'type': record.type,
-        'category': record.category,
+        'category': record.category_id,
         'amount': record.amount,
         'date': record.date.isoformat() if record.date else '',
         'description': record.description,
@@ -392,7 +406,7 @@ def _sync_fee_income(fee, user):
         if rec is None:
             rec = FinanceRecord(
                 type=FinanceRecord.Type.INCOME,
-                category=FinanceRecord.Category.MEMBERSHIP,
+                category=FinanceCategory.membership(),
                 created_by=user,
             )
         rec.amount = fee.amount
@@ -676,17 +690,16 @@ def annual_report(request):
     rows = []
     if year:
         cat = defaultdict(lambda: {'income': 0, 'expense': 0})
-        for r in FinanceRecord.objects.filter(date__year=year):
+        for r in FinanceRecord.objects.filter(date__year=year).select_related('category'):
             if r.type == FinanceRecord.Type.INCOME:
                 income += r.amount
-                cat[r.category]['income'] += r.amount
+                cat[r.category.name]['income'] += r.amount
             else:
                 expense += r.amount
-                cat[r.category]['expense'] += r.amount
-        labels = dict(FinanceRecord.Category.choices)
+                cat[r.category.name]['expense'] += r.amount
         for c, v in cat.items():
             rows.append({
-                'category': labels.get(c, c),
+                'category': c,
                 'income': v['income'],
                 'expense': v['expense'],
             })

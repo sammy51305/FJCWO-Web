@@ -1,13 +1,18 @@
 import tempfile
 
+from django.contrib.admin.sites import AdminSite
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.db.models import ProtectedError
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import User
 
-from .models import FeePeriod, FinanceRecord, MembershipFee, PaymentConfig
+from .admin import FinanceCategoryAdmin
+from .models import (
+    FeePeriod, FinanceCategory, FinanceRecord, MembershipFee, PaymentConfig,
+)
 
 
 class MembershipFeeReportTest(TestCase):
@@ -255,14 +260,13 @@ class FinanceRecordCRUDTest(TestCase):
         data.update(over)
         return data
 
-    # ── 分類（#13-10 新增保險費）──
+    # ── 分類（#13-10 新增保險費；2026-11 起分類改為資料表，見 FinanceCategoryTest）──
     def test_insurance_category_exists(self):
         """#13-10：財務收支要有「保險費」分類（幹部 2026-08-12 回饋）"""
-        self.assertIn('insurance', FinanceRecord.Category.values)
-        self.assertEqual(FinanceRecord.Category.INSURANCE.label, '保險費')
+        self.assertEqual(FinanceCategory.objects.get(code='insurance').name, '保險費')
 
     def test_insurance_appears_in_create_form(self):
-        """新增收支的表單要列出保險費選項（choices 由 model 動態帶出）"""
+        """新增收支的表單要列出保險費選項（選項由 FinanceCategory 資料表帶出）"""
         self.client.force_login(self.officer)
         r = self.client.get(reverse('finance:finance_create'))
         self.assertContains(r, 'insurance')
@@ -275,7 +279,7 @@ class FinanceRecordCRUDTest(TestCase):
             type='expense', category='insurance', description='團員平安保險年費',
         ))
         record = FinanceRecord.objects.get(category='insurance')
-        self.assertEqual(record.get_category_display(), '保險費')
+        self.assertEqual(record.category.name, '保險費')
 
     # ── 存取控制 ──
     def test_list_unauthenticated_redirects(self):
@@ -321,7 +325,7 @@ class FinanceRecordCRUDTest(TestCase):
     # ── 編輯 ──
     def test_edit_record(self):
         rec = FinanceRecord.objects.create(
-            type='expense', category='venue', amount=500, date='2026-08-01',
+            type='expense', category_id='venue', amount=500, date='2026-08-01',
             description='場地費', created_by=self.officer,
         )
         self.client.force_login(self.officer)
@@ -335,7 +339,7 @@ class FinanceRecordCRUDTest(TestCase):
     # ── 刪除限管理員 ──
     def test_delete_officer_forbidden(self):
         rec = FinanceRecord.objects.create(
-            type='income', category='other', amount=100, date='2026-08-01',
+            type='income', category_id='other', amount=100, date='2026-08-01',
             description='x', created_by=self.officer,
         )
         self.client.force_login(self.officer)
@@ -345,7 +349,7 @@ class FinanceRecordCRUDTest(TestCase):
 
     def test_delete_admin_ok(self):
         rec = FinanceRecord.objects.create(
-            type='income', category='other', amount=100, date='2026-08-01',
+            type='income', category_id='other', amount=100, date='2026-08-01',
             description='x', created_by=self.officer,
         )
         self.client.force_login(self.admin)
@@ -354,9 +358,9 @@ class FinanceRecordCRUDTest(TestCase):
 
     # ── 摘要 ──
     def test_list_summary(self):
-        FinanceRecord.objects.create(type='income', category='other', amount=1000,
+        FinanceRecord.objects.create(type='income', category_id='other', amount=1000,
                                      date='2026-08-01', description='收', created_by=self.officer)
-        FinanceRecord.objects.create(type='expense', category='venue', amount=300,
+        FinanceRecord.objects.create(type='expense', category_id='venue', amount=300,
                                      date='2026-08-02', description='支', created_by=self.officer)
         self.client.force_login(self.officer)
         r = self.client.get(self.list_url)
@@ -696,7 +700,7 @@ class FeeIncomeTest(TestCase):
         self.assertIsNotNone(fee.finance_record)
         rec = fee.finance_record
         self.assertEqual(rec.type, FinanceRecord.Type.INCOME)
-        self.assertEqual(rec.category, FinanceRecord.Category.MEMBERSHIP)
+        self.assertEqual(rec.category_id, 'membership')
         self.assertEqual(rec.amount, 500)
         self.assertEqual(rec.date, fee.paid_at)
         self.assertEqual(FinanceRecord.objects.count(), 1)
@@ -762,7 +766,7 @@ class AnnualReportTest(TestCase):
 
     def _rec(self, type_, category, amount, date):
         return FinanceRecord.objects.create(
-            type=type_, category=category, amount=amount, date=date,
+            type=type_, category_id=category, amount=amount, date=date,
             description='x', created_by=self.officer,
         )
 
@@ -942,3 +946,131 @@ class StudentFeeTest(TestCase):
         r = self.client.get(reverse('finance:membership_fee_report'), {'period': self.period.pk})
         self.assertContains(r, '學生 1000 元')
         self.assertContains(r, 'badge bg-info text-dark">學生</span>')
+
+
+class FinanceCategoryTest(TestCase):
+    """收支分類改為資料表（2026-11）：預設分類、自訂分類、適用範圍、停用、系統分類保護。"""
+
+    def setUp(self):
+        self.officer = User.objects.create_user(
+            username='cat_officer', email='cat_officer@test.local', password='x',
+            name='分類幹部', role=User.Role.OFFICER,
+        )
+        self.create_url = reverse('finance:finance_create')
+
+    def _payload(self, **over):
+        data = {'type': 'income', 'category': 'sponsorship', 'amount': '5000',
+                'date': '2026-11-08', 'description': '校友贊助'}
+        data.update(over)
+        return data
+
+    def _record(self, code='sponsorship', type_='income', description='x'):
+        return FinanceRecord.objects.create(
+            type=type_, category_id=code, amount=100, date='2026-08-01',
+            description=description, created_by=self.officer,
+        )
+
+    def test_default_categories_seeded_by_migration(self):
+        """資料遷移要建好原本 8 個分類，加上新增的「贊助／捐款」「幹部代墊」；不含售票收入"""
+        codes = set(FinanceCategory.objects.values_list('code', flat=True))
+        self.assertEqual(codes, {
+            'venue', 'instructor', 'instrument_purchase', 'instrument_maintenance',
+            'score', 'insurance', 'membership', 'sponsorship', 'officer_advance', 'other',
+        })
+        self.assertFalse(FinanceCategory.objects.filter(name__contains='售票').exists())
+
+    def test_kinds_of_new_categories(self):
+        """贊助／捐款只能是收入；幹部代墊收入（墊進來）與支出（歸還）都要能記"""
+        self.assertEqual(FinanceCategory.objects.get(code='sponsorship').kind, 'income')
+        self.assertEqual(FinanceCategory.objects.get(code='officer_advance').kind, 'both')
+
+    def test_custom_category_gets_code_and_can_be_used(self):
+        """幹部自己加的分類：自動配代碼，馬上能在新增收支的表單選到並存檔"""
+        cat = FinanceCategory.objects.create(name='義演收入', kind='income')
+        self.assertTrue(cat.code)
+        self.client.force_login(self.officer)
+        self.assertContains(self.client.get(self.create_url), '義演收入')
+        self.client.post(self.create_url, self._payload(category=cat.code, description='義演'))
+        self.assertEqual(FinanceRecord.objects.get(description='義演').category, cat)
+
+    def test_income_only_category_rejected_for_expense(self):
+        """「贊助／捐款」是收入專用，選成支出要被擋"""
+        self.client.force_login(self.officer)
+        self.client.post(self.create_url, self._payload(type='expense'))
+        self.assertFalse(FinanceRecord.objects.exists())
+
+    def test_both_category_works_for_income_and_expense(self):
+        """幹部代墊：墊進來是收入、歸還是支出"""
+        self.client.force_login(self.officer)
+        self.client.post(self.create_url,
+                         self._payload(category='officer_advance', description='代墊'))
+        self.client.post(self.create_url,
+                         self._payload(category='officer_advance', type='expense',
+                                       description='歸還'))
+        self.assertEqual(FinanceRecord.objects.filter(category_id='officer_advance').count(), 2)
+
+    def test_unknown_category_rejected(self):
+        self.client.force_login(self.officer)
+        self.client.post(self.create_url, self._payload(category='nope'))
+        self.assertFalse(FinanceRecord.objects.exists())
+
+    def test_inactive_category_hidden_and_rejected_for_new(self):
+        """停用的分類：新增表單不再列出、直接送出也會被擋"""
+        FinanceCategory.objects.filter(code='sponsorship').update(is_active=False)
+        self.client.force_login(self.officer)
+        self.assertNotContains(self.client.get(self.create_url), 'sponsorship')
+        self.client.post(self.create_url, self._payload())
+        self.assertFalse(FinanceRecord.objects.exists())
+
+    def test_inactive_category_kept_when_editing_old_record(self):
+        """分類後來被停用，舊紀錄仍能正常編輯、分類不會被改掉"""
+        rec = self._record(description='舊贊助')
+        FinanceCategory.objects.filter(code='sponsorship').update(is_active=False)
+        self.client.force_login(self.officer)
+        edit_url = reverse('finance:finance_edit', args=[rec.pk])
+        self.assertContains(self.client.get(edit_url), '已停用')
+        self.client.post(edit_url, self._payload(amount='200', description='舊贊助（改）'))
+        rec.refresh_from_db()
+        self.assertEqual((rec.amount, rec.category_id), (200, 'sponsorship'))
+
+    def test_category_in_use_cannot_be_deleted(self):
+        """已有紀錄用的分類刪不掉（PROTECT），只能停用"""
+        self._record()
+        with self.assertRaises(ProtectedError):
+            FinanceCategory.objects.get(code='sponsorship').delete()
+
+    def test_rename_does_not_touch_records(self):
+        """改名後舊紀錄跟著顯示新名稱（紀錄是以代碼指向分類）"""
+        rec = self._record()
+        FinanceCategory.objects.filter(code='sponsorship').update(name='贊助')
+        rec.refresh_from_db()
+        self.assertEqual(rec.category.name, '贊助')
+
+    def test_membership_is_system_category(self):
+        """會費是系統分類：後台不能刪、改名／停用欄位唯讀"""
+        cat = FinanceCategory.membership()
+        self.assertTrue(cat.is_system)
+        model_admin = FinanceCategoryAdmin(FinanceCategory, AdminSite())
+        request = RequestFactory().get('/')
+        request.user = User.objects.create_superuser(
+            username='cat_root', email='cat_root@test.local', password='x')
+        self.assertFalse(model_admin.has_delete_permission(request, cat))
+        self.assertTrue(model_admin.has_delete_permission(
+            request, FinanceCategory.objects.get(code='sponsorship')))
+        self.assertIn('is_active', model_admin.get_readonly_fields(request, cat))
+
+    def test_membership_recreated_if_missing(self):
+        """會費分類被清掉時，FinanceCategory.membership() 會補建，確認繳費不會因此壞掉"""
+        FinanceCategory.objects.filter(code='membership').delete()
+        self.assertEqual(FinanceCategory.membership().code, 'membership')
+
+    def test_annual_report_groups_by_category_name(self):
+        """年度報表依分類名稱彙總，贊助不再混進「其他」"""
+        for code, amt in [('sponsorship', 3000), ('other', 500)]:
+            FinanceRecord.objects.create(
+                type='income', category_id=code, amount=amt, date='2026-06-01',
+                description='x', created_by=self.officer)
+        self.client.force_login(self.officer)
+        r = self.client.get(reverse('finance:annual_report'), {'year': 2026})
+        names = {row['category']: row['income'] for row in r.context['rows']}
+        self.assertEqual(names, {'贊助／捐款': 3000, '其他': 500})

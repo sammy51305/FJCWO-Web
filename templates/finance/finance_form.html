@@ -31,10 +31,11 @@
           <label class="form-label fw-semibold">分類 <span class="text-danger">*</span></label>
           <select name="category" class="form-select" required>
             <option value="">請選擇</option>
-            {% for value, label in category_choices %}
-            <option value="{{ value }}" {% if form_data.category == value %}selected{% endif %}>{{ label }}</option>
+            {% for c in categories %}
+            <option value="{{ c.code }}" data-kind="{{ c.kind }}" {% if form_data.category == c.code %}selected{% endif %}>{{ c.name }}{% if not c.is_active %}（已停用）{% endif %}</option>
             {% endfor %}
           </select>
+          <div class="form-text">選了「收入」或「支出」後，只會列出適用的分類。</div>
         </div>
       </div>
 
@@ -85,4 +86,26 @@
     </form>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  {# 依「收入／支出」隱藏不適用的分類；伺服器端另有檢查，這裡只是方便選 #}
+  (function () {
+    var typeSel = document.querySelector('select[name="type"]');
+    var catSel = document.querySelector('select[name="category"]');
+    function apply() {
+      var t = typeSel.value;
+      Array.prototype.forEach.call(catSel.options, function (o) {
+        if (!o.value) return;
+        var ok = !t || o.dataset.kind === 'both' || o.dataset.kind === t;
+        o.hidden = !ok;
+        o.disabled = !ok;
+        if (!ok && o.selected) catSel.value = '';
+      });
+    }
+    typeSel.addEventListener('change', apply);
+    apply();
+  })();
+</script>
 {% endblock %}

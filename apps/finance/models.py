@@ -1,6 +1,61 @@
+import uuid
+
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
+
+
+def _new_category_code():
+    """幹部在後台新增的分類自動配一個代碼（內建分類的代碼由資料遷移寫入，見 0012）。"""
+    return f'c{uuid.uuid4().hex[:10]}'
+
+
+class FinanceCategory(models.Model):
+    """
+    收支分類（可由幹部／管理員在後台自行增減，2026-11 由寫死的 TextChoices 改為資料表）。
+
+    - 紀錄以 `code`（不會變的代碼）指向分類，所以改名不影響舊紀錄。
+    - 已有紀錄用的分類刪不掉（PROTECT）：不想再用就取消「啟用」，舊紀錄照常顯示。
+    - 「會費」是系統分類（is_system）：確認繳費時系統自動寫入，不能改名、停用或刪除。
+    """
+    class Kind(models.TextChoices):
+        INCOME = 'income', '僅收入'
+        EXPENSE = 'expense', '僅支出'
+        BOTH = 'both', '收入與支出皆可'
+
+    MEMBERSHIP_CODE = 'membership'
+
+    code = models.CharField('代碼', max_length=30, unique=True, editable=False,
+                            default=_new_category_code)
+    name = models.CharField('名稱', max_length=30, unique=True)
+    kind = models.CharField('適用', max_length=10, choices=Kind, default=Kind.BOTH)
+    sort_order = models.PositiveIntegerField('排序', default=100,
+                                             help_text='數字小的排前面')
+    is_active = models.BooleanField('啟用', default=True,
+                                    help_text='取消勾選＝新增收支時不再列出，舊紀錄不受影響')
+    is_system = models.BooleanField('系統分類', default=False, editable=False)
+
+    class Meta:
+        verbose_name = '收支分類'
+        verbose_name_plural = '收支分類列表'
+        ordering = ['sort_order', 'id']
+
+    def __str__(self):
+        return self.name
+
+    def fits(self, type_):
+        """這個分類能不能用在 type_（'income' / 'expense'）的收支上。"""
+        return self.kind == self.Kind.BOTH or self.kind == type_
+
+    @classmethod
+    def membership(cls):
+        """會費分類。資料遷移已建好；get_or_create 是保險（例如資料被清空的測試環境）。"""
+        obj, _ = cls.objects.get_or_create(
+            code=cls.MEMBERSHIP_CODE,
+            defaults={'name': '會費', 'kind': cls.Kind.INCOME, 'sort_order': 70,
+                      'is_system': True},
+        )
+        return obj
 
 
 class FinanceRecord(models.Model):
@@ -8,18 +63,12 @@ class FinanceRecord(models.Model):
         INCOME = 'income', '收入'
         EXPENSE = 'expense', '支出'
 
-    class Category(models.TextChoices):
-        VENUE = 'venue', '場地費'
-        INSTRUCTOR = 'instructor', '師資費'
-        INSTRUMENT_PURCHASE = 'instrument_purchase', '樂器購置費'
-        INSTRUMENT_MAINTENANCE = 'instrument_maintenance', '樂器保養費'
-        SCORE = 'score', '樂譜費'
-        INSURANCE = 'insurance', '保險費'
-        MEMBERSHIP = 'membership', '會費'
-        OTHER = 'other', '其他'
-
     type = models.CharField('類型', max_length=10, choices=Type)
-    category = models.CharField('分類', max_length=30, choices=Category)
+    # to_field='code' + db_column='category'：資料庫裡仍是原本那欄，存的值（venue、membership…）不變
+    category = models.ForeignKey(
+        FinanceCategory, to_field='code', db_column='category',
+        on_delete=models.PROTECT, related_name='records', verbose_name='分類',
+    )
     amount = models.DecimalField('金額', max_digits=10, decimal_places=0,
                                  validators=[MinValueValidator(1)])
     date = models.DateField('日期')

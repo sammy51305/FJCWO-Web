@@ -20,7 +20,8 @@ manage.py import_sheet
 | 請假紀錄 | `LeaveRequest`（核准者同步出席為請假） | 團員 × 排練日期 |
 | 團費期別 | `FeePeriod`（含學生團費） | 年份 × 期 |
 | 團費收繳 | `MembershipFee`（已繳者同步收支明細收入） | 團員 × 期別 |
-| 支出紀錄 | `FinanceRecord`（支出） | 日期 × 金額 × 說明 |
+| 支出紀錄 | `FinanceRecord`（支出；幹部先墊付的另記「幹部代墊／借款」收入） | 日期 × 金額 × 說明 |
+| 幹部借款 | `FinanceRecord`（借入＝「幹部代墊／借款」收入，還款＝同分類支出） | 日期 × 金額 × 說明 |
 
 **不直接建帳號**：DESIGN §4.2 訂了「Registration 是帳號怎麼來的唯一紀錄」，所以名冊裡
 沒有帳號的人只會變成待審核的入團申請，由幹部在「入團申請審核」頁批次核准（會寄臨時密碼信）。
@@ -60,12 +61,14 @@ SHEET_LEAVES = '請假紀錄'
 SHEET_PERIODS = '團費期別'
 SHEET_FEES = '團費收繳'
 SHEET_EXPENSES = '支出紀錄'
+SHEET_LOANS = '幹部借款'
 
 # 各分頁必須有的標題。試算表範本改了欄位名稱就整份拒絕，不要猜著對位
 _REQUIRED_HEADERS = {
     SHEET_ROSTER: ('姓名', 'Email'),
     SHEET_VENUES: ('場地名稱', '類別'),
     SHEET_EVENTS: ('演出名稱', '類型', '演出日期', '演出場地'),
+    SHEET_LOANS: ('日期', '幹部', '類型', '金額', '說明', '經手人'),
     SHEET_REHEARSALS: ('排練日期', '開始時間', '場地', '所屬演出', '第幾次排練'),
     SHEET_LEAVES: ('申請時間', '姓名', '排練日期', '請假原因', '審核狀態', '審核幹部', '審核時間'),
     SHEET_PERIODS: ('年份', '期', '團費金額', '繳費開始日', '繳費截止日'),
@@ -75,19 +78,23 @@ _REQUIRED_HEADERS = {
 
 # 試算表「收支」分頁的預算項目 → 系統收支明細的分類。系統分類比較粗（團練室與場地費同屬
 # 場地費），所以描述一律寫成「項目：說明」，原本的預算項目不會因此消失。
+# 值是 FinanceCategory.code（內建分類的代碼，見 finance/migrations/0012）。
 # 對不上的項目歸「其他」並列入報告，不擋匯入——錢確實花了，帳不能漏。
 _EXPENSE_CATEGORY = {
-    '場地費': FinanceRecord.Category.VENUE,
-    '團練室': FinanceRecord.Category.VENUE,
-    '指揮費用': FinanceRecord.Category.INSTRUCTOR,
-    '樂譜': FinanceRecord.Category.SCORE,
-    '架站與伺服器費': FinanceRecord.Category.OTHER,
-    '開發網站': FinanceRecord.Category.OTHER,      # 舊名，改名前填的支出紀錄仍認得
-    '宣傳': FinanceRecord.Category.OTHER,
-    '音樂會錄音錄影': FinanceRecord.Category.OTHER,
-    '工作人員': FinanceRecord.Category.OTHER,
-    '大型樂器': FinanceRecord.Category.OTHER,
+    '場地費': 'venue',
+    '團練室': 'venue',
+    '指揮費用': 'instructor',
+    '樂譜': 'score',
+    '架站與伺服器費': 'other',
+    '開發網站': 'other',      # 舊名，改名前填的支出紀錄仍認得
+    '宣傳': 'other',
+    '音樂會錄音錄影': 'other',
+    '工作人員': 'other',
+    '大型樂器': 'other',
+    '創團行政費': 'other',
 }
+# 幹部用自己的錢先墊付時，支出照記，再多記一筆這個分類的收入（墊進團帳）；歸墊時另記一筆支出
+_ADVANCE_CATEGORY = 'officer_advance'
 
 # 出席紀錄是矩陣：第 1 列從 G 欄起是排練日期，第 5 列起每列一位團員（A 欄姓名）
 _ATTENDANCE_FIRST_DATE_COL = 7
@@ -197,15 +204,23 @@ def _to_amount(value):
     return amount if amount > 0 else None
 
 
-def _read_table(ws):
-    """一般分頁：第 1 列是標題，回傳 [(列號, {標題: 值})]，跳過整列空白。"""
+def _read_table(ws, until_blank=False):
+    """一般分頁：第 1 列是標題，回傳 [(列號, {標題: 值})]，跳過整列空白。
+
+    until_blank：標題列遇到第一個空白格就停（之後的欄位一律不讀）。「幹部借款」分頁右側有一塊
+    自動統計（也有一欄叫「幹部」），不停的話統計值會蓋掉左邊真正的資料欄、空白列也會變成資料。
+    """
     rows = ws.iter_rows(values_only=True)
     try:
         header = [_text(h) for h in next(rows)]
     except StopIteration:
         return [], []
+    if until_blank and '' in header:
+        header = header[:header.index('')]
     table = []
     for row_no, values in enumerate(rows, start=2):
+        if until_blank:
+            values = values[:len(header)]
         # 勾選框欄位（如支出紀錄的「收據」）沒勾也有值 FALSE，整片空白列都會帶著它，
         # 所以 False 視同空白，否則每一列空白都會被當成資料、報一堆「日期無法辨識」
         if not any(v is not False and _text(v) for v in values):
@@ -252,7 +267,7 @@ class Command(BaseCommand):
 
         self.sheets = {}
         for name in (SHEET_ROSTER, SHEET_VENUES, SHEET_EVENTS, SHEET_REHEARSALS, SHEET_ATTENDANCE,
-                     SHEET_LEAVES, SHEET_PERIODS, SHEET_FEES, SHEET_EXPENSES):
+                     SHEET_LEAVES, SHEET_PERIODS, SHEET_FEES, SHEET_EXPENSES, SHEET_LOANS):
             if name in wb.sheetnames:
                 self.sheets[name] = wb[name]
             else:
@@ -292,6 +307,7 @@ class Command(BaseCommand):
         self.periods = self._import_periods()
         self._import_fees()
         self._import_expenses()
+        self._import_loans()
 
     # ── 共用查詢 ───────────────────────────────────────────────
 
@@ -355,6 +371,10 @@ class Command(BaseCommand):
                     user.is_student = True
                     user.save(update_fields=['is_student'])
                     students_flagged.append(name)
+            elif _text(row.get('狀態')) == '離團':
+                problems.append(
+                    f'第 {row_no} 列：{name} 已離團且沒有帳號，不建入團申請（他在其他分頁的紀錄會略過）'
+                )
             elif email:
                 to_register.append({
                     'name': name, 'email': email,
@@ -758,13 +778,19 @@ class Command(BaseCommand):
         支出沒有天然的唯一鍵，以「日期 × 金額 × 描述」對照。試算表裡可能真的有兩筆一模一樣的支出
         （同一天付兩次同樣的場地費），所以不是「有就略過」，而是**數量對齊**：
         試算表有 N 筆、系統已有 M 筆，就補建 N−M 筆。重跑時 M 追上 N，自然不再新增。
+
+        **幹部先墊付**（「經手人先墊付」打勾）：錢不是從團帳出去的，但支出照記，所以多記一筆
+        「幹部代墊」收入（同日、同金額）把團帳補平，系統結餘才等於樂團實際持有的現金。
+        「已歸墊」打勾再記一筆「幹部代墊」支出（樂團把錢還給他）；日期取選填的「歸墊日期」欄，
+        沒有這欄就用支出日期。這幾筆也走同樣的數量對齊，重跑不會重複。
         """
         if SHEET_EXPENSES not in self.sheets:
             return
         _, table = _read_table(self.sheets[SHEET_EXPENSES])
         problems = []
-        wanted = Counter()        # (日期, 金額, 描述) → 試算表裡的筆數
+        wanted = Counter()        # (類型, 日期, 金額, 描述) → 試算表裡的筆數
         categories = {}
+        advances = 0
         for row_no, row in table:
             day = _to_date(row.get('日期'))
             if day is None:
@@ -781,29 +807,108 @@ class Command(BaseCommand):
             category = _EXPENSE_CATEGORY.get(item)
             if category is None:
                 problems.append(f'第 {row_no} 列：項目「{item}」不在預算項目裡，歸為「其他」')
-                category = FinanceRecord.Category.OTHER
+                category = 'other'
             note = _text(row.get('說明'))
             handler = _text(row.get('經手人'))
             description = f'{item}：{note}' if note else item
             if handler:
                 description += f'（經手人：{handler}）'
-            key = (day, amount, description)
+            expense = FinanceRecord.Type.EXPENSE
+            key = (expense, day, amount, description)
             wanted[key] += 1
             categories[key] = category
 
+            advanced = row.get('經手人先墊付') is True
+            reimbursed = row.get('已歸墊') is True
+            if reimbursed and not advanced:
+                problems.append(f'第 {row_no} 列：勾了「已歸墊」但沒勾「經手人先墊付」，歸墊不匯入')
+            if advanced:
+                advances += 1
+                if not handler:
+                    problems.append(f'第 {row_no} 列：勾了「經手人先墊付」但沒填經手人，不知道是誰墊的')
+                income_key = (FinanceRecord.Type.INCOME, day, amount, f'幹部代墊：{description}')
+                wanted[income_key] += 1
+                categories[income_key] = _ADVANCE_CATEGORY
+                if reimbursed:
+                    repaid_on = day
+                    if _text(row.get('歸墊日期')):
+                        repaid_on = _to_date(row.get('歸墊日期'))
+                        if repaid_on is None:
+                            problems.append(f'第 {row_no} 列：歸墊日期無法辨識，改用支出日期')
+                            repaid_on = day
+                    repay_key = (expense, repaid_on, amount, f'歸還幹部代墊：{description}')
+                    wanted[repay_key] += 1
+                    categories[repay_key] = _ADVANCE_CATEGORY
+
+        created, existing = self._align_records(wanted, categories)
+        label = SHEET_EXPENSES
+        if advances:
+            label = (f'{SHEET_EXPENSES}（{advances} 筆幹部先墊付：每筆另記一筆「幹部代墊」收入，'
+                     f'已歸墊的再記一筆「歸還幹部代墊」支出，所以新增筆數會比列數多）')
+        self.report.append((label, created, existing, problems))
+
+    def _align_records(self, wanted, categories):
+        """收支明細的數量對齊：wanted = {(類型, 日期, 金額, 描述): 筆數}，系統不足的補建。
+        回傳 (新增數, 已存在數)。支出與借款共用，重跑時系統追上試算表就不再新增。"""
         created = existing = 0
-        for (day, amount, description), count in wanted.items():
+        for (type_, day, amount, description), count in wanted.items():
             have = FinanceRecord.objects.filter(
-                type=FinanceRecord.Type.EXPENSE, date=day, amount=amount, description=description,
+                type=type_, date=day, amount=amount, description=description,
             ).count()
             existing += min(have, count)
             for _ in range(count - have):
                 FinanceRecord.objects.create(
-                    type=FinanceRecord.Type.EXPENSE, category=categories[(day, amount, description)],
+                    type=type_, category_id=categories[(type_, day, amount, description)],
                     amount=amount, date=day, description=description, created_by=self.operator,
                 )
                 created += 1
-        self.report.append((SHEET_EXPENSES, created, existing, problems))
+        return created, existing
+
+    def _import_loans(self):
+        """幹部借款 → 收支明細。借入＝「幹部代墊／借款」收入（錢進了團帳），還款＝同分類支出。
+
+        借款不是團費、也不是一般收入，但它是樂團實際持有的現金；記成這個分類，系統結餘才會等於
+        試算表「收支」分頁的「樂團實際持有的現金」，之後想看「還欠多少」也能從這個分類加總出來。
+        分頁右側有一塊自動統計，只讀到標題列第一個空白欄為止（見 _read_table）。
+        """
+        if SHEET_LOANS not in self.sheets:
+            return
+        _, table = _read_table(self.sheets[SHEET_LOANS], until_blank=True)
+        problems = []
+        wanted = Counter()
+        categories = {}
+        for row_no, row in table:
+            day = _to_date(row.get('日期'))
+            if day is None:
+                problems.append(f'第 {row_no} 列：日期無法辨識（沒填日期的列不匯入）')
+                continue
+            officer = _text(row.get('幹部'))
+            if not officer:
+                problems.append(f'第 {row_no} 列：缺幹部')
+                continue
+            kind = _text(row.get('類型'))
+            if kind not in ('借入', '還款'):
+                problems.append(f'第 {row_no} 列：類型「{kind}」不是借入／還款')
+                continue
+            amount = _to_amount(row.get('金額'))
+            if amount is None:
+                problems.append(f'第 {row_no} 列：金額要是正整數')
+                continue
+            note = _text(row.get('說明'))
+            handler = _text(row.get('經手人'))
+            if kind == '借入':
+                type_, description = FinanceRecord.Type.INCOME, f'幹部借款：{officer}借給樂團'
+            else:
+                type_, description = FinanceRecord.Type.EXPENSE, f'歸還幹部借款：樂團還給{officer}'
+            if note:
+                description += f'（{note}）'
+            if handler:
+                description += f'（經手人：{handler}）'
+            key = (type_, day, amount, description)
+            wanted[key] += 1
+            categories[key] = _ADVANCE_CATEGORY
+        created, existing = self._align_records(wanted, categories)
+        self.report.append((SHEET_LOANS, created, existing, problems))
 
     # ── 報告 ───────────────────────────────────────────────────
 
