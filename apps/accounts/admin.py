@@ -28,7 +28,7 @@ class SectionTypeAdmin(admin.ModelAdmin):
 class UserAdmin(BaseUserAdmin):
     fieldsets = BaseUserAdmin.fieldsets + (
         ('樂團資料', {
-            'fields': ('name', 'role', 'instrument', 'section', 'grad_year', 'phone', 'line_user_id')
+            'fields': ('name', 'role', 'instrument', 'section', 'grad_year', 'phone', 'line_user_id', 'google_sub')
         }),
     )
     add_fieldsets = BaseUserAdmin.add_fieldsets + (

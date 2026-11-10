@@ -158,6 +158,12 @@ LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 
+# Google 帳號登入（apps/accounts/google_auth.py）。兩個都填才啟用，否則登入頁不顯示按鈕。
+# 只能登入既有團員帳號（以已驗證 email 比對），不會自動建帳號。
+# Google Cloud Console 的「已授權的重新導向 URI」要登記 <網站網址>/accounts/login/google/callback/
+GOOGLE_OAUTH_CLIENT_ID = os.environ.get('GOOGLE_OAUTH_CLIENT_ID', '')
+GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET', '')
+
 EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
