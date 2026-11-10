@@ -409,7 +409,11 @@ powershell -ExecutionPolicy Bypass -File C:\FJCWO-Web\scripts\update.ps1
 ```
 
 它依序做：先備份 → `git pull --ff-only` → `pip install` → `migrate` → `collectstatic` → 重啟服務 → 確認網站有回應；
-任何一步失敗就停下、不重啟服務。server 上的 `C:\FJCWO-Web` **不要直接改程式**（`pull --ff-only` 會因此失敗），改動一律在開發機做、走 PR。
+任何一步失敗就停下、不重啟服務。最後的「確認網站」用 `curl.exe` 打本機 `http://127.0.0.1:8000/`，最多重試 30 秒；
+開了 SSL 旗標後本機 http 回 **301 是正常的**（200／301／302 都算通過，`000` 代表連不上）。
+若只有這一步報錯、前面全部 OK，先用手機開對外網址確認，多半是服務還在啟動。
+刻意**不排程自動更新**：merge 不等於可以上線（例如需要先填 `.env` 的功能），且沒人看著時 migrate 失敗不易察覺。
+server 上的 `C:\FJCWO-Web` **不要直接改程式**（`pull --ff-only` 會因此失敗），改動一律在開發機做、走 PR。
 
 出問題時先看：
 
