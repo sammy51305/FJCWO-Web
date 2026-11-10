@@ -42,19 +42,21 @@
             {{ p.start_date|date:"Y/m/d"|default:"—" }} ～ {{ p.end_date|date:"Y/m/d"|default:"—" }}
           {% else %}—{% endif %}
         </td>
-        <td class="d-flex gap-1">
-          <a href="{% url 'finance:fee_period_edit' p.pk %}" class="btn btn-sm btn-outline-secondary">
-            <i class="bi bi-pencil"></i> 編輯
-          </a>
-          {% if user.is_superuser or user.is_admin_role %}
-          <form method="post" action="{% url 'finance:fee_period_delete' p.pk %}" class="d-inline">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-sm btn-outline-danger"
-                    onclick="return confirm('確定要刪除期別「{{ p }}」嗎？已有繳費紀錄時無法刪除。')">
-              <i class="bi bi-trash"></i>
-            </button>
-          </form>
-          {% endif %}
+        <td>
+          <div class="d-flex gap-1">
+            <a href="{% url 'finance:fee_period_edit' p.pk %}" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-pencil"></i> 編輯
+            </a>
+            {% if user.is_superuser or user.is_admin_role %}
+            <form method="post" action="{% url 'finance:fee_period_delete' p.pk %}" class="d-inline">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger"
+                      onclick="return confirm('確定要刪除期別「{{ p }}」嗎？已有繳費紀錄時無法刪除。')">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+            {% endif %}
+          </div>
         </td>
       </tr>
       {% endfor %}
