@@ -216,7 +216,10 @@ CREATE USER fjcwo WITH PASSWORD '換成強密碼';
 CREATE DATABASE fjcwo OWNER fjcwo;
 ```
 
-4. 保持預設只聽 `localhost`，**不要對外開 5432**。
+4. **只聽 `localhost`，不要對外開 5432**。注意：EDB 安裝版預設是 `listen_addresses = '*'`（聽所有網卡），
+   要改 `C:\Program Files\PostgreSQL\<版本>\data\postgresql.conf` 成 `listen_addresses = 'localhost'` 再重啟服務
+   （`pg_hba.conf` 預設只允許 127.0.0.1／::1 登入，是第二道防線）。驗證：`Get-NetTCPConnection -LocalPort 5432 -State Listen`
+   只應看到 `127.0.0.1`／`::1`。存檔要用**無 BOM** 的 UTF-8，PowerShell 5.1 的 `Set-Content -Encoding utf8` 會加 BOM，可能讓 PostgreSQL 讀設定檔失敗。
 
 ## 5. 第 2 步：放程式碼與 .env
 
@@ -274,6 +277,10 @@ venv\Scripts\python.exe -m waitress --listen=127.0.0.1:8000 --trusted-proxy=127.
 ## 7. 第 4 步：包成開機自動啟動的服務
 
 1. 下載 NSSM，把 `nssm.exe` 放到 `C:\nssm`。
+   或用系統管理員 PowerShell `winget install NSSM.NSSM --scope machine`（重開 PowerShell 後直接打 `nssm`，下文的 `C:\nssm\nssm.exe` 都換成 `nssm`），
+   再用 `nssm install／set` 指令一次設好（不開視窗）：`AppDirectory`、`AppStdout`／`AppStderr`、`AppRotateFiles 1`（每次服務啟動時輪替 log）、
+   **不要開 `AppRotateOnline`**（2026-11-10 實測：NSSM 2.24 開了它，停止服務時會卡在 Stop Pending，只能強制結束 nssm 行程）、
+   `Start SERVICE_AUTO_START`、`DependOnService postgresql-x64-<版本>`（資料庫先起來）。實際指令與設定值見 SERVERS.md 該機器的進度。
 2. 用系統管理員 PowerShell：
 
 ```powershell
@@ -305,33 +312,48 @@ C:\nssm\nssm.exe install FJCWO-Web
 
 ### 選項 B：Tailscale Funnel（免網域）
 
-1. 👤 在筆電安裝 Tailscale 並登入。
-2. 啟用 Funnel，把 8000 port 公開成 `https://機器名.tailnet名.ts.net`。
-3. 網址較長，但免費、設定快。
+1. 👤 在 server 安裝 Tailscale（tailscale.com/download）並登入。可以提早做，順便當遠端維護通道。
+2. 👤 **Server 必做的三項設定**（漏了會在重開機或半年後突然斷線）：
+   - 系統匣 Tailscale 圖示 → Preferences → 勾 **Run unattended**：沒登入 Windows 也保持連線（停電重開後不會有人登入）。
+   - 管理後台 Machines → 這台 → `…` → **Disable key expiry**：否則預設 180 天後金鑰過期、網站斷線。
+   - 同一選單 **Edit machine name** 改成好記的名字（如 `fjcwo`），網址會變 `https://fjcwo.tailnet名.ts.net`。**改名要在設定 `.env` 網域之前**。
+3. 網站在 8000 跑起來後（第 4 步完成），系統管理員 PowerShell 執行 `tailscale funnel --bg 8000`。
+   第一次執行若提示要在後台開啟 HTTPS 憑證或 Funnel 權限，👤 照它給的連結點同意。`--bg` ＝ 背景常駐、重開機後保留；`tailscale funnel status` 查狀態。
 4. 同樣要把這個網址填進 `DJANGO_ALLOWED_HOSTS` 與 `DJANGO_CSRF_TRUSTED_ORIGINS`。
-5. 接好後用 `curl -I https://機器名.tailnet名.ts.net/` 確認回 200 而不是一直 301 轉址；
-   若一直轉址，代表 Funnel 沒送 `X-Forwarded-Proto`，請 Claude 協助排查（尚未實測過 Funnel 的 header 行為）。
+5. 接好後用 `curl -I https://機器名.tailnet名.ts.net/` 確認回 200 而不是一直 301 轉址。
+   （2026-11-10 實測：Funnel 會送 `X-Forwarded-Proto: https`，搭配第 3 步的 Waitress 參數，`DJANGO_SECURE_SSL_REDIRECT=True` 下外部 https 回 200、本機 http 回 301，cookie 帶 `Secure`。）
+6. `.env` 的兩個 SECURE 旗標改完要**重啟服務才生效**（系統管理員 PowerShell `Restart-Service FJCWO-Web`）；驗證方式：`http://127.0.0.1:8000/` 應回 301。
 
 ## 9. 第 6 步：備份（最重要）
 
-三層缺一不可：
+三層缺一不可，全部由 `scripts/backup.py` 處理（用法見檔頭）：
 
-1. **每日 `pg_dump` 到外接硬碟**：Windows 工作排程器，每天凌晨跑。
+| 子指令 | 做什麼 |
+|--------|--------|
+| `backup --dest D:\FJCWO-Backup` | `pg_dump -Fc` ＋ `media/` 打包，以 `.env` 的 `BACKUP_ENCRYPTION_KEY` 用 AES-256-GCM 加密成 `fjcwo_日期_時間.fjbk`；保留 30 天；失敗時 exit≠0 並寄信到樂團信箱 |
+| `offsite --src D:\FJCWO-Backup --dest "G:\我的雲端硬碟\FJCWO-Backup"` | 把 `.fjbk` 鏡像到 Google Drive 電腦版的同步資料夾（雲端保留天數跟本地一致）|
+| `verify 檔案` | 解密＋`pg_restore --list`，確認備份可讀（不碰資料庫）|
+| `decrypt 檔案 輸出資料夾` | 解出 `db.dump`、`media\`、`manifest.json`，還原用 |
+
+1. **每日備份到外接硬碟**：工作排程器以 **SYSTEM** 身分每天凌晨跑 `backup`（沒人登入也會跑）。
+   資料庫密碼由腳本從 `.env` 讀、以環境變數交給 `pg_dump`，**不寫在排程指令裡**。
+2. **異地一份**：Google Drive 電腦版是**每位使用者各自掛載** `G:`，SYSTEM 看不到、沒登入時也不存在，
+   所以 `offsite` 要另排一個**以該使用者身分、登入時才執行**的排程（每日＋登入時各觸發一次）。
+   → server 的 Windows 帳號要**保持登入（鎖定畫面即可）**；重開機後記得登入一次，異地備份才會追上。
+3. **還原演練**（上線前一次，之後每月一次）：在另一個空資料庫還原，確認資料真的回得來。沒驗證過的備份等於沒有備份。
 
 ```powershell
-& "C:\Program Files\PostgreSQL\17\bin\pg_dump.exe" -U fjcwo -Fc fjcwo -f "E:\backup\fjcwo_$(Get-Date -Format yyyyMMdd).dump"
+# 👤 建空資料庫要 postgres 超級使用者密碼；fjcwo 是擁有者，之後的還原與刪除都用 fjcwo
+& "C:\Program Files\PostgreSQL\17\bin\createdb.exe" -U postgres -O fjcwo fjcwo_restore_test
+venv\Scripts\python.exe scripts\backup.py decrypt D:\FJCWO-Backup\<最新>.fjbk C:\FJCWO-RestoreTest
+& "C:\Program Files\PostgreSQL\17\bin\pg_restore.exe" -U fjcwo -d fjcwo_restore_test --no-owner C:\FJCWO-RestoreTest\db.dump
+# 比對幾個資料表的筆數與正式庫一致後：
+& "C:\Program Files\PostgreSQL\17\bin\dropdb.exe" -U fjcwo fjcwo_restore_test
+Remove-Item -Recurse C:\FJCWO-RestoreTest
 ```
 
-   版本號 `17` 換成實際安裝的版本。密碼用 `PGPASSWORD` 環境變數或 `pgpass.conf` 帶入，
-   **不要寫死在排程指令裡**。保留最近 30 天，舊的自動清掉。
-2. **異地一份**：把 dump 加密後傳到雲端（Cloudflare R2 或 Google Drive），保留 30 天。
-   雲端的存取金鑰由使用者自己建立、自己放進環境變數。
-3. **每月還原演練**：在另一個空資料庫還原一次，確認資料真的回得來。
-   沒驗證過的備份等於沒有備份。
-
-另外把 `.env`（尤其加密金鑰）存進密碼管理器，**不要和資料庫備份放在同一處**。
-
-Claude 可協助撰寫 `scripts/backup.ps1`（dump、保留天數、上傳、失敗時通知）與排程設定。
+`.env`（含 `DJANGO_FIELD_ENCRYPTION_KEY` 與 `BACKUP_ENCRYPTION_KEY`）存進密碼管理器，**不要和備份放在同一處**：
+金鑰遺失 ＝ 備份解不開；金鑰和備份放一起 ＝ 加密沒有意義。
 
 ## 10. 第 7 步：試算表寫入紀錄（後續）
 
@@ -361,16 +383,15 @@ Claude 可協助撰寫 `scripts/backup.ps1`（dump、保留天數、上傳、失
 
 ## 12. 日常維運
 
-更新程式：
+更新程式：**server 不會自動抓新版**，push 到 GitHub（merge 進 `main`）之後，要在 server 上手動更新。
+用系統管理員 PowerShell 跑一鍵更新腳本：
 
 ```powershell
-cd C:\FJCWO-Web
-git pull
-venv\Scripts\python.exe -m pip install -r requirements.txt
-venv\Scripts\python.exe manage.py migrate
-venv\Scripts\python.exe manage.py collectstatic --noinput
-C:\nssm\nssm.exe restart FJCWO-Web
+powershell -ExecutionPolicy Bypass -File C:\FJCWO-Web\scripts\update.ps1
 ```
+
+它依序做：先備份 → `git pull --ff-only` → `pip install` → `migrate` → `collectstatic` → 重啟服務 → 確認網站有回應；
+任何一步失敗就停下、不重啟服務。server 上的 `C:\FJCWO-Web` **不要直接改程式**（`pull --ff-only` 會因此失敗），改動一律在開發機做、走 PR。
 
 出問題時先看：
 
@@ -382,7 +403,7 @@ C:\nssm\nssm.exe restart FJCWO-Web
 | `ModuleNotFoundError` | 跑 `pip install -r requirements.txt` |
 | 重開機後起不來 | PostgreSQL 服務是否先啟動、NSSM 服務是否設為自動 |
 
-**每次大改動前先手動跑一次備份。**
+**每次大改動前先手動跑一次備份**（`update.ps1` 已內建）。查備份狀況：`D:\FJCWO-Backup\backup.log`。
 
 ---
 
