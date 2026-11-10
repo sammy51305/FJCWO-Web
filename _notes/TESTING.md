@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-11-08（共 595 個測試；收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
+> 最後更新：2026-11-10（共 615 個測試；新增 Google 帳號登入與綁定 `GoogleLoginTest`）
 
 ---
 
@@ -90,15 +90,17 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **595 個測試**，分布在 8 個 app。
+共 **615 個測試**，分布在 8 個 app。
 
 > 最近一次全站測試：2026-11-08 執行 `python manage.py test`（收支分類改為資料表、試算表匯入補場地／演出／幹部借款／先墊付），**595/595 全數通過、無 regression**（System check 亦無問題）。
+> 2026-11-10 Google 登入：在**無 PostgreSQL 帳密的機器上改用 SQLite 暫時設定**跑全站 614 個（不含最後補的槍手案例）全數通過、`GoogleLoginTest` 20/20 通過；尚待在 PostgreSQL 上跑一次全站確認。
 
-### `apps/accounts/tests.py`（162 個）
+### `apps/accounts/tests.py`（182 個）
 
 | Class | 測試內容 |
 |-------|---------|
 | `LoginLogoutTest` | 登入頁存取、正確/錯誤帳密、session 建立與清除、登出導向 |
+| `GoogleLoginTest` | Google 帳號登入（token 交換以 mock 取代，不連 Google）：未設 client id 時按鈕隱藏且網址 404、導向 Google 帶 state／nonce／PKCE／正確 redirect_uri、首次以已驗證 email（不分大小寫）比對並綁定 sub、已綁定只認 sub、next 導回與外站過濾；**拒絕**：查無團員且不建帳號、email 未驗證、團員已綁別的 Google 帳號（不改綁）、停用帳號、槍手、state 不符（不去換 token）、無 session、nonce 不符、使用者在 Google 取消；個人資料頁手動綁定 email 不同的 Google 帳號後可登入、不可搶綁他人已綁帳號、綁定需登入且限 POST、解除綁定；id_token 的 iss／aud／exp／sub 驗證 |
 | `ProfileTest` | 個人資料頁存取控制、顯示姓名、POST 更新儲存 |
 | `MemberDirectoryTest` | 通訊錄存取控制、電話/email 可見性（member vs officer）、admin 不顯示、依姓名搜尋、預設隱藏已退團、status=inactive 篩選、一般團員無法使用狀態篩選 |
 | `MemberEditTest` | 存取控制（未登入/他人/幹部）、GET 預先帶入既有資料、POST 更新成功、幹部可升級為幹部角色、一般幹部不可授予管理員角色（僅管理員本身可以）、404 |
@@ -333,5 +335,6 @@ def test_invalid_state_raises(self):
 | `public` | `about_manage` / `about_create` / `about_edit` / `about_delete` | 關於百韻內容管理，尚無自動測試 |
 | `events` | 演出樂譜資料夾設定頁「批次貼上」的名稱→族群自動配對（前端 JS） | Django 測試碰不到瀏覽器 JS；2026-10-22 以 node 對 13 個族群名稱＋「總譜」手動驗證過配對（含「上低音號」不被「低音號」搶走）；後端不信任前端、只驗收最後送出的欄位 |
 | `scores` | 樂譜庫存／演出樂譜資料夾在真實瀏覽器的版面 | 無瀏覽器自動化測試；雲端環境連不到 CDN、Bootstrap 沒載入，只能看結構 |
+| `accounts` | Google 登入與 Google 的實際往返（`_exchange_code` 打 token endpoint） | 測試一律 mock 掉；需在正式站設好 OAuth 用戶端後人工登入一次驗證（步驟見 DEPLOY-WINDOWS 10-b 第 5 點）|
 | `meetings` | 所有功能 | Phase 3，尚未實作 |
 | `notifications` | Admin 觸發通知的整合測試 | 需要 mock Admin save_model，目前僅覆蓋 utils 層 |

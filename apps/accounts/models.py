@@ -123,6 +123,13 @@ class User(AbstractUser):
     alumni_info = models.CharField('入學年／科系', max_length=100, blank=True)
     line_id = models.CharField('LINE ID', max_length=100, blank=True)
     line_user_id = models.CharField('LINE User ID', max_length=100, blank=True)
+    # Google 登入綁定：存 Google 帳號的 `sub`（永久不變的帳號 ID），不是 email。
+    # 第一次用 Google 登入時以「已驗證 email = User.email」比對後寫入，之後只認 sub，
+    # 團員日後改 Gmail 或改系統 email 都不會斷。可空＋unique（多個 NULL 不衝突，同 email 欄位）。
+    google_sub = models.CharField(
+        'Google 帳號 ID', max_length=255, unique=True, null=True, blank=True,
+        help_text='第一次用 Google 登入時自動綁定；清空即解除綁定'
+    )
     # 學生團費適用（2026-11-01 定案）。與 role 分開：學生也可能是幹部，「身分」與「收費級距」是兩件事。
     is_student = models.BooleanField(
         '學生', default=False,

@@ -147,7 +147,7 @@
 7. [第 4 步：包成開機自動啟動的服務](#7-第-4-步包成開機自動啟動的服務)
 8. [第 5 步：對外連線](#8-第-5-步對外連線)
 9. [第 6 步：備份（最重要）](#9-第-6-步備份最重要)
-10. [第 7 步：試算表寫入紀錄（後續）](#10-第-7-步試算表寫入紀錄後續)
+10. [第 7 步：試算表寫入紀錄（後續）](#10-第-7-步試算表寫入紀錄後續)（含 [10-b 選用：Google 帳號登入](#10-b選用google-帳號登入)）
 11. [上線前檢查清單](#11-上線前檢查清單)
 12. [日常維運](#12-日常維運)
 13. [附錄 A：改用 Hyper-V 跑 Ubuntu（進階）](#附錄-a改用-hyper-v-跑-ubuntu進階非上線前提)
@@ -367,6 +367,24 @@ Remove-Item -Recurse C:\FJCWO-RestoreTest
 - **不寫入的欄位**：身分證、地址、生日等加密欄位、密碼。
 - 憑證：👤 使用者自己建立 Google 服務帳號、把它加為試算表編輯者，金鑰放環境變數，不貼進對話。
 - 實作後需同步更新 Architecture.md、DESIGN.md、TESTING.md（依 CLAUDE.md 的 commit 前 checklist）。
+
+### 10-b　選用：Google 帳號登入
+
+不設定也完全不影響網站，登入頁只是不顯示 Google 按鈕。運作規則見 DESIGN「Google 帳號登入」。
+
+1. 👤 [Google Cloud Console](https://console.cloud.google.com/) 建一個專案（例如 `fjcwo-web`）。
+2. 👤「API 和服務 → OAuth 同意畫面」：使用者類型選**外部**，應用程式名稱填樂團名稱，
+   範圍只要預設的 `openid`、`email`（不需送審）。填完後按**發布應用程式**——停在「測試」狀態時
+   只有手動加入的測試使用者能登入。
+3. 👤「憑證 → 建立憑證 → OAuth 用戶端 ID」，類型選**網頁應用程式**，「已授權的重新導向 URI」填：
+   - 正式站：`https://<對外網址>/accounts/login/google/callback/`
+     （目前為 `https://fjcwo.tail064d2b.ts.net/accounts/login/google/callback/`）
+   - 本機開發（選填）：`http://localhost:8000/accounts/login/google/callback/`
+   要逐字相同，含結尾斜線；換對外網址時這裡也要跟著改。
+4. 把用戶端 ID 與密鑰寫進 `.env` 的 `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET`，
+   **另存密碼管理器**，然後重啟服務（`nssm restart FJCWO-Web`）。
+5. 驗證：登入頁出現「使用 Google 帳號登入」；用一個 email 與團員資料相同的 Gmail 試登入成功；
+   用一個不在名單內的 Gmail 試，應被擋下且不會產生新帳號。
 
 ## 11. 上線前檢查清單
 

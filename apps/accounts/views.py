@@ -16,6 +16,7 @@ from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .forms import BootstrapAuthenticationForm, ProfileForm
+from .google_auth import google_login_enabled
 from .imports import ImportError_, normalize_instrument, parse_csv, parse_date
 from .models import (
     InstrumentFamily, InstrumentType, Registration, SectionType, User,
@@ -176,7 +177,10 @@ def login_view(request):
             next_url = '/'
         return redirect(next_url)
 
-    return render(request, 'registration/login.html', {'form': form})
+    return render(request, 'registration/login.html', {
+        'form': form,
+        'google_login_enabled': google_login_enabled(),
+    })
 
 
 def logout_view(request):
@@ -227,7 +231,10 @@ def profile_view(request):
         form.save()
         return redirect('accounts:profile')
 
-    return render(request, 'accounts/profile.html', {'form': form})
+    return render(request, 'accounts/profile.html', {
+        'form': form,
+        'google_login_enabled': google_login_enabled(),
+    })
 
 
 @login_required

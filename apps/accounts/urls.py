@@ -1,11 +1,15 @@
 from django.urls import path
 
-from . import views
+from . import google_auth, views
 
 app_name = 'accounts'
 
 urlpatterns = [
     path('login/', views.login_view, name='login'),
+    path('login/google/', google_auth.google_login, name='google_login'),
+    path('login/google/callback/', google_auth.google_callback, name='google_callback'),
+    path('profile/google/link/', google_auth.google_link, name='google_link'),
+    path('profile/google/unlink/', google_auth.google_unlink, name='google_unlink'),
     path('logout/', views.logout_view, name='logout'),
     path('profile/', views.profile_view, name='profile'),
     path('password/change/', views.change_password_view, name='change_password'),

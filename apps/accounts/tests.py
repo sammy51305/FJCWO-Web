@@ -1,5 +1,11 @@
+import base64
+import json
+import time
+import urllib.parse
+from unittest import mock
+
 from django.core import mail
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -2012,3 +2018,253 @@ class StudentFlagTest(TestCase):
             name='新學生', email='new_student@test.local', is_student='1',
         ))
         self.assertTrue(User.objects.get(email='new_student@test.local').is_student)
+
+
+class GoogleLoginTest(TestCase):
+    """Google 帳號登入：只登入既有帳號、以已驗證 email 首次綁定 sub、state/nonce 防護"""
+
+    CLIENT_ID = 'test-client-id.apps.googleusercontent.com'
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='gmember', email='Member@Gmail.com', password='testpass123',
+            name='Google 團員', role=User.Role.MEMBER,
+        )
+        self.login_url = reverse('accounts:login')
+        self.start_url = reverse('accounts:google_login')
+        self.callback_url = reverse('accounts:google_callback')
+        patcher = override_settings(
+            GOOGLE_OAUTH_CLIENT_ID=self.CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET='secret',
+        )
+        patcher.enable()
+        self.addCleanup(patcher.disable)
+
+    def _start(self, next_url=None):
+        """走第一步，回傳 session 裡存的 state / nonce。"""
+        url = self.start_url + (f'?next={next_url}' if next_url else '')
+        r = self.client.get(url)
+        self.assertEqual(r.status_code, 302)
+        return r, self.client.session['google_oauth']
+
+    def _claims(self, nonce, **overrides):
+        claims = {
+            'iss': 'https://accounts.google.com', 'aud': self.CLIENT_ID,
+            'exp': time.time() + 300, 'sub': 'google-sub-001', 'nonce': nonce,
+            'email': 'member@gmail.com', 'email_verified': True,
+        }
+        claims.update(overrides)
+        return claims
+
+    def _callback(self, stored, claims=None, state=None):
+        with mock.patch('apps.accounts.google_auth._exchange_code', return_value=claims) as m:
+            r = self.client.get(self.callback_url, {
+                'state': stored['state'] if state is None else state, 'code': 'auth-code',
+            })
+        return r, m
+
+    # ── 開關與第一步 ─────────────────────────────────────────
+
+    def test_disabled_without_credentials(self):
+        """沒設 client id/secret：按鈕不顯示、兩個網址 404"""
+        with override_settings(GOOGLE_OAUTH_CLIENT_ID='', GOOGLE_OAUTH_CLIENT_SECRET=''):
+            self.assertNotContains(self.client.get(self.login_url), '使用 Google 帳號登入')
+            self.assertEqual(self.client.get(self.start_url).status_code, 404)
+            self.assertEqual(self.client.get(self.callback_url).status_code, 404)
+
+    def test_login_page_shows_button_when_enabled(self):
+        """設定齊全時登入頁顯示 Google 按鈕"""
+        self.assertContains(self.client.get(self.login_url), '使用 Google 帳號登入')
+
+    def test_start_redirects_to_google_with_pkce(self):
+        """第一步導向 Google，帶 state / nonce / PKCE / 正確 redirect_uri"""
+        r, stored = self._start()
+        parsed = urllib.parse.urlparse(r['Location'])
+        params = urllib.parse.parse_qs(parsed.query)
+        self.assertEqual(parsed.netloc, 'accounts.google.com')
+        self.assertEqual(params['client_id'], [self.CLIENT_ID])
+        self.assertEqual(params['state'], [stored['state']])
+        self.assertEqual(params['nonce'], [stored['nonce']])
+        self.assertEqual(params['code_challenge_method'], ['S256'])
+        self.assertEqual(params['redirect_uri'], ['http://testserver' + self.callback_url])
+
+    # ── 成功路徑 ─────────────────────────────────────────────
+
+    def test_first_login_binds_by_verified_email(self):
+        """首次登入：email 不分大小寫比對成功 → 登入並寫入 google_sub"""
+        _, stored = self._start()
+        r, m = self._callback(stored, self._claims(stored['nonce']))
+        self.assertRedirects(r, '/', fetch_redirect_response=False)
+        self.assertEqual(int(self.client.session['_auth_user_id']), self.user.pk)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.google_sub, 'google-sub-001')
+        # PKCE verifier 有傳給換 token 的步驟
+        self.assertEqual(m.call_args.args[2], stored['verifier'])
+
+    def test_bound_user_matched_by_sub_even_if_email_changed(self):
+        """已綁定：只認 sub，Google 那邊的 email 改了照樣登入"""
+        self.user.google_sub = 'google-sub-001'
+        self.user.save()
+        _, stored = self._start()
+        self._callback(stored, self._claims(stored['nonce'], email='new@gmail.com'))
+        self.assertEqual(int(self.client.session['_auth_user_id']), self.user.pk)
+
+    def test_next_is_honoured_and_validated(self):
+        """登入後回到 next；外站網址一律改回首頁"""
+        _, stored = self._start(next_url='/events/')
+        r, _ = self._callback(stored, self._claims(stored['nonce']))
+        self.assertEqual(r['Location'], '/events/')
+
+        self.client.logout()
+        _, stored = self._start(next_url='https://evil.example.com/')
+        r, _ = self._callback(stored, self._claims(stored['nonce']))
+        self.assertEqual(r['Location'], '/')
+
+    # ── 拒絕路徑 ─────────────────────────────────────────────
+
+    def _assert_rejected(self, r):
+        self.assertRedirects(r, self.login_url, fetch_redirect_response=False)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_unknown_email_rejected_and_no_account_created(self):
+        """比對不到團員資料：拒絕，且不會自動建帳號"""
+        _, stored = self._start()
+        count = User.objects.count()
+        r, _ = self._callback(stored, self._claims(stored['nonce'], email='stranger@gmail.com'))
+        self._assert_rejected(r)
+        self.assertEqual(User.objects.count(), count)
+
+    def test_unverified_email_rejected(self):
+        """Google 未驗證的 email 不拿來比對"""
+        _, stored = self._start()
+        r, _ = self._callback(stored, self._claims(stored['nonce'], email_verified=False))
+        self._assert_rejected(r)
+        self.user.refresh_from_db()
+        self.assertIsNone(self.user.google_sub)
+
+    def test_user_bound_to_other_google_account_not_rebound(self):
+        """團員已綁別的 Google 帳號：不自動改綁"""
+        self.user.google_sub = 'another-sub'
+        self.user.save()
+        _, stored = self._start()
+        r, _ = self._callback(stored, self._claims(stored['nonce']))
+        self._assert_rejected(r)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.google_sub, 'another-sub')
+
+    def test_inactive_user_rejected(self):
+        """停用帳號不能用 Google 登入"""
+        self.user.is_active = False
+        self.user.save()
+        _, stored = self._start()
+        r, _ = self._callback(stored, self._claims(stored['nonce']))
+        self._assert_rejected(r)
+
+    def test_guest_rejected_and_not_bound(self):
+        """槍手（role=guest）即使 email 相符或已有綁定，也不能用 Google 登入"""
+        self.user.role = User.Role.GUEST
+        self.user.save()
+        _, stored = self._start()
+        r, _ = self._callback(stored, self._claims(stored['nonce']))
+        self._assert_rejected(r)
+        self.user.refresh_from_db()
+        self.assertIsNone(self.user.google_sub)
+
+        self.user.google_sub = 'google-sub-001'
+        self.user.save()
+        _, stored = self._start()
+        r, _ = self._callback(stored, self._claims(stored['nonce']))
+        self._assert_rejected(r)
+
+    def test_state_mismatch_rejected_without_token_exchange(self):
+        """state 不符：直接拒絕，不去換 token"""
+        _, stored = self._start()
+        r, m = self._callback(stored, self._claims(stored['nonce']), state='forged')
+        self._assert_rejected(r)
+        m.assert_not_called()
+
+    def test_callback_without_session_rejected(self):
+        """沒走第一步就直接打 callback：拒絕"""
+        r, m = self._callback({'state': 'x'}, None)
+        self._assert_rejected(r)
+        m.assert_not_called()
+
+    def test_nonce_mismatch_rejected(self):
+        """id_token 的 nonce 與 session 不符：拒絕"""
+        _, stored = self._start()
+        r, _ = self._callback(stored, self._claims('wrong-nonce'))
+        self._assert_rejected(r)
+
+    def test_user_cancelled_on_google(self):
+        """使用者在 Google 頁面取消：回登入頁"""
+        self._start()
+        r = self.client.get(self.callback_url, {'error': 'access_denied'})
+        self._assert_rejected(r)
+
+    # ── id_token 驗證 ────────────────────────────────────────
+
+    def _id_token(self, **claims):
+        body = base64.urlsafe_b64encode(json.dumps(claims).encode()).rstrip(b'=').decode()
+        return f'header.{body}.signature'
+
+    # ── 個人資料頁手動綁定 / 解除 ────────────────────────────
+
+    def _start_link(self):
+        r = self.client.post(reverse('accounts:google_link'))
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(r['Location'].startswith('https://accounts.google.com/'))
+        return self.client.session['google_oauth']
+
+    def test_link_binds_any_google_account_to_current_user(self):
+        """已登入者可綁定 email 不同的 Google 帳號，之後能用它登入"""
+        self.client.force_login(self.user)
+        stored = self._start_link()
+        r, _ = self._callback(stored, self._claims(
+            stored['nonce'], sub='personal-sub', email='someone-else@gmail.com'))
+        self.assertRedirects(r, reverse('accounts:profile'), fetch_redirect_response=False)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.google_sub, 'personal-sub')
+
+        self.client.logout()
+        _, stored = self._start()
+        self._callback(stored, self._claims(stored['nonce'], sub='personal-sub',
+                                            email='someone-else@gmail.com'))
+        self.assertEqual(int(self.client.session['_auth_user_id']), self.user.pk)
+
+    def test_link_rejects_google_account_owned_by_other_user(self):
+        """Google 帳號已綁在別人身上：不可搶綁"""
+        User.objects.create_user(username='other', email='o@test.local', password='x',
+                                 name='別人', google_sub='taken-sub')
+        self.client.force_login(self.user)
+        stored = self._start_link()
+        self._callback(stored, self._claims(stored['nonce'], sub='taken-sub'))
+        self.user.refresh_from_db()
+        self.assertIsNone(self.user.google_sub)
+
+    def test_link_requires_login_and_post(self):
+        """綁定需登入、且只收 POST"""
+        url = reverse('accounts:google_link')
+        self.assertEqual(self.client.post(url).status_code, 302)  # 導去登入
+        self.assertNotIn('google_oauth', self.client.session)
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.get(url).status_code, 405)
+
+    def test_unlink_clears_google_sub(self):
+        """解除綁定清空 google_sub；個人資料頁依狀態顯示按鈕"""
+        self.user.google_sub = 'google-sub-001'
+        self.user.save()
+        self.client.force_login(self.user)
+        self.assertContains(self.client.get(reverse('accounts:profile')), '解除綁定')
+        self.client.post(reverse('accounts:google_unlink'))
+        self.user.refresh_from_db()
+        self.assertIsNone(self.user.google_sub)
+        self.assertContains(self.client.get(reverse('accounts:profile')), '綁定 Google 帳號')
+
+    def test_decode_id_token_validates_claims(self):
+        """iss / aud / exp 任一不符都拋 GoogleAuthError"""
+        from .google_auth import GoogleAuthError, _decode_id_token
+        good = self._claims('n')
+        self.assertEqual(_decode_id_token(self._id_token(**good))['sub'], 'google-sub-001')
+        for bad in ({'iss': 'https://evil.example.com'}, {'aud': 'other-client'},
+                    {'exp': time.time() - 10}, {'sub': ''}):
+            with self.subTest(bad=bad), self.assertRaises(GoogleAuthError):
+                _decode_id_token(self._id_token(**{**good, **bad}))

@@ -20,6 +20,28 @@
       {% endfor %}
       <button type="submit" class="btn btn-primary">儲存</button>
     </form>
+
+    {% if google_login_enabled %}
+      <hr class="my-4">
+      <h5><i class="bi bi-google me-1"></i>Google 帳號登入</h5>
+      {% if user.google_sub %}
+        <p class="text-success mb-2"><i class="bi bi-check-circle me-1"></i>已綁定，可在登入頁使用 Google 帳號登入。</p>
+        <form method="post" action="{% url 'accounts:google_unlink' %}"
+              onsubmit="return confirm('確定要解除 Google 帳號綁定？之後需改用帳號密碼登入。');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-danger btn-sm">解除綁定</button>
+        </form>
+      {% else %}
+        <p class="text-muted small mb-2">
+          尚未綁定。Gmail 與上方 Email 相同的話，直接在登入頁用 Google 登入就會自動綁定；
+          不同的話，按下方按鈕選擇要綁定的 Google 帳號。
+        </p>
+        <form method="post" action="{% url 'accounts:google_link' %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-secondary btn-sm">綁定 Google 帳號</button>
+        </form>
+      {% endif %}
+    {% endif %}
   </div>
 </div>
 {% endblock %}

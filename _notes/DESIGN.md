@@ -432,6 +432,37 @@ update_session_auth_hash(request, request.user)  # 避免改密碼後被登出
 `update_session_auth_hash()` 是必要的一步：Django 改密碼後預設會讓現有 session 失效，
 不呼叫這個會讓使用者剛設完新密碼就被登出，變成要重新登入一次才能用。
 
+#### Google 帳號登入（2026-11-10）
+
+程式在 `apps/accounts/google_auth.py`，走 OpenID Connect 的 authorization code flow + PKCE。
+`.env` 填了 `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` 才啟用；沒填時按鈕不顯示、
+相關網址一律 404（同 LINE Bot、SMTP「本機開發不需要真憑證」的慣例）。
+
+**核心規則：只登入、不註冊。** 帳號仍只能由幹部建立或核准入團申請產生，Google 帳號必須對應到
+既有、啟用中、非槍手的 User，否則拒絕。辨識順序：
+
+1. 先用 `User.google_sub` 找（已綁定者只認 sub，Gmail 或系統 email 日後改了都不影響）
+2. 找不到 → 以 Google 回傳的 **已驗證**（`email_verified=True`）email 不分大小寫比對 `User.email`，
+   恰好一筆就登入並寫入 `google_sub`（首次自動綁定）
+3. 該筆已綁了**別的** sub → 拒絕，不自動改綁（避免 email 被挪用時帳號被接管）
+
+**手動綁定**：系統 email 與 Gmail 不同（例如資料填學校信箱、平常用私人 Gmail）時，本人登入後在
+個人資料頁按「綁定 Google 帳號」（POST），走同一套授權流程，回來後把 sub 綁到**目前登入者**，
+不要求 email 相同；session 裡記著發起者 id，回來時登入者變了就拒絕。同一個 sub 已綁在別人身上也拒絕。
+「解除綁定」清空 `google_sub`；幹部也可在 Django Admin 清空。
+
+**槍手**（role=guest）比照 `BootstrapAuthenticationForm.confirm_login_allowed`，Google 登入一樣擋。
+`must_change_password` 不受影響：用 Google 登入後仍會被 middleware 導去設定新密碼（臨時密碼仍有效，不能放著不改）。
+
+**為什麼不用 django-allauth**：它會一併掛上自己的註冊、忘記密碼、email 驗證頁面，要逐一關閉才符合
+「不開放註冊」；整個需求其實只有「導去 Google」與「用 code 換 token」兩步，標準庫 `urllib` 就夠，
+不新增任何套件。id_token 是我們透過 TLS 直接向 Google token endpoint 取得，依 OIDC Core 3.1.3.7
+可不驗簽章，只驗 `iss` / `aud` / `exp` / `nonce`；`state` 防 CSRF、PKCE 防 code 被攔截重放。
+
+**重新導向 URI**：`request.build_absolute_uri()` 組出，正式站在 Tailscale Funnel 後面要靠
+`SECURE_PROXY_SSL_HEADER`（`DJANGO_SECURE_SSL_REDIRECT=True` 時才設）才會是 https，
+且必須與 Google Cloud Console 登記值逐字相同，設定步驟見 DEPLOY-WINDOWS「Google 帳號登入」。
+
 #### member_create：幹部手動新增團員
 
 路由：`/accounts/directory/create/`，幹部限定，入口在團員通訊錄頁面右上角「新增團員」按鈕。
