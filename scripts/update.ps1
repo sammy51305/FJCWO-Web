@@ -41,15 +41,19 @@ Step 'collectstatic' { & $Py manage.py collectstatic --noinput }
 
 Write-Host "`n=== 重啟服務 ===" -ForegroundColor Cyan
 Restart-Service $Service
-Start-Sleep -Seconds 5
 (Get-Service $Service).Status
 
 Write-Host "`n=== 確認網站 ===" -ForegroundColor Cyan
-try {
-    $r = Invoke-WebRequest 'http://127.0.0.1:8000/' -UseBasicParsing -MaximumRedirection 0 -ErrorAction Stop
-    $code = $r.StatusCode
-} catch {
-    $code = [int]$_.Exception.Response.StatusCode
+# 用 Windows 內建的 curl.exe，不用 Invoke-WebRequest：
+# 正式站開了 SECURE_SSL_REDIRECT，本機 http 一律回 301；Windows PowerShell 5.1 的
+# Invoke-WebRequest -MaximumRedirection 0 遇到 3xx 會丟 InvalidOperationException 且拿不到回應碼（變成 0），
+# 網站明明正常卻被判失敗（2026-11-11 實際發生）。curl 不跟轉址，直接回報 301。
+# 服務重啟後 Waitress 需要幾秒才開始聽 port，所以最多重試 30 秒，不再固定只等 5 秒。
+$code = '000'
+for ($i = 1; $i -le 15; $i++) {
+    Start-Sleep -Seconds 2
+    $code = curl.exe -s -o NUL -w '%{http_code}' --max-time 5 'http://127.0.0.1:8000/'
+    if ($code -in '200', '301', '302') { break }
 }
-if ($code -in 200, 301, 302) { Write-Host "網站有回應（$code）。更新完成：$before → $after" -ForegroundColor Green }
-else { throw "網站沒有正常回應（$code），請看 $Base\logs\web.log" }
+if ($code -in '200', '301', '302') { Write-Host "網站有回應（$code）。更新完成：$before → $after" -ForegroundColor Green }
+else { throw "網站 30 秒內沒有正常回應（$code；000 代表連不上），請看 $Base\logs\web.log" }
