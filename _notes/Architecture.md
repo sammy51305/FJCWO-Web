@@ -711,13 +711,18 @@ FJCWO-Web/
 │   ├── venues.json         # 場地 + 場地時段
 │   ├── instruments.json    # 樂器族群（13）+ 樂器（28，含吉他族群與「其他（手填）」）
 │   └── sections.json       # 聲部（第一部〜第四部、Solo）——團員／入團申請用；樂譜已不使用聲部
+├── scripts/                # Windows 正式站維運（見 DEPLOY-WINDOWS.md）
+│   ├── backup.py           # 加密備份（資料庫＋media）、異地鏡像、驗證、解密
+│   └── update.ps1          # 一鍵更新：備份 → pull → pip → migrate → collectstatic → 重啟服務
 ├── _notes/                 # 開發文件（不進 production）
 │   ├── Architecture.md
 │   ├── BACKLOG.md
 │   ├── DEMO.md
+│   ├── DEPLOY-WINDOWS.md
 │   ├── DESIGN.md
 │   ├── GUIDE.md
 │   ├── OVERVIEW.md
+│   ├── SERVERS.md
 │   ├── SETUP.md
 │   ├── TESTING.md
 │   └── WORKFLOW.md
