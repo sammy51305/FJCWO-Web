@@ -889,6 +889,32 @@ class TemplateCommentSyntaxTest(TestCase):
         )
 
 
+class TemplateTableCellFlexTest(TestCase):
+    """表格版面檢查：`<td>` 本身不能加 `d-flex`，要包一層 `<div class="d-flex">`"""
+
+    TD_WITH_FLEX = re.compile(r'<td\b[^>]*\bclass="[^"]*\bd-(?:inline-)?flex\b')
+
+    def test_no_flex_on_table_cells(self):
+        """
+        `<td class="d-flex">` 會讓儲存格變成 flex 容器、不再是 table-cell：
+        不會撐滿列高、不會垂直置中，下框線和同列其他格對不齊，按鈕文字還會被擠成兩行。
+        頁面照樣 200、元素都在，一般 view 測試抓不到。2026-11-10 演出詳情頁排練時間表
+        的操作欄就是這樣跑版（同時修掉會費期別、會費繳納狀況兩處），改用結構檢查釘住。
+        """
+        offenders = []
+        for template_dir in settings.TEMPLATES[0]['DIRS']:
+            for path in sorted(Path(template_dir).rglob('*.html')):
+                text = path.read_text(encoding='utf-8')
+                for match in self.TD_WITH_FLEX.finditer(text):
+                    line = text[:match.start()].count('\n') + 1
+                    offenders.append(f'{path}:{line}')
+        self.assertEqual(
+            offenders, [],
+            '以下 <td> 直接加了 d-flex，表格會跑版，請改成 '
+            '<td><div class="d-flex gap-1">…</div></td>：\n  ' + '\n  '.join(offenders)
+        )
+
+
 class ImportSheetCommandTest(TestCase):
     """manage.py import_sheet：團練紀錄試算表（.xlsx）匯入系統"""
 

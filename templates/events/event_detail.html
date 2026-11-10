@@ -130,29 +130,31 @@
         <td>第 {{ rehearsal.sequence }} 次</td>
         <td>{{ rehearsal.date|date:"Y/m/d（D）H:i" }}</td>
         <td>{{ rehearsal.venue.name }}</td>
-        <td class="d-flex gap-1">
-          <a href="{% url 'events:rehearsal_detail' rehearsal.pk %}"
-             class="btn btn-sm {% if rehearsal.summary_progress %}btn-outline-secondary{% else %}btn-outline-light text-muted{% endif %}">
-            {% if rehearsal.summary_progress %}排練摘要{% else %}詳情{% endif %}
-          </a>
-          {% if rehearsal.leave_open %}
-          <a href="{% url 'events:leave_request_create' rehearsal.pk %}" class="btn btn-sm btn-outline-warning">
-            <i class="bi bi-calendar-x"></i> 請假
-          </a>
-          {% else %}
-          {# #13-8：過期一眼可辨——顏色、圖示、文字、游標全部換掉 #}
-          <span class="d-inline-block" style="cursor: not-allowed;"
-                title="請假截止為排練當天 23:59，已過期">
-            <button class="btn btn-sm btn-secondary opacity-50" disabled style="pointer-events: none;">
-              <i class="bi bi-slash-circle"></i> 已截止
-            </button>
-          </span>
-          {% endif %}
-          {% if user.is_officer %}
-          <a href="{% url 'events:rehearsal_edit' rehearsal.pk %}" class="btn btn-sm btn-outline-secondary d-print-none">
-            <i class="bi bi-pencil"></i>
-          </a>
-          {% endif %}
+        <td class="text-nowrap">
+          <div class="d-flex gap-1">
+            <a href="{% url 'events:rehearsal_detail' rehearsal.pk %}"
+               class="btn btn-sm {% if rehearsal.summary_progress %}btn-outline-secondary{% else %}btn-outline-light text-muted{% endif %}">
+              {% if rehearsal.summary_progress %}排練摘要{% else %}詳情{% endif %}
+            </a>
+            {% if rehearsal.leave_open %}
+            <a href="{% url 'events:leave_request_create' rehearsal.pk %}" class="btn btn-sm btn-outline-warning">
+              <i class="bi bi-calendar-x"></i> 請假
+            </a>
+            {% else %}
+            {# #13-8：過期一眼可辨——顏色、圖示、文字、游標全部換掉 #}
+            <span class="d-inline-block" style="cursor: not-allowed;"
+                  title="請假截止為排練當天 23:59，已過期">
+              <button class="btn btn-sm btn-secondary opacity-50" disabled style="pointer-events: none;">
+                <i class="bi bi-slash-circle"></i> 已截止
+              </button>
+            </span>
+            {% endif %}
+            {% if user.is_officer %}
+            <a href="{% url 'events:rehearsal_edit' rehearsal.pk %}" class="btn btn-sm btn-outline-secondary d-print-none">
+              <i class="bi bi-pencil"></i>
+            </a>
+            {% endif %}
+          </div>
         </td>
       </tr>
       {% endfor %}
