@@ -1902,11 +1902,145 @@ class PracticeMenuTest(TestCase):
         )
 
     def test_checkin_entry_without_open_qr_explains(self):
-        """沒有開放簽到的排練時，導回首頁並說明"""
+        """沒有開放簽到的排練時，導到「我的請假」並說明——想請假的人常先點簽到（2026-11 回饋）"""
         self.client.force_login(self.member)
         r = self.client.get(reverse('events:checkin_entry'), follow=True)
-        self.assertRedirects(r, reverse('public:index'))
+        self.assertRedirects(r, reverse('events:my_leave_requests'))
         self.assertContains(r, '目前沒有開放簽到的排練')
+        self.assertContains(r, reverse('events:leave_request_create', args=[self.future.pk]))
+
+
+class LeaveCancelAndEntryTest(TestCase):
+    """團員撤銷自己的請假、「我的請假」頁直接列近期排練可申請（2026-11 團員回饋）"""
+
+    def setUp(self):
+        self.member = User.objects.create_user(
+            username='lc_member', email='lc@test.local', password='testpass123',
+            name='撤銷測試團員', role=User.Role.MEMBER,
+        )
+        self.other = User.objects.create_user(
+            username='lc_other', email='lc_other@test.local', password='testpass123',
+            name='其他團員', role=User.Role.MEMBER,
+        )
+        self.venue = Venue.objects.create(name='撤銷測試場地', type='rehearsal')
+        self.event = PerformanceEvent.objects.create(
+            name='撤銷測試音樂會', type=PerformanceEvent.Type.CONCERT,
+            performance_date=timezone.now() + timedelta(days=30),
+            performance_venue=self.venue,
+        )
+        self.future = Rehearsal.objects.create(
+            event=self.event, sequence=2, date=timezone.now() + timedelta(days=7),
+            venue=self.venue,
+        )
+        self.past = Rehearsal.objects.create(
+            event=self.event, sequence=1, date=timezone.now() - timedelta(days=7),
+            venue=self.venue,
+        )
+        self.mine_url = reverse('events:my_leave_requests')
+
+    def _cancel(self, leave):
+        return self.client.post(reverse('events:leave_cancel', args=[leave.pk]))
+
+    def test_cancel_pending_leave(self):
+        """待審核的申請可撤銷：申請列刪除，之後可以重新申請"""
+        leave = LeaveRequest.objects.create(member=self.member, rehearsal=self.future, reason='考試')
+        self.client.force_login(self.member)
+        r = self._cancel(leave)
+        self.assertRedirects(r, self.mine_url, fetch_redirect_response=False)
+        self.assertFalse(LeaveRequest.objects.filter(pk=leave.pk).exists())
+
+    def test_cancel_approved_leave_removes_leave_attendance(self):
+        """已核准的申請撤銷時，審核寫入的「請假」出席紀錄一併拿掉"""
+        leave = LeaveRequest.objects.create(
+            member=self.member, rehearsal=self.future, reason='考試',
+            status=LeaveRequest.Status.APPROVED,
+        )
+        RehearsalAttendance.objects.create(
+            rehearsal=self.future, member=self.member, status=RehearsalAttendance.Status.LEAVE,
+        )
+        self.client.force_login(self.member)
+        self._cancel(leave)
+        self.assertFalse(LeaveRequest.objects.filter(pk=leave.pk).exists())
+        self.assertFalse(RehearsalAttendance.objects.filter(
+            rehearsal=self.future, member=self.member).exists())
+
+    def test_cancel_keeps_present_attendance(self):
+        """已簽到（出席）的紀錄不因撤銷請假而被刪掉"""
+        leave = LeaveRequest.objects.create(
+            member=self.member, rehearsal=self.future, reason='考試',
+            status=LeaveRequest.Status.APPROVED,
+        )
+        RehearsalAttendance.objects.create(
+            rehearsal=self.future, member=self.member, status=RehearsalAttendance.Status.PRESENT,
+        )
+        self.client.force_login(self.member)
+        self._cancel(leave)
+        self.assertEqual(RehearsalAttendance.objects.get(
+            rehearsal=self.future, member=self.member).status, RehearsalAttendance.Status.PRESENT)
+
+    def test_cannot_cancel_rejected_leave(self):
+        """被拒絕的申請不能撤銷"""
+        leave = LeaveRequest.objects.create(
+            member=self.member, rehearsal=self.future, reason='考試',
+            status=LeaveRequest.Status.REJECTED,
+        )
+        self.client.force_login(self.member)
+        self._cancel(leave)
+        self.assertTrue(LeaveRequest.objects.filter(pk=leave.pk).exists())
+
+    def test_cannot_cancel_after_deadline(self):
+        """排練當天 23:59 過後不能撤銷（與申請截止同一條規則）"""
+        leave = LeaveRequest.objects.create(member=self.member, rehearsal=self.past, reason='考試')
+        self.client.force_login(self.member)
+        self._cancel(leave)
+        self.assertTrue(LeaveRequest.objects.filter(pk=leave.pk).exists())
+
+    def test_cannot_cancel_others_leave(self):
+        """不能撤銷別人的申請（404）"""
+        leave = LeaveRequest.objects.create(member=self.other, rehearsal=self.future, reason='考試')
+        self.client.force_login(self.member)
+        r = self._cancel(leave)
+        self.assertEqual(r.status_code, 404)
+        self.assertTrue(LeaveRequest.objects.filter(pk=leave.pk).exists())
+
+    def test_get_does_not_cancel(self):
+        """GET 不會撤銷，只導回請假頁"""
+        leave = LeaveRequest.objects.create(member=self.member, rehearsal=self.future, reason='考試')
+        self.client.force_login(self.member)
+        self.client.get(reverse('events:leave_cancel', args=[leave.pk]))
+        self.assertTrue(LeaveRequest.objects.filter(pk=leave.pk).exists())
+
+    def test_cancel_button_only_for_cancellable(self):
+        """撤銷按鈕只出現在還能撤銷的那筆（未過截止、非拒絕）"""
+        ok = LeaveRequest.objects.create(member=self.member, rehearsal=self.future, reason='考試')
+        old = LeaveRequest.objects.create(member=self.member, rehearsal=self.past, reason='舊的')
+        self.client.force_login(self.member)
+        r = self.client.get(self.mine_url)
+        self.assertContains(r, reverse('events:leave_cancel', args=[ok.pk]))
+        self.assertNotContains(r, reverse('events:leave_cancel', args=[old.pk]))
+
+    def test_mine_lists_upcoming_rehearsals_with_apply_link(self):
+        """「我的請假」列出近期排練並可直接申請；已過的排練不列"""
+        self.client.force_login(self.member)
+        r = self.client.get(self.mine_url)
+        self.assertContains(r, reverse('events:leave_request_create', args=[self.future.pk]))
+        self.assertNotContains(r, reverse('events:leave_request_create', args=[self.past.pk]))
+
+    def test_mine_upcoming_shows_status_instead_of_link_when_applied(self):
+        """已申請過的近期排練顯示狀態，不再出現申請連結"""
+        LeaveRequest.objects.create(member=self.member, rehearsal=self.future, reason='考試')
+        self.client.force_login(self.member)
+        r = self.client.get(self.mine_url)
+        self.assertNotContains(r, reverse('events:leave_request_create', args=[self.future.pk]))
+        self.assertContains(r, '已申請・待審核')
+
+    def test_mine_upcoming_excludes_cancelled_event(self):
+        """已取消演出的排練不列在近期排練"""
+        self.event.status = PerformanceEvent.Status.CANCELLED
+        self.event.save()
+        self.client.force_login(self.member)
+        r = self.client.get(self.mine_url)
+        self.assertNotContains(r, reverse('events:leave_request_create', args=[self.future.pk]))
 
 
 class EventListDownloadButtonTest(TestCase):

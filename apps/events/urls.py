@@ -19,6 +19,7 @@ urlpatterns = [
     path('leave/mine/', views.my_leave_requests, name='my_leave_requests'),
     path('leave/review/', views.leave_review_list, name='leave_review_list'),
     path('leave/<int:pk>/delete/', views.leave_delete, name='leave_delete'),
+    path('leave/<int:pk>/cancel/', views.leave_cancel, name='leave_cancel'),
     path('<int:event_pk>/intent/', views.performance_intent_set, name='performance_intent_set'),
     path('<int:pk>/intent/report/', views.performance_intent_report, name='performance_intent_report'),
     path('rehearsal/<int:pk>/qr/', views.qr_manage, name='qr_manage'),

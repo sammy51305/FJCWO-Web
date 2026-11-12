@@ -118,8 +118,14 @@ def checkin_entry(request):
     )
     if rehearsal:
         return redirect('events:qr_checkin', token=rehearsal.qr_token.token)
-    messages.info(request, '目前沒有開放簽到的排練。幹部開啟 QR Code 後，這裡就能直接簽到。')
-    return redirect('public:index')
+    # 沒開簽到時導到「我的請假」而不是首頁：2026-11 團員回饋，想請假的人直覺會點
+    # 「簽到」，以前要從演出活動逐層找排練才請得到假。請假頁上方就列近期排練可直接申請。
+    messages.info(
+        request,
+        '目前沒有開放簽到的排練（幹部開啟 QR Code 後，這裡就能直接簽到）。'
+        '要請假的話，可以在下方「近期排練」直接申請。'
+    )
+    return redirect('events:my_leave_requests')
 
 
 @login_required
@@ -159,16 +165,67 @@ def leave_request_create(request, rehearsal_pk):
 
 @login_required
 def my_leave_requests(request):
-    leaves = (
+    leaves = list(
         LeaveRequest.objects
         .filter(member=request.user)
         .select_related('rehearsal__event', 'reviewed_by')
         .order_by('-rehearsal__date')
     )
+    my_leave_by_rehearsal = {leave.rehearsal_id: leave for leave in leaves}
+
+    # 近期可請假的排練（2026-11 團員回饋：請假入口藏在演出活動 › 排練裡找不到）。
+    # 「還能請假」= 今天（含）之後的排練，與 Rehearsal.leave_open 的當天 23:59 截止一致；
+    # 已取消／已結束的演出不列。
+    today_start = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
+    S = PerformanceEvent.Status
+    upcoming = list(
+        Rehearsal.objects
+        .filter(date__gte=today_start)
+        .exclude(event__status__in=[S.FINISHED, S.CANCELLED])
+        .select_related('event', 'venue')
+        .order_by('date')[:10]
+    )
+    for rehearsal in upcoming:
+        rehearsal.my_leave = my_leave_by_rehearsal.get(rehearsal.pk)
+
     # 演出請假已於 2026-09-07 廢除（#13-6），演出改用出席意願三態，此頁只剩排練請假
     return render(request, 'events/my_leave_requests.html', {
         'leaves': leaves,
+        'upcoming': upcoming,
     })
+
+
+@login_required
+def leave_cancel(request, pk):
+    """
+    團員撤銷自己的請假申請（2026-11 團員回饋）。
+
+    - 只能撤銷自己的、狀態為待審核或已核准的申請；被拒絕的沒有東西可撤。
+    - 截止與申請同一條：排練當天 23:59 之後不能撤（#13-7，過了就是過了）。
+    - 直接刪除申請列，不另設「已撤銷」狀態：撤銷後等於沒請過，也才能再重新申請
+      （unique_together 是 member + rehearsal）。
+    - 已核准的申請在審核時會把出席紀錄寫成「請假」，撤銷時一併拿掉那筆，
+      回到「無紀錄」；若已簽到（出席）則不動。
+    """
+    leave = get_object_or_404(
+        LeaveRequest.objects.select_related('rehearsal'), pk=pk, member=request.user
+    )
+    if request.method != 'POST':
+        return redirect('events:my_leave_requests')
+
+    if leave.status == LeaveRequest.Status.REJECTED:
+        messages.error(request, '已拒絕的申請不需要撤銷。')
+    elif not leave.rehearsal.leave_open:
+        messages.error(request, '已超過這場排練的請假截止時間，無法撤銷。')
+    else:
+        if leave.status == LeaveRequest.Status.APPROVED:
+            RehearsalAttendance.objects.filter(
+                rehearsal=leave.rehearsal, member=request.user,
+                status=RehearsalAttendance.Status.LEAVE,
+            ).delete()
+        leave.delete()
+        messages.success(request, '已撤銷請假申請。如果之前有跟分部長說過，記得也再通知分部長。')
+    return redirect('events:my_leave_requests')
 
 
 @login_required
