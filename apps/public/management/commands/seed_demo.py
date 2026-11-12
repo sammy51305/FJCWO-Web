@@ -1,7 +1,7 @@
 """
 manage.py seed_demo
 ===================
-建立展示用的 demo 資料（團員、演出與排練、樂譜、財產、財務會費、待審項目）。
+建立展示用的 demo 資料（團員、演出與排練、樂譜、財產、財務團費、待審項目）。
 
 全部使用 get_or_create，可重複執行不會產生重複資料。
 只新增、不刪除、不修改既有資料。清除請用 `manage.py clear_demo`。
@@ -428,7 +428,7 @@ class Command(BaseCommand):
             defaults=dict(amount=Decimal(1200), start_date=dt.date(2026, 8, 1),
                           end_date=dt.date(2026, 9, 30), created_by=officer),
         )
-        self.log.append(f'會費期別 2026 下期 {"建立" if created else "已存在"}')
+        self.log.append(f'團費期別 2026 下期 {"建立" if created else "已存在"}')
 
         n = 0
         if p1:
@@ -442,7 +442,7 @@ class Command(BaseCommand):
                 if c:
                     mf.finance_record = FinanceRecord.objects.create(
                         type='income', category_id='membership', amount=p1.amount,
-                        date=mf.paid_at, description=f'{u.name} 2026 上期會費',
+                        date=mf.paid_at, description=f'{u.name} 2026 上期團費',
                         created_by=officer)
                     mf.save()
                     n += 1
@@ -468,11 +468,11 @@ class Command(BaseCommand):
             if c:
                 mf.finance_record = FinanceRecord.objects.create(
                     type='income', category_id='membership', amount=p2.amount,
-                    date=mf.paid_at, description=f'{u.name} 2026 下期會費',
+                    date=mf.paid_at, description=f'{u.name} 2026 下期團費',
                     created_by=officer)
                 mf.save()
                 n += 1
-        self.log.append(f'會費紀錄新建 {n} 筆（4 筆待確認：2 現金 + 2 轉帳）')
+        self.log.append(f'團費紀錄新建 {n} 筆（4 筆待確認：2 現金 + 2 轉帳）')
 
         pc, _ = PaymentConfig.objects.get_or_create(pk=1)
         if not pc.bank_code:
@@ -495,7 +495,7 @@ class Command(BaseCommand):
              '請尚未回報團服尺寸的團員於 8/20 前私訊總務，逾期以預設尺寸製作。',
              'member_only', dt.date(2026, 8, 20), True),
             (DEMO_ANNOUNCEMENT_TITLES[3],
-             '討論事項：秋季公演分工、會費催繳、樂譜採購預算。',
+             '討論事項：秋季公演分工、團費催繳、樂譜採購預算。',
              'officer_only', dt.date(2026, 8, 9), True),
             (DEMO_ANNOUNCEMENT_TITLES[4],
              '時間地點確認中，尚未發布。', 'member_only', None, False),

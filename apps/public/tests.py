@@ -667,7 +667,7 @@ class DemoCommandTest(TestCase):
         return User.objects.filter(username__startswith='demo_')
 
     def test_seed_creates_demo_data(self):
-        """seed_demo 建立帳號、演出、樂譜、財產、會費等展示資料"""
+        """seed_demo 建立帳號、演出、樂譜、財產、團費等展示資料"""
         from django.core.management import call_command
         from apps.events.models import PerformanceEvent
         from apps.finance.models import MembershipFee
@@ -899,7 +899,7 @@ class TemplateTableCellFlexTest(TestCase):
         `<td class="d-flex">` 會讓儲存格變成 flex 容器、不再是 table-cell：
         不會撐滿列高、不會垂直置中，下框線和同列其他格對不齊，按鈕文字還會被擠成兩行。
         頁面照樣 200、元素都在，一般 view 測試抓不到。2026-11-10 演出詳情頁排練時間表
-        的操作欄就是這樣跑版（同時修掉會費期別、會費繳納狀況兩處），改用結構檢查釘住。
+        的操作欄就是這樣跑版（同時修掉團費期別、團費收繳狀況兩處），改用結構檢查釘住。
         """
         offenders = []
         for template_dir in settings.TEMPLATES[0]['DIRS']:
@@ -1147,7 +1147,7 @@ class ImportSheetCommandTest(TestCase):
 
         out = io.StringIO()
         call_command('import_sheet', path, '--operator', 'sheet_officer', '--commit', stdout=out)
-        records = FinanceRecord.objects.exclude(category_id='membership')   # 範本裡另有一筆已繳會費
+        records = FinanceRecord.objects.exclude(category_id='membership')   # 範本裡另有一筆已繳團費
         rows = sorted((t, c, d, int(a)) for t, c, d, a in
                       records.values_list('type', 'category_id', 'date', 'amount'))
         self.assertEqual(rows, sorted([

@@ -33,7 +33,7 @@
               <li><a class="dropdown-item" href="{% url 'events:my_checkins' %}">我的簽到記錄</a></li>
               <li><a class="dropdown-item" href="{% url 'events:rehearsal_journal' %}">團練日誌</a></li>
               <li><a class="dropdown-item" href="{% url 'events:my_leave_requests' %}">我的請假</a></li>
-              <li><a class="dropdown-item" href="{% url 'finance:my_fees' %}">我的會費</a></li>
+              <li><a class="dropdown-item" href="{% url 'finance:my_fees' %}">我的團費</a></li>
             </ul>
           </li>
           {% endif %}
@@ -44,7 +44,7 @@
             <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">審核</a>
             <ul class="dropdown-menu">
               <li><a class="dropdown-item" href="{% url 'events:leave_review_list' %}">排練請假審核</a></li>
-              <li><a class="dropdown-item" href="{% url 'finance:fee_review_list' %}">會費確認</a></li>
+              <li><a class="dropdown-item" href="{% url 'finance:fee_review_list' %}">團費確認</a></li>
               <li><a class="dropdown-item" href="{% url 'accounts:registration_review' %}">入團申請審核</a></li>
             </ul>
           </li>
@@ -54,8 +54,8 @@
             <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">財務</a>
             <ul class="dropdown-menu">
               <li><a class="dropdown-item" href="{% url 'finance:finance_list' %}">收支明細</a></li>
-              <li><a class="dropdown-item" href="{% url 'finance:membership_fee_report' %}">會費繳納</a></li>
-              <li><a class="dropdown-item" href="{% url 'finance:fee_period_list' %}">會費期別</a></li>
+              <li><a class="dropdown-item" href="{% url 'finance:membership_fee_report' %}">團費收繳</a></li>
+              <li><a class="dropdown-item" href="{% url 'finance:fee_period_list' %}">團費期別</a></li>
               <li><a class="dropdown-item" href="{% url 'finance:payment_config_edit' %}">轉帳收款設定</a></li>
             </ul>
           </li>
@@ -64,7 +64,7 @@
             <ul class="dropdown-menu">
               <li><a class="dropdown-item" href="{% url 'finance:annual_report' %}">當年度收支</a></li>
               <li><a class="dropdown-item" href="{% url 'assets:borrow_status_report' %}">財產借用現況</a></li>
-              <li><a class="dropdown-item" href="{% url 'finance:membership_fee_report' %}">會費繳納狀況</a></li>
+              <li><a class="dropdown-item" href="{% url 'finance:membership_fee_report' %}">團費收繳狀況</a></li>
             </ul>
           </li>
           {% endif %}

@@ -23,7 +23,7 @@
   <div class="alert {% if fee.status == 'paid' %}alert-success{% else %}alert-secondary{% endif %} d-flex align-items-center gap-3 mb-2">
     <i class="bi {% if fee.status == 'paid' %}bi-check-circle{% else %}bi-dash-circle{% endif %} fs-4"></i>
     <div>
-      你申報的「{{ fee.period }}」會費，
+      你申報的「{{ fee.period }}」團費，
       {% if fee.status == 'paid' %}已由幹部確認繳費。{% else %}被作廢（可能登記有誤），如仍需繳費請重新申報或洽幹部。{% endif %}
       <a href="{% url 'finance:my_fees' %}" class="alert-link ms-2">查看 →</a>
     </div>
@@ -157,7 +157,7 @@
         {% if pending_fees_count %}
         <li>
           <i class="bi bi-cash-coin me-1"></i>
-          有 <strong>{{ pending_fees_count }}</strong> 筆會費繳納待確認。
+          有 <strong>{{ pending_fees_count }}</strong> 筆團費收繳待確認。
           <a href="{% url 'finance:fee_review_list' %}" class="alert-link ms-1">前往確認 →</a>
         </li>
         {% endif %}

@@ -75,7 +75,7 @@ def membership_fee_report(request):
     })
 
 
-# ── 會費期別主檔（FeePeriod）CRUD ─────────────────────────────
+# ── 團費期別主檔（FeePeriod）CRUD ─────────────────────────────
 # 幹部可新增/編輯期別；刪除限管理員（比照其他管理員限定刪除）。
 
 
@@ -389,7 +389,7 @@ def receipt_download(request, pk):
     )
 
 
-# ── 會費登記（MembershipFee）前端 ──────────────────────────────
+# ── 團費登記（MembershipFee）前端 ──────────────────────────────
 
 
 def _sync_fee_income(fee, user):
@@ -411,7 +411,7 @@ def _sync_fee_income(fee, user):
             )
         rec.amount = fee.amount
         rec.date = fee.paid_at or timezone.localdate()
-        rec.description = f'{fee.member.name}（{fee.period}）會費'
+        rec.description = f'{fee.member.name}（{fee.period}）團費'
         rec.save()
         if fee.finance_record_id != rec.pk:
             fee.finance_record = rec
@@ -427,9 +427,9 @@ def _sync_fee_income(fee, user):
 @login_required
 def fee_edit(request):
     """
-    會費登記／編輯（幹部限定）。以 member + period(FeePeriod) 定位一筆 MembershipFee
+    團費登記／編輯（幹部限定）。以 member + period(FeePeriod) 定位一筆 MembershipFee
     （get_or_create），設定狀態（已繳/未繳）與收款幹部；金額由期別固定金額快照，幹部不填。
-    從會費繳納報表每列進入。確認為已繳時自動同步一筆收支明細收入。
+    從團費收繳報表每列進入。確認為已繳時自動同步一筆收支明細收入。
     """
     if not request.user.is_officer:
         messages.error(request, '權限不足。')
@@ -476,7 +476,7 @@ def fee_edit(request):
         fee.collected_by = request.user if paid else None
         fee.save()
         _sync_fee_income(fee, request.user)   # 已繳→產生收入；未繳→移除
-        messages.success(request, f'已更新 {member.name} 的「{period}」會費紀錄。')
+        messages.success(request, f'已更新 {member.name} 的「{period}」團費紀錄。')
         return redirect(f"{reverse('finance:membership_fee_report')}?period={period.pk}")
 
     selected_member_id = request.GET.get('member', '')
@@ -498,13 +498,13 @@ def fee_edit(request):
 
 
 # ── 團員自助申報繳費（附錄五 §9 P2，現金）────────────────────────
-# 團員在「我的會費」看各期狀態，對應繳未繳的期別申報（選收款幹部），
+# 團員在「我的團費」看各期狀態，對應繳未繳的期別申報（選收款幹部），
 # 待確認狀態可自行撤回；一旦幹部確認為已繳即不可撤回。
 
 
 @login_required
 def my_fees(request):
-    """團員檢視自己各期會費狀態，並可對應繳未繳的期別申報繳費。"""
+    """團員檢視自己各期團費狀態，並可對應繳未繳的期別申報繳費。"""
     periods = FeePeriod.objects.all()
     fee_map = {
         f.period_id: f
@@ -549,7 +549,7 @@ def fee_report_create(request, period_pk):
 
         errors = []
         if blocked:
-            errors.append('您已申報或已繳納此期會費，無需重複申報。')
+            errors.append('您已申報或已繳納此期團費，無需重複申報。')
         elif method == M.TRANSFER:
             if not (account_last5.isdigit() and len(account_last5) == 5):
                 errors.append('請填寫正確的匯款帳號末五碼（5 位數字）。')
@@ -577,7 +577,7 @@ def fee_report_create(request, period_pk):
                 fee.account_last5 = ''
                 note = f'現金交予 {officer.name}'
             fee.save()
-            messages.success(request, f'已申報「{period}」會費（{note}），等待幹部確認。')
+            messages.success(request, f'已申報「{period}」團費（{note}），等待幹部確認。')
             return redirect('finance:my_fees')
 
     return render(request, 'finance/fee_report_form.html', {
@@ -655,10 +655,10 @@ def fee_review_list(request):
 
 @login_required
 def fee_delete(request, pk):
-    """刪除會費紀錄，限管理員（比照 leave_delete）。可從審核頁或繳納報表進入。"""
+    """刪除團費紀錄，限管理員（比照 leave_delete）。可從審核頁或繳納報表進入。"""
     fee = get_object_or_404(MembershipFee.objects.select_related('member'), pk=pk)
     if not (request.user.is_superuser or request.user.is_admin_role):
-        messages.error(request, '權限不足，僅管理員可刪除會費紀錄。')
+        messages.error(request, '權限不足，僅管理員可刪除團費紀錄。')
         return redirect('finance:fee_review_list')
     next_url = request.POST.get('next') or reverse('finance:fee_review_list')
     if request.method == 'POST':
@@ -667,13 +667,13 @@ def fee_delete(request, pk):
         fee.delete()
         if rec is not None:
             rec.delete()
-        messages.success(request, f'已刪除 {name} 的會費紀錄。')
+        messages.success(request, f'已刪除 {name} 的團費紀錄。')
     return redirect(next_url)
 
 
 # ── 當年度收支報表（附錄五 §9 P3）─────────────────────────────
 # 按收支明細日期的年份彙總收入/支出/結餘與分類明細，可列印。
-# 會費收入已於「確認繳費」時自動計入收支明細，故此報表天然涵蓋會費。
+# 團費收入已於「確認繳費」時自動計入收支明細，故此報表天然涵蓋團費。
 
 
 @login_required

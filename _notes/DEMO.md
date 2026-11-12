@@ -46,7 +46,7 @@ QR 圖片編碼的是 `request.build_absolute_uri()`——也就是**幹部當�
 
 ### 3. 首頁對幹部沒有「請假待審」提醒
 
-首頁只提醒入團申請與會費待確認（`apps/public/views.py` 的 dashboard 只查這兩項）。
+首頁只提醒入團申請與團費待確認（`apps/public/views.py` 的 dashboard 只查這兩項）。
 **請假審核要從上方選單進去**，別在首頁找。
 
 ---
@@ -58,9 +58,9 @@ QR 圖片編碼的是 `request.build_absolute_uri()`——也就是**幹部當�
 | 帳號 | 角色 | 用途 |
 |------|------|------|
 | `demo_officer` | 幹部（陳品妤） | **主要 demo 帳號** |
-| `demo_tpt` | 團員（謝宗翰） | 團員視角；會費尚未申報，適合演申報流程 |
+| `demo_tpt` | 團員（謝宗翰） | 團員視角；團費尚未申報，適合演申報流程 |
 | `demo_flute1` | 團員（林宜蓁） | 手機掃碼簽到用 |
-| 其餘 `demo_*` ×12 | 團員 | 出席、請假、會費的資料來源 |
+| 其餘 `demo_*` ×12 | 團員 | 出席、請假、團費的資料來源 |
 
 ---
 
@@ -83,7 +83,7 @@ QR 圖片編碼的是 `request.build_absolute_uri()`——也就是**幹部當�
 → OVERVIEW「幹部另有的管理功能」
 
 **1. 登入 → 首頁 Dashboard**（`demo_officer`）
-看到下次排練、入團申請待審筆數、會費待確認筆數。
+看到下次排練、入團申請待審筆數、團費待確認筆數。
 > **講**：登入就知道今天有什麼事要處理，不用一個一個系統點進去看。
 
 **2. 入團申請審核**　`/accounts/register/review/`　→ OVERVIEW「入團申請」
@@ -148,9 +148,9 @@ QR 圖片編碼的是 `request.build_absolute_uri()`——也就是**幹部當�
 
 ---
 
-### 第三幕：財務與會費（8 分）
+### 第三幕：財務與團費（8 分）
 
-→ OVERVIEW「財務與會費」「轉帳收款設定」
+→ OVERVIEW「財務與團費」「轉帳收款設定」
 
 **1. 團員視角**（另開無痕視窗，`demo_tpt`）
 `/finance/membership/mine/` → 「申報繳費」→ 選**轉帳（掃碼）**
@@ -158,10 +158,10 @@ QR 圖片編碼的是 `request.build_absolute_uri()`——也就是**幹部當�
 > **講**：團員掃碼轉帳，填末五碼給財務對帳，不用再拍照傳 LINE。
 
 **2. 幹部確認**（切回幹部）`/finance/membership/review/` → 確認該筆。
-> **講**：確認的瞬間，系統自動把這筆記成「會費收入」。
+> **講**：確認的瞬間，系統自動把這筆記成「團費收入」。
 
 **3. 收支明細**　`/finance/records/` → 找到剛才自動產生的那筆收入。
-> **講**：會費和財務不再是兩本帳。
+> **講**：團費和財務不再是兩本帳。
 
 **4. 當年度收支**　`/finance/annual/`
 
@@ -175,7 +175,7 @@ QR 圖片編碼的是 `request.build_absolute_uri()`——也就是**幹部當�
 |------|------|------|
 | 排練出席 | `/events/<rehearsal_pk>/attendance/` | 出席／請假／缺席 |
 | 財產借用現況 | `/assets/borrows/` | **逾期會標警示** |
-| 會費繳納狀況 | `/finance/membership/` | 按期別看全團 |
+| 團費收繳狀況 | `/finance/membership/` | 按期別看全團 |
 | 請假統計 | `/events/leave/stats/` | |
 | 團員通訊錄名冊 | `/accounts/directory/report/` | 按樂器分組 |
 
@@ -215,7 +215,7 @@ venv\Scripts\python.exe manage.py clear_demo             # 實際清除（會再
 
 > **藏譜改版（2026-10）後的舊 demo 資料**：部署新版時 migration `scores 0005` 會清掉所有樂譜、分譜、曲目單、
 > 樂譜交換紀錄（含 demo 的）。之後**直接再跑一次 `seed_demo`** 就會補回新版的藏譜、曲目單與演出樂譜資料夾，
-> 不需要先 `clear_demo`；想把整套 demo（帳號、排練、會費…）全部重建才需要先清再建。
+> 不需要先 `clear_demo`；想把整套 demo（帳號、排練、團費…）全部重建才需要先清再建。
 
 建立的資料包含：
 
@@ -223,10 +223,10 @@ venv\Scripts\python.exe manage.py clear_demo             # 實際清除（會再
 |------|------|
 | 帳號 | 幹部 ×1、團員 ×12（各樂器族群），密碼 `demo1234` |
 | 演出 | 秋季公演 ×1，排練 ×7（過去 4 場有出席與摘要、當天 1 場留給 QR、未來 2 場可請假）|
-| 待審項目 | 排練請假 ×3、演出請假 ×1、入團申請 ×4、會費待確認 ×4 |
+| 待審項目 | 排練請假 ×3、演出請假 ×1、入團申請 ×4、團費待確認 ×4 |
 | 樂譜 | 藏譜 ×6（前 2 首已切割）、秋季公演曲目 5 首＋未入藏特例 1 首、演出樂譜資料夾（總譜／典藏／13 個族群）。連結都是示意用的假 Google Drive 連結，點下去會是 Google 的找不到頁面，屬正常 |
 | 財產 | 10 樣，借用 4 筆（含 1 筆逾期）|
-| 財務 | 收支 10 筆、會費 2 期、轉帳收款設定（含 QR 圖檔）|
+| 財務 | 收支 10 筆、團費 2 期、轉帳收款設定（含 QR 圖檔）|
 | 公告 | 5 則（含草稿與幹部限定）|
 
 **維護這兩支指令時要注意的坑**：
@@ -236,8 +236,8 @@ venv\Scripts\python.exe manage.py clear_demo             # 實際清除（會再
 - 排練時間用 `timezone.make_aware()` 建立；直接印 model 欄位看到的是 UTC，
   網頁會轉成 `Asia/Taipei` 顯示，兩者差 8 小時屬正常。
 - **`clear_demo` 必須先把要刪的 pk 固化**（`freeze()`），不能沿用 lazy queryset。
-  刪除是分批進行的，例如「會費自動入帳的收入」是靠 `MembershipFee` 反查的，
-  會費一旦先被刪掉就再也查不到那些收入，漏刪之後在刪帳號時會被
+  刪除是分批進行的，例如「團費自動入帳的收入」是靠 `MembershipFee` 反查的，
+  團費一旦先被刪掉就再也查不到那些收入，漏刪之後在刪帳號時會被
   `FinanceRecord.created_by` 的 PROTECT 擋下。此坑已由 `DemoCommandTest` 覆蓋。
 - **`FinanceRecord.created_by` 與 `Announcement.created_by` 都是 PROTECT `User`**，
   所以清除時除了 seed 建立的資料，還要涵蓋 demo 期間用 demo 帳號新增的收支與公告。

@@ -1866,7 +1866,7 @@ class PracticeMenuTest(TestCase):
         )
 
     def test_menu_visible_to_member_with_all_entries(self):
-        """登入團員的導覽列有「團練」下拉，含簽到／我的簽到記錄／團練日誌／我的請假／我的會費；
+        """登入團員的導覽列有「團練」下拉，含簽到／我的簽到記錄／團練日誌／我的請假／我的團費；
         樂譜庫存（藏譜）幹部限定，團員導覽列不出現"""
         self.client.force_login(self.member)
         r = self.client.get(reverse('public:index'))

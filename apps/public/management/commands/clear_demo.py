@@ -59,8 +59,8 @@ class Command(BaseCommand):
         def freeze(model, qs):
             """
             把 queryset 固化成一組 pk。刪除是分批進行的，若沿用 lazy queryset，
-            後面的查詢會因為前面已刪掉關聯而查不到東西（例如會費入帳的收入是靠
-            MembershipFee 反查的，會費一刪就找不到那些收入，導致漏刪後續 PROTECT 爆掉）。
+            後面的查詢會因為前面已刪掉關聯而查不到東西（例如團費入帳的收入是靠
+            MembershipFee 反查的，團費一刪就找不到那些收入，導致漏刪後續 PROTECT 爆掉）。
             """
             return model.objects.filter(pk__in=list(qs.values_list('pk', flat=True)))
 
@@ -94,8 +94,8 @@ class Command(BaseCommand):
             ('排練 QR Token', RehearsalQRToken.objects.filter(rehearsal__in=rehearsals)),
             ('排練請假', LeaveRequest.objects.filter(rehearsal__in=rehearsals)),
             ('演出出席確認', PerformanceAttendance.objects.filter(event__in=events)),
-            ('會費繳納紀錄', member_fees),
-            ('財務收支（含會費自動入帳）', finance),
+            ('團費收繳紀錄', member_fees),
+            ('財務收支（含團費自動入帳）', finance),
             ('公告', announcements),
             ('財產借用紀錄', AssetBorrow.objects.filter(asset__in=assets)),
             ('公用財產', assets),
@@ -103,7 +103,7 @@ class Command(BaseCommand):
             ('排練', rehearsals),
             ('演出活動', events),
             ('入團申請', registrations),
-            ('會費期別 2026 下期', fee_periods),
+            ('團費期別 2026 下期', fee_periods),
             ('demo 帳號', users),
         ]
 
