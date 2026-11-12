@@ -429,6 +429,10 @@ Migration 順序：① accounts（Role 加 GUEST 僅 choices + 新增 from_band 
 
 ### 10. 部署 Web 供幹部測試 — P0 待討論
 
+> **✅ 已下架 Render＋Neon 測試站（2026-11-13）**：Render 服務 `fjcwo-web` 與 Blueprint 已斷開並刪除、Neon 專案 `fjcwo-test` 已刪除
+> （資料全是測試資料，不保留；Neon 有恢復期，到期後才永久清除）。repo 的 `render.yaml` 與文件中的 Render 段落已移除（SETUP.md 情境 E 整段刪除）。
+> 以下第 10 節為當時的決策紀錄，僅供參考。
+
 2026-08-09 記錄。目前系統只跑在本機開發環境，其他幹部無法實際連線試用。需要一個能讓幹部點來點去測試的部署，實作前待討論：
 
 - **目標**：先求「幹部連得到、能操作試用」即可，不必一步到位做正式上線（正式部署另見 [SETUP.md](SETUP.md) 情境 D 與 Architecture 八、伺服器規劃）。
