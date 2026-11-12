@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}我的會費 — 百韻管樂團{% endblock %}
+{% block title %}我的團費 — 百韻管樂團{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-  <h2 class="mb-0">我的會費</h2>
+  <h2 class="mb-0">我的團費</h2>
   {% if user.is_officer %}
   <a href="{% url 'finance:payment_config_edit' %}" class="btn btn-sm btn-outline-primary">設定收款帳戶／上傳 QR Code</a>
   {% endif %}
@@ -58,7 +58,7 @@
 </div>
 <p class="text-muted small">申報後由幹部確認；確認前可撤回。可選現金（交給指定收款幹部）或轉帳（掃碼後填匯款末五碼）。</p>
 {% else %}
-<p class="text-muted">目前尚無任何會費期別。</p>
+<p class="text-muted">目前尚無任何團費期別。</p>
 {% endif %}
 
 {% if payment_config and payment_config.qrcode or payment_config.account_number %}

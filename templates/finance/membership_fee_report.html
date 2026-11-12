@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}會費繳納狀況 — 百韻管樂團{% endblock %}
+{% block title %}團費收繳狀況 — 百韻管樂團{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -14,7 +14,7 @@
 
 {% block content %}
 <div class="d-flex align-items-center justify-content-between mb-4">
-  <h2 class="mb-0">會費繳納狀況</h2>
+  <h2 class="mb-0">團費收繳狀況</h2>
   <div class="d-flex gap-2 d-print-none">
     <a href="{% url 'finance:fee_period_list' %}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-calendar3"></i> 管理期別
@@ -118,7 +118,7 @@
               {% csrf_token %}
               <input type="hidden" name="next" value="{% url 'finance:membership_fee_report' %}?period={{ selected_period.pk }}">
               <button type="submit" class="btn btn-sm btn-outline-danger"
-                      onclick="return confirm('確定刪除 {{ row.member.name }} 的這筆會費紀錄嗎？無法復原。')">
+                      onclick="return confirm('確定刪除 {{ row.member.name }} 的這筆團費紀錄嗎？無法復原。')">
                 <i class="bi bi-trash"></i>
               </button>
             </form>

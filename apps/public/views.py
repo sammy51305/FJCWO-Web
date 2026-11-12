@@ -115,7 +115,7 @@ def index(request):
             ).update(result_seen=True)
         # 演出請假已於 2026-09-07 廢除（#13-6）：演出改用出席意願三態、團員自行表態、
         # 不經審核，因此首頁不再有「待審／審核結果」這類通知。
-        # 我的會費審核結果（幹部確認/作廢後尚未在首頁看過的通知）
+        # 我的團費審核結果（幹部確認/作廢後尚未在首頁看過的通知）
         from apps.finance.models import MembershipFee
         reviewed_fees = list(
             MembershipFee.objects
@@ -129,7 +129,7 @@ def index(request):
             MembershipFee.objects.filter(
                 pk__in=[fee.pk for fee in reviewed_fees]
             ).update(result_seen=True)
-        # 幹部：待我處理的事項（入團申請、排練請假、會費確認；集中成一塊，見 #12）
+        # 幹部：待我處理的事項（入團申請、排練請假、團費確認；集中成一塊，見 #12）
         if request.user.is_officer:
             from apps.accounts.models import Registration
             context['pending_registrations_count'] = Registration.objects.filter(

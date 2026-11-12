@@ -16,7 +16,7 @@ class FinanceCategory(models.Model):
 
     - 紀錄以 `code`（不會變的代碼）指向分類，所以改名不影響舊紀錄。
     - 已有紀錄用的分類刪不掉（PROTECT）：不想再用就取消「啟用」，舊紀錄照常顯示。
-    - 「會費」是系統分類（is_system）：確認繳費時系統自動寫入，不能改名、停用或刪除。
+    - 「團費」是系統分類（is_system）：確認繳費時系統自動寫入，不能改名、停用或刪除。
     """
     class Kind(models.TextChoices):
         INCOME = 'income', '僅收入'
@@ -49,10 +49,10 @@ class FinanceCategory(models.Model):
 
     @classmethod
     def membership(cls):
-        """會費分類。資料遷移已建好；get_or_create 是保險（例如資料被清空的測試環境）。"""
+        """團費分類。資料遷移已建好；get_or_create 是保險（例如資料被清空的測試環境）。"""
         obj, _ = cls.objects.get_or_create(
             code=cls.MEMBERSHIP_CODE,
-            defaults={'name': '會費', 'kind': cls.Kind.INCOME, 'sort_order': 70,
+            defaults={'name': '團費', 'kind': cls.Kind.INCOME, 'sort_order': 70,
                       'is_system': True},
         )
         return obj
@@ -94,7 +94,7 @@ class FinanceRecord(models.Model):
 
 class FeePeriod(models.Model):
     """
-    會費期別主檔（附錄五 §9 P1）。幹部/管理員建立某一期，金額全團固定、繳費時段不定可調。
+    團費期別主檔（附錄五 §9 P1）。幹部/管理員建立某一期，金額全團固定、繳費時段不定可調。
     建立後每位在團團員對這期天然就是「應繳未繳」（報表以團員 × 期別 join 導出，不預建列）。
     """
     class Term(models.TextChoices):
@@ -118,8 +118,8 @@ class FeePeriod(models.Model):
     )
 
     class Meta:
-        verbose_name = '會費期別'
-        verbose_name_plural = '會費期別列表'
+        verbose_name = '團費期別'
+        verbose_name_plural = '團費期別列表'
         ordering = ['-year', 'term']
         unique_together = [['year', 'term']]
 
@@ -177,8 +177,8 @@ class MembershipFee(models.Model):
     )
 
     class Meta:
-        verbose_name = '會費繳納紀錄'
-        verbose_name_plural = '會費繳納紀錄列表'
+        verbose_name = '團費收繳紀錄'
+        verbose_name_plural = '團費收繳紀錄列表'
         ordering = ['-period__year', '-period__term', 'member__name']
         unique_together = [['member', 'period']]
 

@@ -27,7 +27,7 @@
    - [4.13 樂譜瀏覽與下載（scores）](#413-樂譜瀏覽與下載scores)
    - [4.14 報表：排練出席（events）](#414-報表排練出席events)
    - [4.15 報表：財產借用現況（assets）](#415-報表財產借用現況assets)
-   - [4.16 報表：會費繳納狀況（finance）](#416-報表會費繳納狀況finance)
+   - [4.16 報表：團費收繳狀況（finance）](#416-報表團費收繳狀況finance)
    - [4.17 報表：請假統計（events）](#417-報表請假統計events)
    - [報表：團員通訊錄名冊（accounts）— 附於報表群，無節號（見內文說明）](#報表團員通訊錄名冊accounts)
    - [4.18 LINE 群組通知（notifications）](#418-line-群組通知notifications)
@@ -70,7 +70,7 @@ apps/
 ├── accounts/      會員登入、User 資料、通訊錄
 ├── public/        不需登入就能看的頁面（首頁、章程）+ Venue / VenueTimeSlot
 ├── events/        演出活動、排練、QR 簽到、請假
-├── finance/       財務紀錄、會費
+├── finance/       財務紀錄、團費
 ├── scores/        樂譜庫存、對外交換
 ├── assets/        公用財產、借用、樂器保養
 └── announcements/ 公告
@@ -856,7 +856,7 @@ qr_checkin_confirm（POST）：建立或更新 RehearsalAttendance（status=pres
 
 #### 導覽列「團練」選單與團練日誌
 
-團員每週會用到的入口收進導覽列「團練」下拉：簽到、我的簽到記錄、團練日誌、我的請假、我的會費
+團員每週會用到的入口收進導覽列「團練」下拉：簽到、我的簽到記錄、團練日誌、我的請假、我的團費
 （原本是各自平鋪的導覽項；「演出活動」維持頂層）。「樂譜庫存」原本也在這裡，2026-10-22 藏譜改為幹部限定後移到幹部導覽區（§4.8）。
 
 - `checkin_entry`（`/events/checkin/`）：找 QR 有效（啟用且未過期）的排練，有就導向 `qr_checkin`，
@@ -1097,7 +1097,7 @@ def status_of(rehearsal, member):
 
 **檔案**：`apps/finance/models.py`
 
-幹部前端可管理收支明細（`FinanceRecord` CRUD，刪除限管理員）與會費（期別＋繳納），
+幹部前端可管理收支明細（`FinanceRecord` CRUD，刪除限管理員）與團費（期別＋繳納），
 詳見附錄五 §7、§9；金額一律驗正數（`MinValueValidator(1)` ＋ view 層 >0 檢查）。
 
 #### 五個 Model 的分工
@@ -1106,11 +1106,11 @@ def status_of(rehearsal, member):
 |-------|------|
 | `FinanceCategory` | 收支分類主檔，幹部／管理員在後台自行增減（見下方〈收支分類為什麼是資料表〉）|
 | `FinanceRecord` | 所有收入/支出明細，可關聯到某場演出；分類指向 `FinanceCategory` |
-| `FeePeriod` | 會費期別主檔（年份+上/下期、全團固定金額、繳費時段），幹部/管理員 CRUD |
+| `FeePeriod` | 團費期別主檔（年份+上/下期、全團固定金額、繳費時段），幹部/管理員 CRUD |
 | `MembershipFee` | 每位團員對某期（FK→FeePeriod）的繳納狀態，金額自期別快照 |
 | `PaymentConfig` | 轉帳收款設定（單例，QRCode＋銀行代號/名稱/戶名/帳號），供團員掃碼或複製轉帳 |
 
-**為什麼會費要拆成期別主檔 + 繳納狀態？（附錄五 §9 S1）**
+**為什麼團費要拆成期別主檔 + 繳納狀態？（附錄五 §9 S1）**
 原本 `MembershipFee.period` 是自由文字、金額每列各自填，缺單一來源。改成 `FeePeriod` 主檔後：
 金額由期別統一決定（團員/幹部登記時不重填、快照當下金額避免日後改期別竄改歷史）；建立一期後
 每位在團團員天然就是「應繳未繳」（報表以團員 × 期別 join 導出，不預建列）。
@@ -1118,11 +1118,11 @@ def status_of(rehearsal, member):
 `MembershipFee.status`（應繳未繳/待確認/已繳/作廢）取代原本「有無 `paid_at`」的兩態判斷，
 `is_paid` 改看 `status==paid`；「待確認」為 S2 團員自助申報預留，S1 只用到 應繳未繳/已繳/作廢。
 
-**為什麼會費與收支明細分開？**
-會費有「期別 + 每人繳沒繳」的追蹤需求，和一般收支性質不同，故各自一個 model。但兩者已於 §9 S3 串接：
-**確認繳費時自動產生一筆對應的 FinanceRecord 收入**（分類=會費、日期=收款日、金額快照，經
+**為什麼團費與收支明細分開？**
+團費有「期別 + 每人繳沒繳」的追蹤需求，和一般收支性質不同，故各自一個 model。但兩者已於 §9 S3 串接：
+**確認繳費時自動產生一筆對應的 FinanceRecord 收入**（分類=團費、日期=收款日、金額快照，經
 `MembershipFee.finance_record` 連結），作廢/退回/硬刪時連動移除。因此「財務總收入」與「當年度收支」
-（`annual_report`，按收款日年份彙總）天然涵蓋會費——**不需、也不可再手動於收支明細登記會費收入**。
+（`annual_report`，按收款日年份彙總）天然涵蓋團費——**不需、也不可再手動於收支明細登記團費收入**。
 
 **收支分類為什麼是資料表？（2026-11）**
 原本分類寫死在程式裡（`TextChoices`），樂團有贊助、校友捐款、幹部先墊錢進團帳這類收入，
@@ -1134,13 +1134,13 @@ def status_of(rehearsal, member):
   編輯舊紀錄時仍會保留它原本的（已停用）分類。
 - **適用範圍 `kind`**：僅收入／僅支出／皆可。新增收支時前端依類型過濾，伺服器端也會擋
   （例：「贊助／捐款」選成支出會被拒）。
-- **「會費」是系統分類**：`_sync_fee_income` 經 `FinanceCategory.membership()` 取用（缺了會自動補建），
+- **「團費」是系統分類**：`_sync_fee_income` 經 `FinanceCategory.membership()` 取用（缺了會自動補建），
   後台不能改名、停用、刪除。
 - **幹部代墊／借款**：墊進團帳或借給樂團記一筆收入、歸還時記一筆支出（分類同為「幹部代墊／借款」），
   兩邊都記得到；系統不追蹤「誰還沒拿回」，要看尚欠多少得自己對這個分類的收入與支出，那需要另外的欠款模型，目前不做。
 - **試算表匯入**：`import_sheet` 的預算項目對照表直接寫分類代碼（`venue`、`other`…）。
 
-會費期別/繳納/確認/自動入帳的完整設計、view、nav、刪除層級，詳見附錄五 §9。
+團費期別/繳納/確認/自動入帳的完整設計、view、nav、刪除層級，詳見附錄五 §9。
 
 #### 學生團費（2026-11-01）
 
@@ -1154,8 +1154,8 @@ def status_of(rehearsal, member):
 | 學生標記由幹部在團員編輯頁勾選，團員不能自己改 | 金額由此而來，屬於幹部判斷 |
 | 快照不回溯 | 期別或學生身分事後修改，已建立的 `MembershipFee.amount` 不變（與原本「快照避免竄改歷史」一致）；要修正請幹部重新登記該筆 |
 
-顯示面：期別列表多一欄「學生團費」；會費繳納狀況表頭列出學生團費、學生名字旁標「學生」；
-「我的會費」與申報頁顯示該團員實際應繳的金額；審核頁顯示該筆快照金額並標「學生」。
+顯示面：期別列表多一欄「學生團費」；團費收繳狀況表頭列出學生團費、學生名字旁標「學生」；
+「我的團費」與申報頁顯示該團員實際應繳的金額；審核頁顯示該筆快照金額並標「學生」。
 
 ---
 
@@ -1424,7 +1424,7 @@ context['reviewed_leaves'] = reviewed_leaves
 if reviewed_leaves:
     LeaveRequest.objects.filter(pk__in=[leave.pk for leave in reviewed_leaves]).update(result_seen=True)
 
-# 幹部：待我處理的事項（入團申請、排練請假、會費確認；集中成一塊，#12）
+# 幹部：待我處理的事項（入團申請、排練請假、團費確認；集中成一塊，#12）
 if request.user.is_officer:
     context['pending_registrations_count'] = Registration.objects.filter(status=Registration.Status.PENDING).count()
     context['pending_leaves_count'] = LeaveRequest.objects.filter(status=LeaveRequest.Status.PENDING).count()
@@ -1443,11 +1443,11 @@ if request.user.is_officer:
 | 區塊 | 看得到的人 | 資料來源 | 意義 |
 |------|-----------|---------|------|
 | 「我的請假（待審核）」卡片 | 所有登入者 | `pending_leaves`（`filter(member=request.user)`）| **我自己送出、還沒被審**的假單 |
-| 「待我處理的事項」清單 | 僅幹部 | `pending_leaves_count`（全團 `status=pending`）＋入團申請＋會費確認 | **等著我去審／確認**的事項 |
+| 「待我處理的事項」清單 | 僅幹部 | `pending_leaves_count`（全團 `status=pending`）＋入團申請＋團費確認 | **等著我去審／確認**的事項 |
 
 原本只有「我的請假」卡片，幹部登入看到「沒有待審核的請假」會誤讀成「沒有假要我審」，
 實際上可能有好幾筆躺在審核頁——漏了不會有任何跡象。現在幹部待審排練請假併進「待我處理的事項」
-（與入團申請、會費確認同一塊），**日後再加審核類型只需在這塊加一行**，不必每次改首頁結構。
+（與入團申請、團費確認同一塊），**日後再加審核類型只需在這塊加一行**，不必每次改首頁結構。
 
 #### 為什麼「下次排練」不是 `date > now`
 
@@ -1591,12 +1591,12 @@ for borrow in active_borrows:
 
 ---
 
-### 4.16 報表：會費繳納狀況（finance）
+### 4.16 報表：團費收繳狀況（finance）
 
 **檔案**：`apps/finance/views.py`（`membership_fee_report`）、路由：`/finance/membership/`
 
 **幹部限定**，按期別（`FeePeriod` 主檔）顯示所有團員的繳費狀態。
-期別自 §9 S1 起改為 FK 主檔、不再是自由文字；狀態改由 `MembershipFee.status` 推導（完整會費重構見 [BACKLOG.md](BACKLOG.md) 附錄五 §9）。
+期別自 §9 S1 起改為 FK 主檔、不再是自由文字；狀態改由 `MembershipFee.status` 推導（完整團費重構見 [BACKLOG.md](BACKLOG.md) 附錄五 §9）。
 
 #### 四種顯示狀態（由 `MembershipFee.status` 推導）
 

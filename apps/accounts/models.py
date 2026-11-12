@@ -133,7 +133,7 @@ class User(AbstractUser):
     # 學生團費適用（2026-11-01 定案）。與 role 分開：學生也可能是幹部，「身分」與「收費級距」是兩件事。
     is_student = models.BooleanField(
         '學生', default=False,
-        help_text='勾選後，會費以期別的「學生團費」計算（見 FeePeriod.student_amount）'
+        help_text='勾選後，團費以期別的「學生團費」計算（見 FeePeriod.student_amount）'
     )
     must_change_password = models.BooleanField(
         '需重設密碼', default=False,

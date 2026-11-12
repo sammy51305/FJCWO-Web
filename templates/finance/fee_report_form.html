@@ -5,7 +5,7 @@
 {% block content %}
 <nav aria-label="breadcrumb" class="mb-3">
   <ol class="breadcrumb">
-    <li class="breadcrumb-item"><a href="{% url 'finance:my_fees' %}">我的會費</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'finance:my_fees' %}">我的團費</a></li>
     <li class="breadcrumb-item active">申報繳費</li>
   </ol>
 </nav>
@@ -17,10 +17,10 @@
 
     {% if blocked %}
       <div class="alert alert-info">
-        您已申報或已繳納此期會費，目前狀態：
+        您已申報或已繳納此期團費，目前狀態：
         <strong>{{ existing.get_status_display }}</strong>
       </div>
-      <a href="{% url 'finance:my_fees' %}" class="btn btn-secondary">回我的會費</a>
+      <a href="{% url 'finance:my_fees' %}" class="btn btn-secondary">回我的團費</a>
     {% else %}
       <form method="post">
         {% csrf_token %}

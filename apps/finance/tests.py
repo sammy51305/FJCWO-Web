@@ -16,7 +16,7 @@ from .models import (
 
 
 class MembershipFeeReportTest(TestCase):
-    """會費繳納狀況報表（期別改為 FeePeriod 主檔，附錄五 §9 P1）"""
+    """團費收繳狀況報表（期別改為 FeePeriod 主檔，附錄五 §9 P1）"""
 
     def setUp(self):
         self.officer = User.objects.create_user(
@@ -49,7 +49,7 @@ class MembershipFeeReportTest(TestCase):
         self.assertRedirects(r, '/', fetch_redirect_response=False)
 
     def test_officer_can_access(self):
-        """幹部可進入會費繳納狀況頁"""
+        """幹部可進入團費收繳狀況頁"""
         self.client.force_login(self.officer)
         r = self.client.get(self.url)
         self.assertEqual(r.status_code, 200)
@@ -136,7 +136,7 @@ class MembershipFeeReportTest(TestCase):
         self.assertIn('費用幹部', names)
 
     def test_guest_excluded_from_rows(self):
-        """槍手（role=guest）不列入會費名單"""
+        """槍手（role=guest）不列入團費名單"""
         period = self._period()
         guest = User.objects.create_user(
             username='fee_guest', email='fee_guest@test.local',
@@ -149,7 +149,7 @@ class MembershipFeeReportTest(TestCase):
 
 
 class FeePeriodTest(TestCase):
-    """會費期別主檔 CRUD（附錄五 §9 P1）"""
+    """團費期別主檔 CRUD（附錄五 §9 P1）"""
 
     def setUp(self):
         self.officer = User.objects.create_user(
@@ -370,12 +370,12 @@ class FinanceRecordCRUDTest(TestCase):
 
 
 class FeeEditTest(TestCase):
-    """會費登記／編輯（fee_edit）：權限、建立、已繳/未繳、金額由期別快照、更新不重複"""
+    """團費登記／編輯（fee_edit）：權限、建立、已繳/未繳、金額由期別快照、更新不重複"""
 
     def setUp(self):
         self.officer = User.objects.create_user(
             username='feedit_officer', email='feedit_officer@test.local', password='x',
-            name='會費幹部', role=User.Role.OFFICER,
+            name='團費幹部', role=User.Role.OFFICER,
         )
         self.member = User.objects.create_user(
             username='feedit_member', email='feedit_member@test.local', password='x',
@@ -470,7 +470,7 @@ class FeeReportTest(TestCase):
         self.assertIn('/accounts/login/', r['Location'])
 
     def test_my_fees_shows_period_and_report_action(self):
-        """我的會費列出期別，應繳未繳可申報"""
+        """我的團費列出期別，應繳未繳可申報"""
         self.client.force_login(self.member)
         r = self.client.get(self.mine_url)
         self.assertContains(r, str(self.period))
@@ -576,7 +576,7 @@ class FeeReportTest(TestCase):
 
 
 class FeeReviewTest(TestCase):
-    """幹部確認/作廢會費 ＋ 管理員硬刪（附錄五 §9 P2）"""
+    """幹部確認/作廢團費 ＋ 管理員硬刪（附錄五 §9 P2）"""
 
     def setUp(self):
         self.member = User.objects.create_user(
@@ -648,7 +648,7 @@ class FeeReviewTest(TestCase):
         self.assertEqual(fee.status, MembershipFee.Status.PAID)
 
     def test_officer_cannot_delete(self):
-        """一般幹部不可硬刪會費紀錄"""
+        """一般幹部不可硬刪團費紀錄"""
         fee = self._reported()
         self.client.force_login(self.officer)
         r = self.client.post(reverse('finance:fee_delete', args=[fee.pk]), follow=True)
@@ -656,7 +656,7 @@ class FeeReviewTest(TestCase):
         self.assertContains(r, '僅管理員')
 
     def test_admin_can_delete(self):
-        """管理員可硬刪會費紀錄"""
+        """管理員可硬刪團費紀錄"""
         fee = self._reported()
         self.client.force_login(self.admin)
         self.client.post(reverse('finance:fee_delete', args=[fee.pk]))
@@ -692,7 +692,7 @@ class FeeIncomeTest(TestCase):
         )
 
     def test_confirm_creates_income(self):
-        """確認繳費 → 自動產生一筆會費收入（金額、日期=收款日），並連結 finance_record"""
+        """確認繳費 → 自動產生一筆團費收入（金額、日期=收款日），並連結 finance_record"""
         fee = self._reported()
         self.client.force_login(self.officer)
         self.client.post(self.review_url, {'fee_id': fee.pk, 'action': 'confirm'})
@@ -739,7 +739,7 @@ class FeeIncomeTest(TestCase):
         self.assertFalse(FinanceRecord.objects.exists())
 
     def test_admin_delete_removes_linked_income(self):
-        """管理員硬刪已繳會費 → 連動刪除那筆收入"""
+        """管理員硬刪已繳團費 → 連動刪除那筆收入"""
         fee = self._reported()
         self.client.force_login(self.officer)
         self.client.post(self.review_url, {'fee_id': fee.pk, 'action': 'confirm'})
@@ -797,7 +797,7 @@ class AnnualReportTest(TestCase):
         self.assertEqual(r.context['balance'], 700)
 
     def test_confirmed_fee_counts_into_year_income(self):
-        """整合：確認繳費產生的會費收入，會出現在當年度收支"""
+        """整合：確認繳費產生的團費收入，會出現在當年度收支"""
         from django.utils import timezone as tz
         period = FeePeriod.objects.create(year=2026, term='first', amount=500, created_by=self.officer)
         fee = MembershipFee.objects.create(
@@ -957,7 +957,7 @@ class StudentFeeTest(TestCase):
         self.assertEqual((fee.status, fee.amount), (MembershipFee.Status.PAID, 1000))
 
     def test_my_fees_and_report_form_show_student_amount(self):
-        """「我的會費」與申報頁顯示學生應繳的 1,000"""
+        """「我的團費」與申報頁顯示學生應繳的 1,000"""
         self.client.force_login(self.student)
         r = self.client.get(reverse('finance:my_fees'))
         self.assertEqual(r.context['rows'][0]['amount_due'], 1000)
@@ -966,7 +966,7 @@ class StudentFeeTest(TestCase):
         self.assertContains(r, '學生團費')
 
     def test_report_marks_students(self):
-        """會費繳納狀況：表頭列出學生團費、學生名字旁標「學生」"""
+        """團費收繳狀況：表頭列出學生團費、學生名字旁標「學生」"""
         self.client.force_login(self.officer)
         r = self.client.get(reverse('finance:membership_fee_report'), {'period': self.period.pk})
         self.assertContains(r, '學生 1000 元')
@@ -1072,7 +1072,7 @@ class FinanceCategoryTest(TestCase):
         self.assertEqual(rec.category.name, '贊助')
 
     def test_membership_is_system_category(self):
-        """會費是系統分類：後台不能刪、改名／停用欄位唯讀"""
+        """團費是系統分類：後台不能刪、改名／停用欄位唯讀"""
         cat = FinanceCategory.membership()
         self.assertTrue(cat.is_system)
         model_admin = FinanceCategoryAdmin(FinanceCategory, AdminSite())
@@ -1085,7 +1085,7 @@ class FinanceCategoryTest(TestCase):
         self.assertIn('is_active', model_admin.get_readonly_fields(request, cat))
 
     def test_membership_recreated_if_missing(self):
-        """會費分類被清掉時，FinanceCategory.membership() 會補建，確認繳費不會因此壞掉"""
+        """團費分類被清掉時，FinanceCategory.membership() 會補建，確認繳費不會因此壞掉"""
         FinanceCategory.objects.filter(code='membership').delete()
         self.assertEqual(FinanceCategory.membership().code, 'membership')
 

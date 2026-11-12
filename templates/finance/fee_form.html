@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 
-{% block title %}登記會費 — 百韻管樂團{% endblock %}
+{% block title %}登記團費 — 百韻管樂團{% endblock %}
 
 {% block content %}
 <nav aria-label="breadcrumb" class="mb-3">
   <ol class="breadcrumb">
-    <li class="breadcrumb-item"><a href="{% url 'finance:membership_fee_report' %}">會費繳納狀況</a></li>
-    <li class="breadcrumb-item active">登記／編輯會費</li>
+    <li class="breadcrumb-item"><a href="{% url 'finance:membership_fee_report' %}">團費收繳狀況</a></li>
+    <li class="breadcrumb-item active">登記／編輯團費</li>
   </ol>
 </nav>
 
 <div class="row justify-content-center">
   <div class="col-lg-6">
-    <h2 class="mb-4">登記／編輯會費</h2>
+    <h2 class="mb-4">登記／編輯團費</h2>
 
     <form method="post">
       {% csrf_token %}

@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}會費確認 — 百韻管樂團{% endblock %}
+{% block title %}團費確認 — 百韻管樂團{% endblock %}
 
 {% block content %}
-<h2 class="mb-4">會費確認</h2>
+<h2 class="mb-4">團費確認</h2>
 
 <h5 class="text-muted mb-3">待確認（團員已申報）</h5>
 {% if pending %}
@@ -85,7 +85,7 @@
             {% csrf_token %}
             <input type="hidden" name="next" value="{% url 'finance:fee_review_list' %}">
             <button type="submit" class="btn btn-sm btn-outline-danger"
-                    onclick="return confirm('確定刪除 {{ fee.member.name }} 的這筆會費紀錄嗎？無法復原。')">
+                    onclick="return confirm('確定刪除 {{ fee.member.name }} 的這筆團費紀錄嗎？無法復原。')">
               <i class="bi bi-trash"></i>
             </button>
           </form>
