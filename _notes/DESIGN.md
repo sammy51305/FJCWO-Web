@@ -860,7 +860,8 @@ qr_checkin_confirm（POST）：建立或更新 RehearsalAttendance（status=pres
 （原本是各自平鋪的導覽項；「演出活動」維持頂層）。「樂譜庫存」原本也在這裡，2026-10-22 藏譜改為幹部限定後移到幹部導覽區（§4.8）。
 
 - `checkin_entry`（`/events/checkin/`）：找 QR 有效（啟用且未過期）的排練，有就導向 `qr_checkin`，
-  沒有就導回首頁並提示「目前沒有開放簽到的排練」。以 QR 有效性判斷，不重用首頁的 `_dashboard_rehearsal`
+  沒有就導到「我的請假」並提示「目前沒有開放簽到的排練」，同時說明可在頁上的近期排練直接請假
+  （2026-11 團員回饋：想請假的人直覺會點「簽到」；原本導回首頁）。以 QR 有效性判斷，不重用首頁的 `_dashboard_rehearsal`
   （那是「今天哪一場」，這裡要的是「幹部現在開了簽到的是哪一場」）。
 - `rehearsal_journal`（`/events/rehearsal/journal/`）：`date <= now` 的排練，新到舊、每頁 20 筆，
   標示「有摘要／尚無摘要」，連到 `rehearsal_detail`。原本要讀排練摘要得逐層點演出活動 › 活動 › 排練。
@@ -923,15 +924,36 @@ attendance, _ = RehearsalAttendance.objects.get_or_create(
 
 ### 4.6 請假申請（events）
 
-**檔案**：`apps/events/views.py`（`leave_request_create`、`my_leave_requests`、`leave_review_list`）
+**檔案**：`apps/events/views.py`（`leave_request_create`、`my_leave_requests`、`leave_cancel`、`leave_review_list`）
 
-#### 三支 View 各自的職責
+#### 各 View 的職責
 
 | View | 對象 | 功能 |
 |------|------|------|
 | `leave_request_create` | 所有團員 | 填寫請假原因，送出申請 |
-| `my_leave_requests` | 所有團員 | 查看自己歷史申請的狀態 |
+| `my_leave_requests` | 所有團員 | 上方列近期排練（可直接申請或看已申請狀態），下方查看自己歷史申請的狀態 |
+| `leave_cancel` | 申請者本人 | 撤銷自己待審核／已核准的申請（POST） |
 | `leave_review_list` | 幹部 | 審核待審的申請（核准 / 拒絕） |
+
+#### 「我的請假」直接列近期排練（2026-11 團員回饋）
+
+團員反映請假很直覺會去點「簽到」或「我的請假」，但入口藏在「演出活動 › 活動 › 排練」裡，一開始找不到。
+`my_leave_requests` 上方新增「近期排練」：今天（本地時區 00:00）之後的排練、排除已取消／已結束的演出、最多 10 場，
+每場顯示「申請請假」連結，已申請過的改顯示狀態。用「今天 00:00 起」而非 `date >= now`，
+是為了跟 `leave_open` 的「當天 23:59 截止」一致——排練已開始但當天還能請。
+「簽到」沒開放時也改導到這頁（見 §4.5 導覽列「團練」選單）。
+
+#### leave_cancel：團員撤銷請假（2026-11 團員回饋）
+
+撤銷按鈕放在「我的請假」請假紀錄表的狀態欄旁，只在可撤的那筆出現。規則：
+
+- 只能撤**自己**的（查詢帶 `member=request.user`，別人的回 404），限 POST。
+- 待審核、已核准可撤；**被拒絕的不能撤**——沒有效果可撤。
+- 截止與申請同一條 `rehearsal.leave_open`（排練當天 23:59，#13-7）。過了就不能撤，避免事後把已記的請假洗掉。
+- **直接刪除申請列，不新增「已撤銷」狀態**：撤銷後等於沒請過，`unique_together(member, rehearsal)` 也才不會擋住重新申請；
+  不需要 migration。代價是幹部看不到「曾經請過又撤銷」，目前沒有這個需求。
+- 已核准的申請在審核時會把出席紀錄寫成 `LEAVE`，撤銷時把那筆 `LEAVE` 刪掉、回到「無紀錄」；
+  已簽到（`PRESENT`）的不動（比照核准時不覆寫 PRESENT 的規則）。
 
 #### 防止重複申請
 

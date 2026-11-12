@@ -3,8 +3,42 @@
 {% block title %}我的請假紀錄 — 百韻管樂團{% endblock %}
 
 {% block content %}
-<h2 class="mb-4">我的請假紀錄</h2>
+<h2 class="mb-4">我的請假</h2>
 
+{% comment %} 2026-11 團員回饋：請假入口原本只在演出活動 › 排練詳情裡，找不到。
+   這裡直接列近期排練，可以不經演出活動就申請。 {% endcomment %}
+<h5 class="mb-3"><i class="bi bi-calendar-event me-1"></i>近期排練</h5>
+{% if upcoming %}
+<div class="list-group mb-5">
+  {% for rehearsal in upcoming %}
+  <div class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+      <div class="fw-semibold">{{ rehearsal.date|date:"Y/m/d（D）H:i" }}</div>
+      <div class="small text-muted">
+        {{ rehearsal.event.name }}・第 {{ rehearsal.sequence }} 次排練{% if rehearsal.venue %}・{{ rehearsal.venue.name }}{% endif %}
+      </div>
+    </div>
+    <div>
+      {% if rehearsal.my_leave %}
+        {% if rehearsal.my_leave.status == 'pending' %}
+          <span class="badge bg-secondary">已申請・{{ rehearsal.my_leave.get_status_display }}</span>
+        {% elif rehearsal.my_leave.status == 'approved' %}
+          <span class="badge bg-success">已申請・{{ rehearsal.my_leave.get_status_display }}</span>
+        {% else %}
+          <span class="badge bg-danger">已申請・{{ rehearsal.my_leave.get_status_display }}</span>
+        {% endif %}
+      {% else %}
+        <a href="{% url 'events:leave_request_create' rehearsal.pk %}" class="btn btn-sm btn-outline-primary">申請請假</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="text-muted mb-5">目前沒有可以請假的近期排練。</p>
+{% endif %}
+
+<h5 class="mb-3"><i class="bi bi-clock-history me-1"></i>請假紀錄</h5>
 {% if leaves %}
 <div class="table-responsive mb-5">
   <table class="table table-hover align-middle">
@@ -24,13 +58,22 @@
         <td>{{ leave.rehearsal.date|date:"Y/m/d（D）H:i" }}</td>
         <td>{{ leave.reason }}</td>
         <td>
-          {% if leave.status == 'pending' %}
-            <span class="badge bg-secondary">{{ leave.get_status_display }}</span>
-          {% elif leave.status == 'approved' %}
-            <span class="badge bg-success">{{ leave.get_status_display }}</span>
-          {% else %}
-            <span class="badge bg-danger">{{ leave.get_status_display }}</span>
-          {% endif %}
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            {% if leave.status == 'pending' %}
+              <span class="badge bg-secondary">{{ leave.get_status_display }}</span>
+            {% elif leave.status == 'approved' %}
+              <span class="badge bg-success">{{ leave.get_status_display }}</span>
+            {% else %}
+              <span class="badge bg-danger">{{ leave.get_status_display }}</span>
+            {% endif %}
+            {% if leave.status != 'rejected' and leave.rehearsal.leave_open %}
+              <form method="post" action="{% url 'events:leave_cancel' leave.pk %}" class="d-inline"
+                    onsubmit="return confirm('確定要撤銷這筆請假申請嗎？');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger py-0">撤銷</button>
+              </form>
+            {% endif %}
+          </div>
         </td>
         <td>{{ leave.reviewed_by.name|default:"—" }}</td>
       </tr>
