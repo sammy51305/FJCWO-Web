@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-11-10（共 616 個測試；新增 Google 帳號登入與綁定 `GoogleLoginTest`、`<td>` 不可加 d-flex 的模板檢查）；2026-11-08（收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
+> 最後更新：2026-11-12（共 618 個測試；帳號密碼信附登入網址 `TempPasswordEmailTest`）；2026-11-10（新增 Google 帳號登入與綁定 `GoogleLoginTest`、`<td>` 不可加 d-flex 的模板檢查）；2026-11-08（收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
 
 ---
 
@@ -90,17 +90,18 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **616 個測試**，分布在 8 個 app。
+共 **618 個測試**，分布在 8 個 app。
 
 > 最近一次全站測試：2026-11-08 執行 `python manage.py test`（收支分類改為資料表、試算表匯入補場地／演出／幹部借款／先墊付），**595/595 全數通過、無 regression**（System check 亦無問題）。
 > 2026-11-10 Google 登入：在**無 PostgreSQL 帳密的機器上改用 SQLite 暫時設定**跑全站 614 個（不含最後補的槍手案例）全數通過、`GoogleLoginTest` 20/20 通過；尚待在 PostgreSQL 上跑一次全站確認。
 
-### `apps/accounts/tests.py`（182 個）
+### `apps/accounts/tests.py`（184 個）
 
 | Class | 測試內容 |
 |-------|---------|
 | `LoginLogoutTest` | 登入頁存取、正確/錯誤帳密、session 建立與清除、登出導向 |
 | `GoogleLoginTest` | Google 帳號登入（token 交換以 mock 取代，不連 Google）：未設 client id 時按鈕隱藏且網址 404、導向 Google 帶 state／nonce／PKCE／正確 redirect_uri、首次以已驗證 email（不分大小寫）比對並綁定 sub、已綁定只認 sub、next 導回與外站過濾；**拒絕**：查無團員且不建帳號、email 未驗證、團員已綁別的 Google 帳號（不改綁）、停用帳號、槍手、state 不符（不去換 token）、無 session、nonce 不符、使用者在 Google 取消；個人資料頁手動綁定 email 不同的 Google 帳號後可登入、不可搶綁他人已綁帳號、綁定需登入且限 POST、解除綁定；id_token 的 iss／aud／exp／sub 驗證 |
+| `TempPasswordEmailTest` | 帳號密碼信：有設 `SITE_URL` 時附上「登入網址：`SITE_URL`＋`/accounts/login/`」、帳號與臨時密碼照常附上；`SITE_URL` 留空時不附網址那一行 |
 | `ProfileTest` | 個人資料頁存取控制、顯示姓名、POST 更新儲存 |
 | `MemberDirectoryTest` | 通訊錄存取控制、電話/email 可見性（member vs officer）、admin 不顯示、依姓名搜尋、預設隱藏已退團、status=inactive 篩選、一般團員無法使用狀態篩選 |
 | `MemberEditTest` | 存取控制（未登入/他人/幹部）、GET 預先帶入既有資料、POST 更新成功、幹部可升級為幹部角色、一般幹部不可授予管理員角色（僅管理員本身可以）、404 |

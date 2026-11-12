@@ -288,6 +288,7 @@ venv\Scripts\python.exe manage.py runserver
 | `DJANGO_SECRET_KEY` | 沿用範例值即可 | **必須換成新的隨機值**，且只放正式機的 `.env` |
 | `DJANGO_DEBUG` | `True` | **`False`**（否則錯誤頁會外洩程式碼與設定）|
 | `DJANGO_ALLOWED_HOSTS` | `localhost 127.0.0.1` | 填正式網域，如 `fjcwo.example.com`（多個以空格分隔）|
+| `SITE_URL` | 留空 | 正式網址含 `https://`、結尾不加斜線，如 `https://fjcwo.example.com`；帳號密碼信會附上登入連結，換網址時一起改 |
 | `EMAIL_HOST_USER` / `PASSWORD` | 可留空走 console | **必須填真憑證**，否則系統寄不出帳號密碼信 |
 | `LINE_CHANNEL_ACCESS_TOKEN` / `GROUP_ID` | 可留空 | 要通知就填真值 |
 | 資料庫 `DB_*` | 本機 PostgreSQL | 正式機的資料庫連線資訊 |
@@ -350,6 +351,7 @@ static 由 WhiteNoise 供應；強制 https 與 secure cookie 由環境變數開
 | `DATABASE_URL` | E-2 複製的 Neon 連線字串 |
 | `DJANGO_ALLOWED_HOSTS` | Render 給的網域，**不含** `https://`，例如 `fjcwo-web.onrender.com` |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | 同一個網域，**要含** `https://`，例如 `https://fjcwo-web.onrender.com` |
+| `SITE_URL` | 同上含 `https://`、結尾不加斜線；帳號密碼信裡的登入網址（留空＝信裡不附網址）|
 | `DEMO_PASSWORD` | 自己想一組，**不可以用 `demo1234`**（那組寫在 DEMO.md 裡等於公開）|
 | `DJANGO_ROBOTS_NOINDEX` | `True` —— 測試站不讓搜尋引擎收錄（見下方 E-7）|
 | `DJANGO_FIELD_ENCRYPTION_KEY` | 任意隨機字串（Blueprint 會自動產生）。敏感個資的加密金鑰，**設定後不要再改**——換掉會讓既有密文解不開 |

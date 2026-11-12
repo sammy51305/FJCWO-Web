@@ -158,6 +158,11 @@ LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 
+# 網站對外網址（例如 https://fjcwo.tail064d2b.ts.net），寄給團員的信會附上登入連結。
+# 網址會變動、且各環境不同（本機／測試站／正式站），所以放 .env 而不寫死在程式裡；
+# 換網址時跟 DJANGO_ALLOWED_HOSTS、DJANGO_CSRF_TRUSTED_ORIGINS 一起改。沒設就不附網址。
+SITE_URL = os.environ.get('SITE_URL', '').strip().rstrip('/')
+
 # Google 帳號登入（apps/accounts/google_auth.py）。兩個都填才啟用，否則登入頁不顯示按鈕。
 # 只能登入既有團員帳號（以已驗證 email 比對），不會自動建帳號。
 # Google Cloud Console 的「已授權的重新導向 URI」要登記 <網站網址>/accounts/login/google/callback/

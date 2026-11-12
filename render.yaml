@@ -24,6 +24,9 @@ services:
         sync: false
       - key: DJANGO_CSRF_TRUSTED_ORIGINS
         sync: false
+      # 網站網址（含 https://、結尾不加斜線），帳號密碼信會附上登入連結；留空＝信裡不附網址
+      - key: SITE_URL
+        sync: false
       - key: DJANGO_SECURE_SSL_REDIRECT
         value: "True"
       - key: DJANGO_SECURE_COOKIES

@@ -242,6 +242,8 @@ venv\Scripts\python.exe -m pip install -r requirements.txt
   **不要設 `DATABASE_URL`**：設了它，`settings.py` 會強制 `ssl_require=True`（給 Neon 等託管資料庫用），
   本機 PostgreSQL 預設沒開 SSL，會連不上（`server does not support SSL`）。
 - `DJANGO_ALLOWED_HOSTS`（不含 `https://`）與 `DJANGO_CSRF_TRUSTED_ORIGINS`（含 `https://`），填最終對外網域
+- `SITE_URL`：對外網址，含 `https://`、結尾不加斜線（例如 `https://fjcwo.tail064d2b.ts.net`）。帳號密碼信會附上登入連結；
+  **換網址時這三個要一起改**，改完重啟服務
 - `DJANGO_FIELD_ENCRYPTION_KEY`（**遺失就解不開個資，另存密碼管理器**）
 - Gmail SMTP 設定，沿用測試站那組
 - 強制 https 與 secure cookie：`DJANGO_SECURE_SSL_REDIRECT=True`、`DJANGO_SECURE_COOKIES=True`（同 `render.yaml`）。
@@ -319,7 +321,7 @@ C:\nssm\nssm.exe install FJCWO-Web
    - 同一選單 **Edit machine name** 改成好記的名字（如 `fjcwo`），網址會變 `https://fjcwo.tailnet名.ts.net`。**改名要在設定 `.env` 網域之前**。
 3. 網站在 8000 跑起來後（第 4 步完成），系統管理員 PowerShell 執行 `tailscale funnel --bg 8000`。
    第一次執行若提示要在後台開啟 HTTPS 憑證或 Funnel 權限，👤 照它給的連結點同意。`--bg` ＝ 背景常駐、重開機後保留；`tailscale funnel status` 查狀態。
-4. 同樣要把這個網址填進 `DJANGO_ALLOWED_HOSTS` 與 `DJANGO_CSRF_TRUSTED_ORIGINS`。
+4. 同樣要把這個網址填進 `DJANGO_ALLOWED_HOSTS`、`DJANGO_CSRF_TRUSTED_ORIGINS` 與 `SITE_URL`。
 5. 接好後用 `curl -I https://機器名.tailnet名.ts.net/` 確認回 200 而不是一直 301 轉址。
    （2026-11-10 實測：Funnel 會送 `X-Forwarded-Proto: https`，搭配第 3 步的 Waitress 參數，`DJANGO_SECURE_SSL_REDIRECT=True` 下外部 https 回 200、本機 http 回 301，cookie 帶 `Secure`。）
 6. `.env` 的兩個 SECURE 旗標改完要**重啟服務才生效**（系統管理員 PowerShell `Restart-Service FJCWO-Web`）；驗證方式：`http://127.0.0.1:8000/` 應回 301。
@@ -600,7 +602,7 @@ sudo -u fjcwo venv/bin/pip install -r requirements.txt
 | `sudo -u fjcwo …` | 用這個帳號執行指令，確保檔案擁有者正確 |
 | `python3 -m venv venv` | 建專案專用的 Python 環境（Ubuntu 24.04 內建 Python 3.12，Django 6 支援）|
 
-建立 `/opt/fjcwo/app/.env`（**不進 git**），變數與第 5 節相同：資料庫用 `DB_NAME`、`DB_USER`、`DB_PASSWORD`、`DB_HOST=localhost`、`DB_PORT=5432`（**不要設 `DATABASE_URL`**，原因見第 5 節），再加上 `DJANGO_SECRET_KEY`、`DJANGO_DEBUG=False`、`DJANGO_ALLOWED_HOSTS`、`DJANGO_CSRF_TRUSTED_ORIGINS`、`DJANGO_FIELD_ENCRYPTION_KEY`、Gmail SMTP、`DJANGO_SECURE_SSL_REDIRECT=True`、`DJANGO_SECURE_COOKIES=True`。
+建立 `/opt/fjcwo/app/.env`（**不進 git**），變數與第 5 節相同：資料庫用 `DB_NAME`、`DB_USER`、`DB_PASSWORD`、`DB_HOST=localhost`、`DB_PORT=5432`（**不要設 `DATABASE_URL`**，原因見第 5 節），再加上 `DJANGO_SECRET_KEY`、`DJANGO_DEBUG=False`、`DJANGO_ALLOWED_HOSTS`、`DJANGO_CSRF_TRUSTED_ORIGINS`、`SITE_URL`、`DJANGO_FIELD_ENCRYPTION_KEY`、Gmail SMTP、`DJANGO_SECURE_SSL_REDIRECT=True`、`DJANGO_SECURE_COOKIES=True`。
 
 ```bash
 sudo chown fjcwo:fjcwo /opt/fjcwo/app/.env
