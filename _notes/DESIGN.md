@@ -279,7 +279,7 @@ Django 官方建議用 `settings.AUTH_USER_MODEL`，因為 User model 可能被�
 |------|------|------|
 | `registration_apply` | `GET/POST /accounts/register/` | 填寫申請表單，送出後建立 `Registration`（status=pending）|
 | `registration_status` | `GET/POST /accounts/register/status/` | 輸入 Email 查詢自己的申請狀態，**不需登入** |
-| `registration_review` | `GET/POST /accounts/register/review/` | 幹部管理頁：查詢／篩選所有申請、核准／拒絕／重新開放審核 |
+| `registration_review` | `GET/POST /accounts/register/review/` | 幹部管理頁：查詢／篩選所有申請、核准／拒絕／重新開放審核；列表排序為待審核 → 已核准 → 已拒絕，同狀態內最新申請在前 |
 | `registration_create` | `GET/POST /accounts/register/create/` | 幹部手動新增一筆申請紀錄（例如電話報到，補登進系統）|
 | `registration_edit` | `GET/POST /accounts/register/<pk>/edit/` | 幹部編輯申請的基本資料，不含審核狀態 |
 | `registration_delete` | `POST /accounts/register/<pk>/delete/` | **管理員**刪除申請紀錄（含已核准者）|

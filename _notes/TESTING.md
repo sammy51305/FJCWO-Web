@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-11-13（共 635 個測試；新增「我的簽到記錄」頁 `PracticeMenuTest`；收款 QR Code 換圖刪舊檔、/media/ 需登入 `PaymentConfigTest`）；2026-11-12（團員撤銷請假、我的請假頁直接列近期排練 `LeaveCancelAndEntryTest`；帳號密碼信附登入網址 `TempPasswordEmailTest`）；2026-11-10（新增 Google 帳號登入與綁定 `GoogleLoginTest`、`<td>` 不可加 d-flex 的模板檢查）；2026-11-08（收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
+> 最後更新：2026-11-13（共 636 個測試；入團申請審核列表改依狀態排序（待審核→已核准→已拒絕）；新增「我的簽到記錄」頁 `PracticeMenuTest`；收款 QR Code 換圖刪舊檔、/media/ 需登入 `PaymentConfigTest`）；2026-11-12（團員撤銷請假、我的請假頁直接列近期排練 `LeaveCancelAndEntryTest`；帳號密碼信附登入網址 `TempPasswordEmailTest`）；2026-11-10（新增 Google 帳號登入與綁定 `GoogleLoginTest`、`<td>` 不可加 d-flex 的模板檢查）；2026-11-08（收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
 
 ---
 
@@ -95,7 +95,7 @@ python manage.py test --noinput
 > 最近一次全站測試：2026-11-08 執行 `python manage.py test`（收支分類改為資料表、試算表匯入補場地／演出／幹部借款／先墊付），**595/595 全數通過、無 regression**（System check 亦無問題）。
 > 2026-11-10 Google 登入：在**無 PostgreSQL 帳密的機器上改用 SQLite 暫時設定**跑全站 614 個（不含最後補的槍手案例）全數通過、`GoogleLoginTest` 20/20 通過；尚待在 PostgreSQL 上跑一次全站確認。
 
-### `apps/accounts/tests.py`（184 個）
+### `apps/accounts/tests.py`（185 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -112,7 +112,7 @@ python manage.py test --noinput
 | `MemberDeleteTest` | 無關聯紀錄的帳號可真正刪除、有關聯紀錄（如出席）的帳號擋下並保留、不能刪除自己、一般團員無法刪除他人、管理員／superuser 可強制刪除有關聯紀錄的帳號、PROTECT 關聯（如發過公告）即使管理員也無法繞過 |
 | `UserRoleTest` | `is_officer` 各角色行為（member/officer/admin/superuser）、`is_staff` 與 `is_superuser` 自動設定 |
 | `RegistrationTest` | 顯示名稱為「入團申請」（#13-2）、申請（公開存取、重複申請防止、送出建立紀錄）、狀態查詢（用 email 查）、幹部審核（核准/拒絕）、核准同步建立 User 帳號（含 must_change_password）、寄送臨時密碼信件、Email 重複時擋下不建立重複帳號 |
-| `RegistrationManageTest` | 依姓名/Email 搜尋、依狀態篩選、拒絕可重新開放審核（核准不行）、新增申請紀錄（幹部限定）、編輯基本資料（不影響審核狀態）、刪除申請紀錄（限管理員：幹部與團員都不可、按鈕也不顯示；已核准者可刪；刪紀錄不會刪掉核准時建立的帳號）|
+| `RegistrationManageTest` | 依姓名/Email 搜尋、依狀態篩選、列表排序（待審核→已核准→已拒絕）、拒絕可重新開放審核（核准不行）、新增申請紀錄（幹部限定）、編輯基本資料（不影響審核狀態）、刪除申請紀錄（限管理員：幹部與團員都不可、按鈕也不顯示；已核准者可刪；刪紀錄不會刪掉核准時建立的帳號）|
 | `StudentFlagTest` | 團員「學生」標記：預設否、幹部編輯時勾選／取消勾選（並預先帶入表單）、學生與角色互不影響（幹部也可以是學生）、新增團員時勾選 |
 | `MemberCreateTest` | 存取控制（未登入/一般團員/幹部）、POST 新增團員成功（角色固定 member）、帳號依 Email 自動產生、Email 重複不建立記錄、寄送臨時密碼信件 |
 | `ForcePasswordChangeTest` | `must_change_password` 使用者任何頁面都被導向設定密碼頁、一般使用者不受影響、設定密碼頁本身不被攔截、成功設定後清除 flag 並可用新密碼登入、密碼不一致/太弱被擋、臨時密碼登入後仍被導向設定密碼頁（含錯誤密碼登入失敗的驗證）|
