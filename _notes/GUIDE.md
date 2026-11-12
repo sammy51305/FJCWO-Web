@@ -34,7 +34,7 @@
 ### 🖥️ 建環境 / 換電腦
 | 文件 | 什麼時候開 |
 |------|-----------|
-| [SETUP.md](SETUP.md) | 從零建置、換機接手、`git pull` 後要跑什麼（情境 F）、Render 測試站（情境 E）|
+| [SETUP.md](SETUP.md) | 從零建置、換機接手、`git pull` 後要跑什麼（情境 F）|
 | [DEPLOY-WINDOWS.md](DEPLOY-WINDOWS.md) | 用 Windows 主機當正式站（與機器無關、可換機）：預檢、PostgreSQL、Waitress 服務、Cloudflare Tunnel／Tailscale、備份、維運 |
 | [SERVERS.md](SERVERS.md) | 每台 server 機器的規格、授權現況、已定案決定與部署進度 |
 
@@ -72,7 +72,6 @@
 | 要把系統正式部署到一台 Windows 主機（含備份、對外連線）| [DEPLOY-WINDOWS.md](DEPLOY-WINDOWS.md) |
 | 現在用哪台 server、規格與授權狀況、部署做到哪 | [SERVERS.md](SERVERS.md) |
 | 要換一台 server，該改哪些文件 | [SERVERS.md](SERVERS.md) 新增一節；[DEPLOY-WINDOWS.md](DEPLOY-WINDOWS.md) 不用改 |
-| Render 測試站怎麼建 | [SETUP.md](SETUP.md) 情境 E |
 | commit 前要確認哪些文件 | [WORKFLOW.md](WORKFLOW.md) Commit 前 Checklist |
 | 我是新協作者，分支／PR 怎麼開、merge 怎麼走 | [WORKFLOW.md](WORKFLOW.md) 協作與 Branch 流程 |
 | Branch 命名與適用範圍（誰要開 branch）| [WORKFLOW.md](WORKFLOW.md) 協作與 Branch 流程 |
@@ -89,7 +88,7 @@
 | [DESIGN.md](DESIGN.md) | FK 關聯圖、各系統設計邏輯與決策、設計選擇備忘 | 欄位清單（在 Architecture）、待辦（在 BACKLOG）|
 | [BACKLOG.md](BACKLOG.md) | 待辦清單：待開發功能構想與優先權表、待評估的資料完整性問題（原 DESIGN 附錄四、五）| 已實作系統的設計邏輯（在 DESIGN）|
 | [TESTING.md](TESTING.md) | 測試總數、各 class 說明、執行方式、未覆蓋功能 | 測試的具體程式碼 |
-| [SETUP.md](SETUP.md) | 從零建環境的步驟（含 fixtures 載入順序）、Render 測試站（情境 E）| 架構設計、Windows 正式站部署（在 DEPLOY-WINDOWS.md）|
+| [SETUP.md](SETUP.md) | 從零建環境的步驟（含 fixtures 載入順序）| 架構設計、Windows 正式站部署（在 DEPLOY-WINDOWS.md）|
 | [DEPLOY-WINDOWS.md](DEPLOY-WINDOWS.md) | 與機器無關的正式站部署步驟：機器最低需求與預檢指令（含參數說明）、PostgreSQL、Waitress 服務、對外連線、備份、日常維運；附錄 A 是 Hyper-V ＋ Ubuntu VM 的替代做法 | 特定機器的規格、授權、進度（在 SERVERS.md）|
 | [SERVERS.md](SERVERS.md) | 每台 server 機器一節：規格、系統授權、已定案決定、待回答問題、部署進度 | 部署步驟（在 DEPLOY-WINDOWS.md）、機密（密碼、金鑰、序號一律不寫）|
 | [OVERVIEW.md](OVERVIEW.md) | 功能總覽與操作流程（非技術人員版）| 技術實作細節 |

@@ -12,7 +12,6 @@
 4. [步驟三：建立 PostgreSQL 資料庫與使用者](#步驟三建立-postgresql-資料庫與使用者)
 5. [步驟四：建立 .env](#步驟四建立-env)
 6. [機密設定 SOP（LINE Bot / Email）](#機密設定-sopline-bot--email)
-   - [情境 E：Render ＋ Neon 免費測試站](#情境-erender--neon-免費測試站2026-09-07-建置)
    - [情境 F：`git pull` 之後要跑什麼](#情境-fgit-pull-之後要跑什麼)
 7. [步驟五：執行 Migration](#步驟五執行-migration)
 8. [步驟六：載入基礎資料（Fixtures）](#步驟六載入基礎資料fixtures)
@@ -135,7 +134,7 @@ DB_PORT=5432
 >
 > `DJANGO_FIELD_ENCRYPTION_KEY` 不同：它單一變數、沒填會退回內建 dev 金鑰，所以**本機開發不設也能跑**。
 > 但**金鑰決定既有密文能否解開**——一旦某個環境開始存真資料，就不能再換金鑰（換掉＝舊密文全部解不開）。
-> 正式環境務必設一組固定的隨機字串，見下方情境 E（E-3 / E-9）。
+> 正式環境務必設一組固定的隨機字串，設在正式機 `.env`，見情境 D 與 [DEPLOY-WINDOWS.md](DEPLOY-WINDOWS.md)。
 
 **先判斷你屬於哪個情境，再往下看對應段落：**
 
@@ -278,9 +277,6 @@ venv\Scripts\python.exe manage.py runserver
 
 正式環境與本機開發的差別，**主要是 `.env` 的填法**。
 
-> 想先用免費方案架一個給幹部試用的測試站 → 看 **情境 E**（Render ＋ Neon），那裡有完整步驟。
-> 本情境談的是正式環境該注意什麼，兩者的檢查清單可以互相對照。
-
 #### D-1　`.env` 與本機的差異
 
 | 變數 | 本機開發 | 正式環境 |
@@ -312,170 +308,8 @@ venv\Scripts\python.exe -c "from django.core.management.utils import get_random_
 
 > 正式環境的所有機密值同樣只放正式機 `.env`，不進 git、不寫進 `_notes/`、不放 commit 訊息。
 
-### 情境 E：Render ＋ Neon 免費測試站（2026-09-07 建置）
-
-給幹部連線試用的測試站，全程免費、不需要信用卡。對應 DESIGN 附錄五 #10 的**路線 A**。
-路線 B（家機自架）要重灌機器，兩者不衝突——測試站先跑 A，之後要搬 B 再說。
-
-**分工**：Render 跑網站（免費方案）、Neon 存資料庫（永久免費）。
-不用 Render 自家的免費 Postgres——它 30 天會過期，資料整包不見。
-
-#### E-1　repo 裡已經準備好的東西
-
-| 檔案 | 作用 |
-|------|------|
-| `render.yaml` | Render Blueprint，一次建好服務與環境變數骨架 |
-| `build.sh` | 每次部署跑的建置指令（安裝套件 → collectstatic → migrate）|
-| `.python-version` | 釘住 Python 3.13.1（Django 6 需要 3.12 以上）|
-| `requirements.txt` | 已含 `gunicorn`／`whitenoise`／`dj-database-url` |
-
-`config/settings.py` 也已就緒：設了 `DATABASE_URL` 就走雲端資料庫、沒設就用本機的 `DB_*`；
-static 由 WhiteNoise 供應；強制 https 與 secure cookie 由環境變數開關（預設關，不影響本機與測試）。
-
-#### E-2　建立 Neon 資料庫（約 3 分鐘）
-
-1. 到 [neon.tech](https://neon.tech) 用 GitHub 帳號註冊。
-2. 建 project，region 選 **Singapore** 或 **Tokyo**（離台灣最近）。
-3. 複製 **Connection string**，長得像
-   `postgresql://user:pass@ep-xxx.ap-southeast-1.aws.neon.tech/neondb?sslmode=require`。
-   **這串是機密**，等一下貼進 Render，不要寫進 git 或任何文件。
-
-#### E-3　建立 Render 服務（約 5 分鐘）
-
-1. 到 [render.com](https://render.com) 用 GitHub 帳號註冊、授權讀取 `FJCWO-Web`。
-2. **New → Blueprint** → 選這個 repo，Render 會讀 `render.yaml` 自動帶出設定。
-3. 建立時它會問幾個 `sync: false` 的變數，照下表填：
-
-| 變數 | 填什麼 |
-|------|--------|
-| `DATABASE_URL` | E-2 複製的 Neon 連線字串 |
-| `DJANGO_ALLOWED_HOSTS` | Render 給的網域，**不含** `https://`，例如 `fjcwo-web.onrender.com` |
-| `DJANGO_CSRF_TRUSTED_ORIGINS` | 同一個網域，**要含** `https://`，例如 `https://fjcwo-web.onrender.com` |
-| `SITE_URL` | 同上含 `https://`、結尾不加斜線；帳號密碼信裡的登入網址（留空＝信裡不附網址）|
-| `DEMO_PASSWORD` | 自己想一組，**不可以用 `demo1234`**（那組寫在 DEMO.md 裡等於公開）|
-| `DJANGO_ROBOTS_NOINDEX` | `True` —— 測試站不讓搜尋引擎收錄（見下方 E-7）|
-| `DJANGO_FIELD_ENCRYPTION_KEY` | 任意隨機字串（Blueprint 會自動產生）。敏感個資的加密金鑰，**設定後不要再改**——換掉會讓既有密文解不開 |
-
-> 網域要等第一次部署後才知道。可以先隨便填、部署完再回設定頁改成正確的，改完會自動重新部署。
-> 填錯的症狀很好認：`ALLOWED_HOSTS` 不對 → 整站 400；`CSRF_TRUSTED_ORIGINS` 不對 → 頁面打得開但一送出表單就 403。
-
-#### E-4　灌基礎資料與 demo 資料
-
-部署成功後，在 Render 該服務的 **Shell** 分頁執行（`migrate` 已由 `build.sh` 跑過）：
-
-```bash
-python manage.py loaddata fixtures/instruments.json fixtures/sections.json fixtures/venues.json
-python manage.py seed_demo          # demo 密碼自動吃 DEMO_PASSWORD 環境變數
-python manage.py createsuperuser    # 自己的管理員帳號
-```
-
-**測試站一律用假資料**，不要匯入真團員個資（DESIGN #10「共通事項」已定）。
-
-#### E-5　免費方案的三個限制（測試可接受，正式上線前要解）
-
-1. **會休眠**：15 分鐘沒人用就睡著，下一個請求要等約 1 分鐘喚醒。第一次點會覺得很慢，是正常的。
-2. **磁碟是暫時的**：**重新部署會清空上傳的檔案**——收據、QR 圖會不見（QR 圖可重新產生）。
-   **樂譜不受影響**：樂譜檔案改放樂團 Google Drive，系統只記連結（見 DESIGN §4.8）。
-   其他上傳要持久保存得接 Cloudflare R2 之類的物件儲存（見 DESIGN #10 路線 A 的「媒體」）。
-3. **Email 仍是 console backend**：沒填 `EMAIL_HOST_USER`／`PASSWORD` 的話，
-   系統寄的臨時密碼信只會印在 Render 的 log 裡、收件人收不到。
-   要測「入團申請 → 收密碼信」整條流程（#11）就得填真的 SMTP。
-
-#### E-6　去哪裡看 log
-
-Render 後台 → 服務 `fjcwo-web`：
-
-| 分頁 | 看得到什麼 | 什麼時候看 |
-|------|-----------|-----------|
-| **Logs** | 網站執行中的輸出（gunicorn ＋ Django）| 頁面噴 500、推播沒送出、信沒寄出 |
-| **Events** | 每次部署的紀錄，點進去有 build log | 部署失敗、`build.sh` 的 `pip install`／`collectstatic`／`migrate` 出錯 |
-
-免費方案的 log 保留時間有限，出事後盡快去看。
-
-常見會在 Logs 看到的：500 的完整 traceback、`LINE notification skipped/failed`、
-console backend 印出來的臨時密碼信全文。
-
-> Django 的**預設** logging 設定會讓 `DEBUG=False` 的站完全看不到 500 的原因
-> （console handler 帶 `require_debug_true`）。專案已在 `config/settings.py` 的
-> `LOGGING` 覆寫掉這個行為，改成一律寫 stderr 由 Render 收走。
-> 要更細的追蹤可把 `DJANGO_LOG_LEVEL` 設成 `DEBUG`，但會很吵，查完記得改回來。
-
-#### E-7　不讓搜尋引擎收錄測試站
-
-測試站網址是公開的，可能被搜尋引擎爬到。設 `DJANGO_ROBOTS_NOINDEX=True` 會同時做兩件事：
-
-| 機制 | 擋什麼 |
-|------|--------|
-| `/robots.txt` 回 `Disallow: /` | 擋「爬取」——守規矩的爬蟲不會來抓內容 |
-| 每個回應加 `X-Robots-Tag: noindex, nofollow` | 擋「收錄」——即使有人把網址貼在別處被爬到，也不會進搜尋結果 |
-
-兩個都要，因為 **robots.txt 只擋爬取、不擋收錄**：搜尋引擎若從別的網頁發現這個網址，
-仍可能把網址本身列進結果（只是不顯示內容）。
-
-**正式站不要設這個變數**（或設 `False`）。那時 `/robots.txt` 會改成只擋內部路徑
-（`/admin/`、`/accounts/`、`/events/`、`/scores/`、`/assets/`、`/finance/`），
-公開頁（首頁、關於百韻、組織章程、公開公告）仍可被搜尋到——那對樂團是好事。
-
-> 這是刻意做成環境變數而非寫死：同一份程式碼會同時部署到測試站與正式站，
-> 寫死「全站禁止」會讓正式站的公開頁也搜尋不到。
-
-#### E-8　接真的 SMTP（Gmail 應用程式密碼）
-
-測試站預設是 console backend——信只印在 Render 的 log 裡，收件人收不到。
-**#11 校友批次匯入靠「核准 → 寄臨時密碼信」收尾，那條流程沒有真 SMTP 就是斷的**，
-所以這是 #10「上線前必須處理的兩件事」的第 2 點。
-
-**用哪個帳號**：建議樂團公用帳號而非個人帳號——校友看到的寄件人是樂團，日後交接也不用重設。
-
-**產生應用程式密碼**（不是帳號登入密碼）：
-
-1. 該 Google 帳號必須先開啟**兩步驟驗證**，否則沒有這個選項
-2. 到 <https://myaccount.google.com/apppasswords>（或：安全性 → 兩步驟驗證 → 最下方「應用程式密碼」）
-3. 取名如 `FJCWO-Web` → 建立 → 得到 16 碼密碼
-4. **視窗關掉就再也看不到**，馬上複製；填進 Render 時把空格拿掉
-
-**Render 環境變數**：
-
-| 變數 | 值 |
-|------|-----|
-| `EMAIL_HOST` | `smtp.gmail.com`（Blueprint 已填）|
-| `EMAIL_PORT` | `587`（已填）|
-| `EMAIL_USE_TLS` | `True`（已填，**大小寫敏感**）|
-| `EMAIL_HOST_USER` | 該 Gmail 完整位址 |
-| `EMAIL_HOST_PASSWORD` | 上面那 16 碼應用程式密碼 |
-| `DEFAULT_FROM_EMAIL` | 如 `輔仁百韻管樂團 <fujencwo@gmail.com>` |
-
-> **`DEFAULT_FROM_EMAIL` 的信箱必須與 `EMAIL_HOST_USER` 相同**，否則 Gmail 會把寄件人
-> 改寫成驗證過的那個位址（或直接被收件端判為偽冒）。預設值 `noreply@fjcwo.local`
-> 是本機用的假位址，上線一定要換掉。
-
-`settings.py` 的切換是**四個都要有才生效**：`EMAIL_HOST_USER` 與 `EMAIL_HOST_PASSWORD`
-任一為空就退回 console backend。所以「填了一半」的症狀是**安靜地沒寄出去**，不會報錯。
-
-**驗證**（本機連測試站設定，或在 Render Shell）：
-
-```bash
-python manage.py sendtestemail 你的信箱@example.com
-```
-
-收到就成了。沒收到先看垃圾郵件匣，再看 Render 的 Logs 有沒有 SMTP 錯誤。
-
-> ⚠️ **寄送額度**：一般 Gmail 帳號每日約數百封上限。#11 要一次核准三百位校友時
-> 很可能撞到限流，屆時要分批核准（DESIGN #11 風險表已列）。
-
-#### E-9　上線檢查
-
-- [ ] `DJANGO_DEBUG=False`（`render.yaml` 已寫死，確認沒被改掉）
-- [ ] `DEMO_PASSWORD` 不是 `demo1234`
-- [ ] 網站打得開、能登入、表單送得出去（送不出去看 `CSRF_TRUSTED_ORIGINS`）
-- [ ] 沒有匯入任何真實團員個資
-- [ ] 幹部拿到的網址是 `https://`（`DJANGO_SECURE_SSL_REDIRECT=True` 會自動轉）
-- [ ] `DJANGO_ROBOTS_NOINDEX=True`，且 `https://<網域>/robots.txt` 顯示 `Disallow: /`
-- [ ] `DJANGO_FIELD_ENCRYPTION_KEY` 已設（沒設的話 `build.sh` 會直接讓部署失敗）
-- [ ] Email 已接真 SMTP，且 `sendtestemail` 實測收得到（見 E-8）
 
 ---
-
 ## 步驟五：執行 Migration
 
 ```bash
@@ -513,7 +347,7 @@ python manage.py seed_demo
 資料內容、demo 動線與注意事項見 [DEMO.md](DEMO.md)。
 
 > ⚠️ demo 帳號的預設密碼寫在 DEMO.md 裡（等於公開），**任何連得到外面的環境**
-> 都要用 `DEMO_PASSWORD` 環境變數蓋掉，見情境 E。
+> 都要用 `DEMO_PASSWORD` 環境變數蓋掉。
 
 ---
 

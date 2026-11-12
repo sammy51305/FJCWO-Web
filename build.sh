@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Render 的 Build Command。每次部署會跑一次。
+# PaaS 類平台的建置指令（原為 Render 測試站使用，該站已於 2026-11-13 下架；自架正式站走 scripts/update.ps1）。
 # set -o errexit：任何一步失敗就中止部署，不要帶著半殘的狀態上線。
 set -o errexit
 

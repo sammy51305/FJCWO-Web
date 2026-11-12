@@ -156,7 +156,7 @@
 
 ## 1. 為什麼這樣選、風險在哪
 
-之前用 Render 免費網站＋Neon 免費資料庫，資料庫被清空過一次。免費方案沒有可靠的還原機制，
+之前用雲端免費網站與資料庫，資料庫被清空過一次。免費方案沒有可靠的還原機制，
 所以改成自己掌握資料。
 
 **這個方案的結構性風險（務必知道）**：
@@ -233,8 +233,8 @@ venv\Scripts\python.exe -m pip install -r requirements.txt
 
 > `waitress` 已列在 `requirements.txt`（Windows 用它取代 gunicorn）。
 
-建立 `C:\FJCWO-Web\.env`（**不進 git**）。變數名稱以 `render.yaml`、[SETUP.md](SETUP.md) 情境 E
-與 `config/settings.py` 為準，Claude 請先讀過再協助填，不要憑空猜名稱。需要設定的有：
+建立 `C:\FJCWO-Web\.env`（**不進 git**）。變數名稱以 `config/settings.py`、[SETUP.md](SETUP.md)
+為準，Claude 請先讀過再協助填，不要憑空猜名稱。需要設定的有：
 
 - 新的 `DJANGO_SECRET_KEY`（不要沿用本機或測試站那把）
 - `DJANGO_DEBUG=False`（上傳檔如收款 QR Code、收據掃描檔放在 `media/`，由 Django 自己送檔且限登入者讀取，
@@ -247,7 +247,7 @@ venv\Scripts\python.exe -m pip install -r requirements.txt
   **換網址時這三個要一起改**，改完重啟服務
 - `DJANGO_FIELD_ENCRYPTION_KEY`（**遺失就解不開個資，另存密碼管理器**）
 - Gmail SMTP 設定，沿用測試站那組
-- 強制 https 與 secure cookie：`DJANGO_SECURE_SSL_REDIRECT=True`、`DJANGO_SECURE_COOKIES=True`（同 `render.yaml`）。
+- 強制 https 與 secure cookie：`DJANGO_SECURE_SSL_REDIRECT=True`、`DJANGO_SECURE_COOKIES=True`。
   前者也會開啟 `SECURE_PROXY_SSL_HEADER`，靠反向代理送的 `X-Forwarded-Proto` 判斷 https——Waitress 要另外設定才會轉交這個 header，見第 3 步。
 - **不要**設 `DJANGO_ROBOTS_NOINDEX=True`（那是測試站用的，正式站要讓公開頁被搜尋到）
 
@@ -400,7 +400,7 @@ Remove-Item -Recurse C:\FJCWO-RestoreTest
 - [ ] Email 寄得出去（臨時密碼信）
 - [ ] 每日備份有跑，外接硬碟與雲端各有一份
 - [ ] **已做過一次還原演練**
-- [ ] 測試站（Render）的資料不是真資料，上線後確認舊測試站停用或不再被使用
+- [ ] 舊的 Render 測試站已下架（資料全是測試資料，不需保留）
 
 ## 12. 日常維運
 

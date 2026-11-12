@@ -115,7 +115,7 @@ STORAGES = {
     'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage'},
 }
 
-# 雲端部署時必填：POST 表單的來源網域白名單（含 scheme，如 https://fjcwo.onrender.com）。
+# 雲端部署時必填：POST 表單的來源網域白名單（含 scheme，如 https://example.com）。
 # 沒填會讓所有表單送出被擋成 CSRF 403。
 CSRF_TRUSTED_ORIGINS = [
     o for o in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split() if o
