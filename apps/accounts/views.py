@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Case, IntegerField, Q, Value, When
 from django.db.models.deletion import Collector, ProtectedError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -887,7 +887,18 @@ def registration_review(request):
 
         return redirect('accounts:registration_review')
 
-    registrations = Registration.objects.select_related('instrument', 'reviewed_by').order_by('-created_at')
+    # 排序：待審核 → 已核准 → 已拒絕；同狀態內最新申請在前
+    status_rank = Case(
+        When(status=Registration.Status.PENDING, then=Value(0)),
+        When(status=Registration.Status.APPROVED, then=Value(1)),
+        default=Value(2),
+        output_field=IntegerField(),
+    )
+    registrations = (
+        Registration.objects.select_related('instrument', 'reviewed_by')
+        .annotate(status_rank=status_rank)
+        .order_by('status_rank', '-created_at')
+    )
 
     query = request.GET.get('q', '').strip()
     status_filter = request.GET.get('status', '')

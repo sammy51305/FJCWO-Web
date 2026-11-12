@@ -865,6 +865,26 @@ class RegistrationManageTest(TestCase):
         self.assertContains(r, '已拒絕的人')
         self.assertNotContains(r, '待審的人')
 
+    def test_review_order_pending_first_then_approved_then_rejected(self):
+        """列表排序：待審核 → 已核准 → 已拒絕；同狀態內最新申請在前"""
+        from .models import Registration
+        S = Registration.Status
+        specs = [
+            ('拒絕甲', S.REJECTED), ('核准甲', S.APPROVED), ('待審甲', S.PENDING),
+            ('拒絕乙', S.REJECTED), ('核准乙', S.APPROVED), ('待審乙', S.PENDING),
+        ]
+        for i, (name, status) in enumerate(specs):
+            Registration.objects.create(
+                name=name, instrument=self.family, grad_year=110,
+                email=f'order{i}@test.local', status=status,
+            )
+        self.client.force_login(self.officer)
+        r = self.client.get(self.review_url)
+        names = [reg.name for reg in r.context['registrations']]
+        self.assertEqual(
+            names, ['待審乙', '待審甲', '核准乙', '核准甲', '拒絕乙', '拒絕甲']
+        )
+
     # ── 重新開放審核 ────────────────────────────────────
 
     def test_reopen_rejected_registration(self):
