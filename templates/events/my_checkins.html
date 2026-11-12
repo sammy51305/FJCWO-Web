@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}我的簽到記錄 — 百韻管樂團{% endblock %}
+
+{% block content %}
+<h2 class="mb-1">我的簽到記錄</h2>
+<p class="text-muted mb-4">已進行的排練，新的在上。顯示你每一場的出席狀態。</p>
+
+{% if total %}
+<p class="mb-3">
+  共 {{ total }} 場：
+  <span class="badge bg-success">出席 {{ present }}</span>
+  <span class="badge bg-warning text-dark">請假 {{ leave }}</span>
+</p>
+
+<div class="list-group mb-3">
+  {% for row in rows %}
+  {% with r=row.rehearsal a=row.attendance %}
+  <a href="{% url 'events:rehearsal_detail' r.pk %}"
+     class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+    <span>
+      <span class="fw-semibold">{{ r.date|date:"Y/m/d（D）" }}</span>
+      {{ r.event.name }} › 第 {{ r.sequence }} 次
+      <span class="text-muted small ms-2">{{ r.venue.name }}</span>
+    </span>
+    <span class="text-nowrap">
+      {% if a and a.status == 'present' %}
+        {% if a.checked_in_at %}<span class="text-muted small me-2">{{ a.checked_in_at|date:"H:i" }} 簽到</span>{% endif %}
+        <span class="badge bg-success">出席</span>
+      {% elif a and a.status == 'leave' %}
+        <span class="badge bg-warning text-dark">請假</span>
+      {% else %}
+        <span class="badge bg-light text-muted border">未簽到</span>
+      {% endif %}
+    </span>
+  </a>
+  {% endwith %}
+  {% endfor %}
+</div>
+
+{% if page.has_other_pages %}
+<nav aria-label="分頁">
+  <ul class="pagination">
+    {% if page.has_previous %}
+    <li class="page-item"><a class="page-link" href="?page={{ page.previous_page_number }}">上一頁</a></li>
+    {% endif %}
+    <li class="page-item disabled"><span class="page-link">{{ page.number }} / {{ page.paginator.num_pages }}</span></li>
+    {% if page.has_next %}
+    <li class="page-item"><a class="page-link" href="?page={{ page.next_page_number }}">下一頁</a></li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
+{% else %}
+<p class="text-muted">還沒有進行過的排練。</p>
+{% endif %}
+{% endblock %}

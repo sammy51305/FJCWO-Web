@@ -1866,11 +1866,11 @@ class PracticeMenuTest(TestCase):
         )
 
     def test_menu_visible_to_member_with_all_entries(self):
-        """登入團員的導覽列有「團練」下拉，含簽到／團練日誌／我的請假／我的會費；
+        """登入團員的導覽列有「團練」下拉，含簽到／我的簽到記錄／團練日誌／我的請假／我的會費；
         樂譜庫存（藏譜）幹部限定，團員導覽列不出現"""
         self.client.force_login(self.member)
         r = self.client.get(reverse('public:index'))
-        for url_name in ('events:checkin_entry', 'events:rehearsal_journal',
+        for url_name in ('events:checkin_entry', 'events:my_checkins', 'events:rehearsal_journal',
                          'events:my_leave_requests', 'finance:my_fees'):
             self.assertContains(r, f'href="{reverse(url_name)}"')
         self.assertNotContains(r, f'href="{reverse("scores:score_list")}"')
@@ -1908,6 +1908,50 @@ class PracticeMenuTest(TestCase):
         self.assertRedirects(r, reverse('events:my_leave_requests'))
         self.assertContains(r, '目前沒有開放簽到的排練')
         self.assertContains(r, reverse('events:leave_request_create', args=[self.future.pk]))
+
+    def test_my_checkins_requires_login(self):
+        """未登入看我的簽到記錄導向登入頁"""
+        r = self.client.get(reverse('events:my_checkins'))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/accounts/login/', r['Location'])
+
+    def test_my_checkins_lists_only_started_rehearsals(self):
+        """只列已開始的排練，未來的不出現"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:my_checkins'))
+        self.assertContains(r, reverse('events:rehearsal_detail', args=[self.past.pk]))
+        self.assertNotContains(r, reverse('events:rehearsal_detail', args=[self.future.pk]))
+
+    def test_my_checkins_no_record_shows_not_checked_in(self):
+        """沒有出席紀錄列的已開始排練顯示「未簽到」，不預先建列"""
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:my_checkins'))
+        self.assertContains(r, '未簽到')
+        self.assertFalse(RehearsalAttendance.objects.filter(member=self.member).exists())
+
+    def test_my_checkins_shows_own_status_only(self):
+        """顯示自己的出席與簽到時間；別人的紀錄不影響自己"""
+        other = User.objects.create_user(
+            username='pm_other', email='pm_other@test.local', password='testpass123',
+            name='其他團員', role=User.Role.MEMBER,
+        )
+        RehearsalAttendance.objects.create(
+            rehearsal=self.past, member=other, status=RehearsalAttendance.Status.PRESENT,
+            checked_in_at=timezone.now(),
+        )
+        self.client.force_login(self.member)
+        r = self.client.get(reverse('events:my_checkins'))
+        self.assertContains(r, '未簽到')
+        self.assertEqual(r.context['present'], 0)
+
+        RehearsalAttendance.objects.create(
+            rehearsal=self.past, member=self.member, status=RehearsalAttendance.Status.PRESENT,
+            checked_in_at=timezone.now(),
+        )
+        r = self.client.get(reverse('events:my_checkins'))
+        self.assertNotContains(r, '未簽到')
+        self.assertEqual(r.context['present'], 1)
+        self.assertContains(r, '簽到')
 
 
 class LeaveCancelAndEntryTest(TestCase):
