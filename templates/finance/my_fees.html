@@ -3,7 +3,12 @@
 {% block title %}我的會費 — 百韻管樂團{% endblock %}
 
 {% block content %}
-<h2 class="mb-4">我的會費</h2>
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0">我的會費</h2>
+  {% if user.is_officer %}
+  <a href="{% url 'finance:payment_config_edit' %}" class="btn btn-sm btn-outline-primary">設定收款帳戶／上傳 QR Code</a>
+  {% endif %}
+</div>
 
 {% if rows %}
 <div class="table-responsive">
@@ -54,5 +59,25 @@
 <p class="text-muted small">申報後由幹部確認；確認前可撤回。可選現金（交給指定收款幹部）或轉帳（掃碼後填匯款末五碼）。</p>
 {% else %}
 <p class="text-muted">目前尚無任何會費期別。</p>
+{% endif %}
+
+{% if payment_config and payment_config.qrcode or payment_config.account_number %}
+<div class="card mt-4" style="max-width:420px;">
+  <div class="card-header fw-semibold">樂團收款帳戶</div>
+  <div class="card-body text-center">
+    {% if payment_config.qrcode %}
+    <img src="{{ payment_config.qrcode.url }}" alt="收款 QR Code" class="img-fluid mb-2" style="max-width:220px;">
+    {% endif %}
+    {% if payment_config.account_number %}
+    <div class="small text-start">
+      {% if payment_config.bank_name or payment_config.bank_code %}<div>銀行　{{ payment_config.bank_name }}{% if payment_config.bank_code %}（{{ payment_config.bank_code }}）{% endif %}</div>{% endif %}
+      {% if payment_config.account_name %}<div>戶名　{{ payment_config.account_name }}</div>{% endif %}
+      <div>帳號　{{ payment_config.account_number }}</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% elif user.is_officer %}
+<p class="text-muted small mt-4">尚未設定收款帳戶，團員轉帳時會看不到 QR Code。</p>
 {% endif %}
 {% endblock %}
