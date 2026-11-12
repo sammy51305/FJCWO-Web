@@ -2268,3 +2268,33 @@ class GoogleLoginTest(TestCase):
                     {'exp': time.time() - 10}, {'sub': ''}):
             with self.subTest(bad=bad), self.assertRaises(GoogleAuthError):
                 _decode_id_token(self._id_token(**{**good, **bad}))
+
+
+class TempPasswordEmailTest(TestCase):
+    """帳號密碼信附上網站登入網址（取自 .env 的 SITE_URL，換網址只改 .env）"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='site_url_test', email='site_url@test.local', password='x',
+            name='網址測試員', role=User.Role.MEMBER,
+        )
+
+    def _send(self):
+        from .utils import send_temp_password_email
+        self.assertTrue(send_temp_password_email(self.user, 'site_url_test', 'TempPass99'))
+        return mail.outbox[-1].body
+
+    @override_settings(SITE_URL='https://fjcwo.example.org')
+    def test_includes_login_url_when_site_url_set(self):
+        """有設 SITE_URL：信裡附上「網址＋登入頁路徑」，帳號與臨時密碼照常附上"""
+        body = self._send()
+        self.assertIn('登入網址：https://fjcwo.example.org/accounts/login/', body)
+        self.assertIn('site_url_test', body)
+        self.assertIn('TempPass99', body)
+
+    @override_settings(SITE_URL='')
+    def test_omits_login_url_when_site_url_empty(self):
+        """沒設 SITE_URL：不附網址那一行，也不亂猜網址"""
+        body = self._send()
+        self.assertNotIn('登入網址', body)
+        self.assertIn('TempPass99', body)

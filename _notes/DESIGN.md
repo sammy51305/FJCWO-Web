@@ -391,7 +391,10 @@ def _create_member_with_temp_password(
 #### 帳密如何送達本人：Email
 
 `apps/accounts/utils.py` 的 `send_temp_password_email()` 呼叫 Django 的 `send_mail()`，
-把帳號與臨時密碼寄給本人。寄信失敗不擋帳號建立（帳號已經建立成功），只記 log，
+把帳號與臨時密碼寄給本人。信裡附上「登入網址：`SITE_URL` ＋ `LOGIN_URL`」（2026-11-12）：
+網址會變動（例如 Tailscale 換成自有網域）、且本機／測試站／正式站各不同，所以放 `.env` 的 `SITE_URL`，
+不寫死在程式或模板裡；換網址時與 `DJANGO_ALLOWED_HOSTS`、`DJANGO_CSRF_TRUSTED_ORIGINS` 一起改。
+沒設就不附這一行——不從 request 推算，因為幹部可能從區網 IP 或本機操作，推出來的網址團員連不到。寄信失敗不擋帳號建立（帳號已經建立成功），只記 log，
 呼叫端會依 `email_sent` 決定訊息文字：
 
 ```python
