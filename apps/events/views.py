@@ -8,6 +8,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
+from django.db.models import Count
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -98,6 +99,54 @@ def rehearsal_journal(request):
     )
     page = Paginator(rehearsals, 20).get_page(request.GET.get('page'))
     return render(request, 'events/rehearsal_journal.html', {'page': page})
+
+
+@login_required
+def my_checkins(request):
+    """
+    我的簽到記錄：已開始的排練逐場列出自己的出席狀態，新到舊。
+
+    導覽列「團練 › 我的簽到記錄」的入口。「簽到」是入口、不是清單，團員過去沒有地方
+    回頭確認自己有沒有簽到成功。
+
+    沒有出席紀錄列（團員沒掃碼、幹部也沒補登）一律顯示「未簽到」，
+    不預先建列：與 PerformanceAttendance 的「沒有紀錄 = 還沒表態」同理，
+    查詢時才補成顯示用的狀態，避免為每位團員每場排練灌一堆空列。
+    """
+    rehearsals = (
+        Rehearsal.objects
+        .filter(date__lte=timezone.now())
+        .select_related('event', 'venue')
+        .order_by('-date')
+    )
+    page = Paginator(rehearsals, 20).get_page(request.GET.get('page'))
+
+    mine = {
+        a.rehearsal_id: a
+        for a in RehearsalAttendance.objects.filter(
+            member=request.user, rehearsal__in=list(page.object_list),
+        )
+    }
+    rows = [{'rehearsal': r, 'attendance': mine.get(r.pk)} for r in page.object_list]
+
+    # 全部場次的出席統計（不只當頁）
+    status_counts = dict(
+        RehearsalAttendance.objects
+        .filter(member=request.user, rehearsal__date__lte=timezone.now())
+        .values_list('status')
+        .annotate(n=Count('id'))
+    )
+    total = rehearsals.count()
+    present = status_counts.get(RehearsalAttendance.Status.PRESENT, 0)
+    leave = status_counts.get(RehearsalAttendance.Status.LEAVE, 0)
+
+    return render(request, 'events/my_checkins.html', {
+        'page': page,
+        'rows': rows,
+        'total': total,
+        'present': present,
+        'leave': leave,
+    })
 
 
 @login_required
