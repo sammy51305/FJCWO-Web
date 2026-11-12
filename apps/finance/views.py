@@ -514,7 +514,10 @@ def my_fees(request):
     for period in periods:
         fee = fee_map.get(period.pk)
         rows.append({'period': period, 'fee': fee, 'amount_due': period.amount_for(request.user)})
-    return render(request, 'finance/my_fees.html', {'rows': rows})
+    return render(request, 'finance/my_fees.html', {
+        'rows': rows,
+        'payment_config': PaymentConfig.objects.first(),
+    })
 
 
 @login_required
@@ -731,6 +734,9 @@ def payment_config_edit(request):
         config.account_number = request.POST.get('account_number', '').strip()
         f = request.FILES.get('qrcode')
         if f:
+            # 換新圖時順手刪掉舊檔，避免 media/payment/ 堆積孤兒檔
+            if config.qrcode:
+                config.qrcode.delete(save=False)
             config.qrcode = f
         config.save()
         messages.success(request, '轉帳收款設定已更新。')

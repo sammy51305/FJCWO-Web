@@ -237,7 +237,8 @@ venv\Scripts\python.exe -m pip install -r requirements.txt
 與 `config/settings.py` 為準，Claude 請先讀過再協助填，不要憑空猜名稱。需要設定的有：
 
 - 新的 `DJANGO_SECRET_KEY`（不要沿用本機或測試站那把）
-- `DJANGO_DEBUG=False`
+- `DJANGO_DEBUG=False`（上傳檔如收款 QR Code、收據掃描檔放在 `media/`，由 Django 自己送檔且限登入者讀取，
+  `DEBUG=False` 也看得到，不需另設 nginx／Caddy；`media/` 要隨備份一起保留）
 - 資料庫連線：用 `DB_NAME=fjcwo`、`DB_USER=fjcwo`、`DB_PASSWORD=…`、`DB_HOST=localhost`、`DB_PORT=5432`。
   **不要設 `DATABASE_URL`**：設了它，`settings.py` 會強制 `ssl_require=True`（給 Neon 等託管資料庫用），
   本機 PostgreSQL 預設沒開 SSL，會連不上（`server does not support SSL`）。

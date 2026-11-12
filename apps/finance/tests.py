@@ -868,6 +868,31 @@ class PaymentConfigTest(TestCase):
                 self.assertTrue(config.qrcode.name)
                 self.assertTrue(config.qrcode.name.startswith('payment/'))
 
+    def test_qrcode_replace_deletes_old_file(self):
+        """重新上傳 QR Code 會刪掉舊檔，避免 media/payment/ 堆積孤兒檔"""
+        import os
+        self.client.force_login(self.officer)
+        with tempfile.TemporaryDirectory() as tmp:
+            with override_settings(MEDIA_ROOT=tmp):
+                self.client.post(self.url, {'qrcode': SimpleUploadedFile('a.png', b'aaa', content_type='image/png')})
+                old_path = PaymentConfig.objects.first().qrcode.path
+                self.assertTrue(os.path.exists(old_path))
+                self.client.post(self.url, {'qrcode': SimpleUploadedFile('b.png', b'bbb', content_type='image/png')})
+                self.assertFalse(os.path.exists(old_path))
+                self.assertTrue(os.path.exists(PaymentConfig.objects.first().qrcode.path))
+
+    def test_media_requires_login(self):
+        """/media/ 在 DEBUG=False 也要能提供檔案（否則 QR Code 破圖），但未登入不可讀"""
+        self.client.force_login(self.officer)
+        # Windows 下串流回應會握著檔案不放，暫存目錄清理時忽略該錯誤
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            with override_settings(MEDIA_ROOT=tmp):
+                self.client.post(self.url, {'qrcode': SimpleUploadedFile('a.png', b'aaa', content_type='image/png')})
+                url = PaymentConfig.objects.first().qrcode.url
+                self.assertEqual(self.client.get(url).status_code, 200)
+                self.client.logout()
+                self.assertEqual(self.client.get(url).status_code, 302)
+
 
 class StudentFeeTest(TestCase):
     """學生團費：期別可另訂學生金額，學生在登記、申報、確認各步驟的金額快照都取學生團費"""

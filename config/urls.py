@@ -1,7 +1,8 @@
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include, path
+from django.contrib.auth.decorators import login_required
+from django.urls import include, path, re_path
+from django.views.static import serve as media_serve
 
 from apps.public import views as public_views
 
@@ -18,5 +19,13 @@ urlpatterns = [
     path('', include('apps.public.urls')),
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# 使用者上傳檔（收款 QR Code、收據掃描檔）：DEBUG=False 時 Django 不會自己提供 media，
+# 圖會破掉；這裡由 Django 直接送檔，且限登入者才能讀（收據屬內部資料）。
+# 本站流量小、單機部署，不另架 nginx 也夠用。
+@login_required
+def serve_media(request, path):
+    # 每次請求才讀 MEDIA_ROOT（不在載入時固定），測試的暫存目錄才會生效
+    return media_serve(request, path, document_root=settings.MEDIA_ROOT)
+
+
+urlpatterns += [re_path(r'^media/(?P<path>.*)$', serve_media)]

@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-11-12（共 629 個測試；團員撤銷請假、我的請假頁直接列近期排練 `LeaveCancelAndEntryTest`；帳號密碼信附登入網址 `TempPasswordEmailTest`）；2026-11-10（新增 Google 帳號登入與綁定 `GoogleLoginTest`、`<td>` 不可加 d-flex 的模板檢查）；2026-11-08（收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
+> 最後更新：2026-11-13（共 631 個測試；收款 QR Code 換圖刪舊檔、/media/ 需登入 `PaymentConfigTest`）；2026-11-12（團員撤銷請假、我的請假頁直接列近期排練 `LeaveCancelAndEntryTest`；帳號密碼信附登入網址 `TempPasswordEmailTest`）；2026-11-10（新增 Google 帳號登入與綁定 `GoogleLoginTest`、`<td>` 不可加 d-flex 的模板檢查）；2026-11-08（收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
 
 ---
 
@@ -90,7 +90,7 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **629 個測試**，分布在 8 個 app。
+共 **631 個測試**，分布在 8 個 app。
 
 > 最近一次全站測試：2026-11-08 執行 `python manage.py test`（收支分類改為資料表、試算表匯入補場地／演出／幹部借款／先墊付），**595/595 全數通過、無 regression**（System check 亦無問題）。
 > 2026-11-10 Google 登入：在**無 PostgreSQL 帳密的機器上改用 SQLite 暫時設定**跑全站 614 個（不含最後補的槍手案例）全數通過、`GoogleLoginTest` 20/20 通過；尚待在 PostgreSQL 上跑一次全站確認。
@@ -162,7 +162,7 @@ python manage.py test --noinput
 |-------|---------|
 | `BorrowStatusReportTest` | 存取控制、空狀態訊息、借出中財產顯示、已還財產不顯示、逾期標記（overdue flag）、未到期不標記、overdue_count 正確計算 |
 
-### `apps/finance/tests.py`（94 個）
+### `apps/finance/tests.py`（96 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -170,7 +170,7 @@ python manage.py test --noinput
 | `StudentFeeTest` | 學生團費：`amount_for` 學生取學生團費、非學生取一般金額、期別沒訂學生團費時學生繳一般金額；期別表單學生團費選填（留空存 None、0 被擋）；幹部登記、團員申報、幹部確認三處金額快照都取 1,000（收支明細收入同步）；「我的會費」與申報頁顯示學生應繳金額；繳納狀況表頭列學生團費並標示學生 |
 | `FeePeriodTest` | 會費期別主檔 CRUD：存取控制（團員無權限/幹部可看）、新增、同年份+期別重複被擋、金額 0 被擋、編輯、刪除限管理員（幹部擋下/管理員可刪）、已有繳費紀錄時 PROTECT 擋下 |
 | `FeeReportTest` | 團員自助申報（S2 現金 / S4 轉帳）：我的會費列期別/可申報、現金申報建 reported（記收款幹部、金額快照）、缺收款幹部被擋、轉帳申報記末五碼(無收款幹部)、末五碼非 5 位數字被擋、已申報/已繳不可重複、作廢後可重新申報、撤回自己的待確認、不可撤回已繳/他人 |
-| `PaymentConfigTest` | 轉帳收款設定（S4）：存取控制（團員無權限/幹部可看）、儲存結構化欄位（代號/名稱/戶名/帳號）到單例設定、帳號存檔自動去除 dash 與空白、上傳 QR Code 圖檔保存 |
+| `PaymentConfigTest` | 轉帳收款設定（S4）：存取控制（團員無權限/幹部可看）、儲存結構化欄位（代號/名稱/戶名/帳號）到單例設定、帳號存檔自動去除 dash 與空白、上傳 QR Code 圖檔保存、換圖刪舊檔、/media/ 需登入才能讀 |
 | `FeeReviewTest` | 幹部確認/作廢（S2）：存取控制、確認→已繳(記 paid_at、result_seen=False、金額再快照)、作廢→void、已處理不可重複、管理員可硬刪/一般幹部不可刪 |
 | `FeeIncomeTest` | 確認繳費自動入帳（S3）：確認→產生會費收入(金額/日期=收款日、連結 finance_record)、作廢待確認不產生收入、幹部代登記已繳也入帳、已繳改未繳連動移除收入、管理員硬刪連動刪收入 |
 | `AnnualReportTest` | 當年度收支（S3）：存取控制、預設最新年度、當年收入/支出/結餘彙總（跨年不計入）、確認繳費的會費收入計入當年度 |
