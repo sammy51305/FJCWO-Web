@@ -111,6 +111,53 @@ class LoginLogoutTest(TestCase):
         self.assertNotIn('_auth_user_id', self.client.session)
 
 
+class SessionTimeoutTest(TestCase):
+    """登入閒置逾時：期限 8 小時，且每次請求都往後延（滑動視窗）"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='timeout_user', email='timeout@test.local',
+            password='testpass123', name='逾時測試', role=User.Role.MEMBER,
+        )
+
+    def test_session_age_is_eight_hours(self):
+        """設定值為 8 小時，且開啟每次請求續期"""
+        from django.conf import settings
+        self.assertEqual(settings.SESSION_COOKIE_AGE, 8 * 60 * 60)
+        self.assertTrue(settings.SESSION_SAVE_EVERY_REQUEST)
+
+    def test_login_cookie_expires_in_eight_hours(self):
+        """登入後發出的 session cookie 效期是 8 小時"""
+        self.client.post(reverse('accounts:login'), {
+            'username': 'timeout_user', 'password': 'testpass123',
+        })
+        self.assertEqual(self.client.cookies['sessionid']['max-age'], 8 * 60 * 60)
+
+    def test_activity_extends_session(self):
+        """有操作就延長：把 session 期限改成快到期，再發一次請求應被推回約 8 小時後"""
+        from django.contrib.sessions.models import Session
+        self.client.force_login(self.user)
+        key = self.client.session.session_key
+        Session.objects.filter(session_key=key).update(
+            expire_date=timezone.now() + timezone.timedelta(minutes=5)
+        )
+        self.client.get(reverse('accounts:profile'))
+        remaining = Session.objects.get(session_key=key).expire_date - timezone.now()
+        self.assertGreater(remaining.total_seconds(), 7 * 60 * 60)
+
+    def test_expired_session_requires_login(self):
+        """閒置超過期限：session 過期後被導向登入頁"""
+        from django.contrib.sessions.models import Session
+        self.client.force_login(self.user)
+        key = self.client.session.session_key
+        Session.objects.filter(session_key=key).update(
+            expire_date=timezone.now() - timezone.timedelta(minutes=1)
+        )
+        r = self.client.get(reverse('accounts:profile'))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn(reverse('accounts:login'), r['Location'])
+
+
 class ProfileTest(TestCase):
     """個人資料頁面"""
 
