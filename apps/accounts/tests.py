@@ -436,6 +436,174 @@ class MemberStatusTest(TestCase):
         self.assertTrue(self.member.is_active)
 
 
+class MemberResetPasswordTest(TestCase):
+    """幹部重設團員臨時密碼並重寄（團員沒收到帳密信／忘記密碼）"""
+
+    def setUp(self):
+        self.officer = User.objects.create_user(
+            username='rp_officer', password='x', name='重設幹部',
+            email='rp_officer@test.local', role=User.Role.OFFICER,
+        )
+        self.other_officer = User.objects.create_user(
+            username='rp_officer2', password='x', name='另一位幹部',
+            email='rp_officer2@test.local', role=User.Role.OFFICER,
+        )
+        self.admin = User.objects.create_user(
+            username='rp_admin', password='x', name='重設管理員',
+            email='rp_admin@test.local', role=User.Role.ADMIN,
+        )
+        self.member = User.objects.create_user(
+            username='rp_member', password='oldpass123', name='沒收到信的人',
+            email='rp_member@test.local', role=User.Role.MEMBER,
+        )
+        self.url = reverse('accounts:member_reset_password', args=[self.member.pk])
+
+    def _reset(self, who, target=None):
+        self.client.force_login(who)
+        url = reverse('accounts:member_reset_password', args=[(target or self.member).pk])
+        return self.client.post(url, follow=True)
+
+    def _messages(self, r):
+        return ' '.join(str(m) for m in r.context['messages'])
+
+    def _shown_password(self, r):
+        return self._messages(r).split('臨時密碼：')[1].split('。')[0]
+
+    def test_officer_resets_member_password(self):
+        """幹部重設後：舊密碼失效、強制改密碼、畫面顯示新臨時密碼並寄信"""
+        r = self._reset(self.officer)
+        self.member.refresh_from_db()
+        self.assertFalse(self.member.check_password('oldpass123'))
+        self.assertTrue(self.member.must_change_password)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['rp_member@test.local'])
+        self.assertIn('重設', mail.outbox[0].subject)
+        # 寄信成功也要在畫面顯示（信可能進垃圾信匣），且顯示的必須是帳號現在的密碼
+        shown = self._shown_password(r)
+        self.assertTrue(self.member.check_password(shown))
+        self.assertIn(shown, mail.outbox[0].body)
+
+    def test_reset_invalidates_existing_session(self):
+        """重設後，對方原本的登入狀態立即失效"""
+        victim = self.client_class()
+        victim.force_login(self.member)
+        self.assertEqual(victim.get(reverse('accounts:profile')).status_code, 200)
+        self._reset(self.officer)
+        r = victim.get(reverse('accounts:profile'))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn(reverse('accounts:login'), r['Location'])
+
+    def test_member_without_email_shows_password_only(self):
+        """沒有 Email：不寄信，但畫面仍顯示臨時密碼"""
+        self.member.email = None
+        self.member.save()
+        r = self._reset(self.officer)
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertIn('沒有 Email', self._messages(r))
+        self.assertTrue(self.member.__class__.objects.get(pk=self.member.pk)
+                        .check_password(self._shown_password(r)))
+
+    def test_mail_failure_still_shows_password(self):
+        """寄信失敗：密碼仍顯示在畫面，且密碼確實已重設"""
+        with mock.patch('apps.accounts.utils.send_mail', side_effect=Exception('smtp down')):
+            r = self._reset(self.officer)
+        self.assertIn('寄信失敗', self._messages(r))
+        self.member.refresh_from_db()
+        self.assertTrue(self.member.must_change_password)
+        self.assertTrue(self.member.check_password(self._shown_password(r)))
+
+    def test_reset_then_login_forces_password_change(self):
+        """用新臨時密碼可登入，且被導向設定新密碼頁"""
+        r = self._reset(self.officer)
+        c = self.client_class()
+        self.assertTrue(c.login(username='rp_member', password=self._shown_password(r)))
+        r = c.get(reverse('accounts:member_directory'))
+        self.assertRedirects(r, reverse('accounts:change_password'), fetch_redirect_response=False)
+
+    def test_get_does_not_reset(self):
+        """GET 不會重設密碼"""
+        self.client.force_login(self.officer)
+        self.client.get(self.url)
+        self.member.refresh_from_db()
+        self.assertTrue(self.member.check_password('oldpass123'))
+
+    def test_member_cannot_reset(self):
+        """一般團員無權重設別人的密碼"""
+        other = User.objects.create_user(
+            username='rp_other', password='x', name='路人', email='rp_other@test.local',
+            role=User.Role.MEMBER,
+        )
+        self._reset(other)
+        self.member.refresh_from_db()
+        self.assertTrue(self.member.check_password('oldpass123'))
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_anonymous_redirected_to_login(self):
+        """未登入導向登入頁"""
+        r = self.client.post(self.url)
+        self.assertEqual(r.status_code, 302)
+        self.assertIn(reverse('accounts:login'), r['Location'])
+
+    def test_cannot_reset_self(self):
+        """不能重設自己的密碼"""
+        self._reset(self.officer, self.officer)
+        self.officer.refresh_from_db()
+        self.assertTrue(self.officer.check_password('x'))
+
+    def test_officer_cannot_reset_other_officer_or_admin(self):
+        """一般幹部不能重設幹部或管理員的密碼（防止接管高權限帳號）"""
+        self._reset(self.officer, self.other_officer)
+        self._reset(self.officer, self.admin)
+        self.other_officer.refresh_from_db()
+        self.admin.refresh_from_db()
+        self.assertTrue(self.other_officer.check_password('x'))
+        self.assertTrue(self.admin.check_password('x'))
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_admin_can_reset_officer_but_not_admin_or_superuser(self):
+        """管理員可重設幹部；但管理員與 superuser 帳號一律不能由此重設"""
+        su = User.objects.create_superuser(
+            username='rp_su', password='x', name='超級', email='rp_su@test.local',
+        )
+        another_admin = User.objects.create_user(
+            username='rp_admin2', password='x', name='管理員二', email='rp_a2@test.local',
+            role=User.Role.ADMIN,
+        )
+        self._reset(self.admin, self.other_officer)
+        self.other_officer.refresh_from_db()
+        self.assertFalse(self.other_officer.check_password('x'))
+        self._reset(self.admin, another_admin)
+        self._reset(self.admin, su)
+        another_admin.refresh_from_db()
+        su.refresh_from_db()
+        self.assertTrue(another_admin.check_password('x'))
+        self.assertTrue(su.check_password('x'))
+
+    def test_cannot_reset_guest(self):
+        """槍手沒有登入能力，不能重設（不會被誤開通登入）"""
+        guest = User.objects.create_user(username='rp_guest', name='槍手', role=User.Role.GUEST)
+        guest.set_unusable_password()
+        guest.save()
+        self._reset(self.officer, guest)
+        guest.refresh_from_db()
+        self.assertFalse(guest.has_usable_password())
+
+    def test_cannot_reset_inactive_member(self):
+        """已退團的帳號不重設"""
+        self.member.is_active = False
+        self.member.save()
+        self._reset(self.officer)
+        self.member.refresh_from_db()
+        self.assertTrue(self.member.check_password('oldpass123'))
+
+    def test_directory_shows_reset_button_only_for_officer(self):
+        """通訊錄：幹部看得到重設按鈕，一般團員看不到"""
+        self.client.force_login(self.officer)
+        self.assertContains(self.client.get(reverse('accounts:member_directory')), self.url)
+        self.client.force_login(self.member)
+        self.assertNotContains(self.client.get(reverse('accounts:member_directory')), self.url)
+
+
 class MemberDeleteTest(TestCase):
     """團員帳號刪除：僅無任何關聯紀錄時允許真的刪除"""
 

@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-11-13（共 636 個測試；入團申請審核列表改依狀態排序（待審核→已核准→已拒絕）；新增「我的簽到記錄」頁 `PracticeMenuTest`；收款 QR Code 換圖刪舊檔、/media/ 需登入 `PaymentConfigTest`）；2026-11-12（團員撤銷請假、我的請假頁直接列近期排練 `LeaveCancelAndEntryTest`；帳號密碼信附登入網址 `TempPasswordEmailTest`）；2026-11-10（新增 Google 帳號登入與綁定 `GoogleLoginTest`、`<td>` 不可加 d-flex 的模板檢查）；2026-11-08（收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
+> 最後更新：2026-11-17（共 650 個測試；幹部重設團員臨時密碼 `MemberResetPasswordTest`）；2026-11-13（入團申請審核列表改依狀態排序（待審核→已核准→已拒絕）；新增「我的簽到記錄」頁 `PracticeMenuTest`；收款 QR Code 換圖刪舊檔、/media/ 需登入 `PaymentConfigTest`）；2026-11-12（團員撤銷請假、我的請假頁直接列近期排練 `LeaveCancelAndEntryTest`；帳號密碼信附登入網址 `TempPasswordEmailTest`）；2026-11-10（新增 Google 帳號登入與綁定 `GoogleLoginTest`、`<td>` 不可加 d-flex 的模板檢查）；2026-11-08（收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
 
 ---
 
@@ -95,7 +95,7 @@ python manage.py test --noinput
 > 最近一次全站測試：2026-11-08 執行 `python manage.py test`（收支分類改為資料表、試算表匯入補場地／演出／幹部借款／先墊付），**595/595 全數通過、無 regression**（System check 亦無問題）。
 > 2026-11-10 Google 登入：在**無 PostgreSQL 帳密的機器上改用 SQLite 暫時設定**跑全站 614 個（不含最後補的槍手案例）全數通過、`GoogleLoginTest` 20/20 通過；尚待在 PostgreSQL 上跑一次全站確認。
 
-### `apps/accounts/tests.py`（185 個）
+### `apps/accounts/tests.py`（199 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -105,6 +105,7 @@ python manage.py test --noinput
 | `ProfileTest` | 個人資料頁存取控制、顯示姓名、POST 更新儲存 |
 | `MemberDirectoryTest` | 通訊錄存取控制、電話/email 可見性（member vs officer）、admin 不顯示、依姓名搜尋、預設隱藏已退團、status=inactive 篩選、一般團員無法使用狀態篩選 |
 | `MemberEditTest` | 存取控制（未登入/他人/幹部）、GET 預先帶入既有資料、POST 更新成功、幹部可升級為幹部角色、一般幹部不可授予管理員角色（僅管理員本身可以）、404 |
+| `MemberResetPasswordTest` | 幹部重設臨時密碼：舊密碼失效＋強制改密碼＋寄信、畫面顯示的密碼即新密碼（寄信成功／失敗／無 Email 都顯示）、對方既有 session 失效、新密碼可登入並被導去改密碼、GET 不重設、一般團員／未登入無權；**拒絕**：自己、槍手、已退團、一般幹部重設幹部或管理員、管理員重設管理員或 superuser；管理員可重設幹部；通訊錄僅幹部看得到按鈕 |
 | `MemberStatusTest` | 幹部可退團／恢復、退團不刪除資料、不能將自己標記退團、一般團員無法操作他人狀態 |
 | `RegistrationImportTest` | #11 批次匯入：存取控制、匯入建立待審紀錄（不建帳號不寄信）、樂器別名對照、對不上的樂器留空並報告、多種日期格式、**缺 Email／缺姓名／檔內重複／已有帳號／已有申請一律列出原因**、重複匯入冪等、缺必要欄位整份拒絕、空白列略過；批次核准建帳號寄信、敏感欄位帶入、一筆失敗不影響其他筆、未勾選有提示、限幹部 |
 | `FieldEncryptionTest` | 敏感個資欄位加密（#13-1 決定二）：ORM 讀出明文、**DB 實際存的是 Fernet 密文**、空值不加密、生日仍是 date 物件、申請單同樣加密、解不開的壞資料回傳空字串不炸掉、遮蔽仍正常、通訊錄不外洩明文 |

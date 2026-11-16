@@ -387,6 +387,57 @@ def member_edit(request, pk):
 
 
 @login_required
+def member_reset_password(request, pk):
+    """
+    幹部重設團員的臨時密碼並重寄（團員沒收到帳密信、或忘記密碼時用）。
+
+    - 產生新的隨機臨時密碼、標記 must_change_password，對方登入後須自行設定新密碼；
+      密碼雜湊一變，該帳號既有的登入 session 也會一併失效。
+    - **不論寄信成功與否，新密碼都會顯示在畫面上**：信可能進垃圾信匣或 Email 打錯，
+      系統無從得知，幹部需要能直接用 LINE 等管道轉告。
+    - 權限：一般幹部只能重設團員（member）；管理員／superuser 另可重設幹部。
+      管理員與 superuser 帳號不能由這裡重設（否則幹部可藉此接管最高權限帳號）；槍手沒有登入能力，不適用。
+    """
+    member = get_object_or_404(User, pk=pk)
+    if not request.user.is_officer:
+        messages.error(request, '權限不足。')
+        return redirect('accounts:member_directory')
+
+    if request.method != 'POST':
+        return redirect('accounts:member_directory')
+
+    can_reset_officer = request.user.is_superuser or request.user.is_admin_role
+    if member.pk == request.user.pk:
+        messages.error(request, '不能重設自己的密碼，請改用「變更密碼」。')
+    elif member.is_guest:
+        messages.error(request, f'{member.name} 是槍手，沒有登入帳號，無法重設密碼。')
+    elif member.is_superuser or member.role == User.Role.ADMIN:
+        messages.error(request, f'{member.name} 是管理員帳號，無法在此重設密碼。')
+    elif member.role == User.Role.OFFICER and not can_reset_officer:
+        messages.error(request, f'只有管理員可以重設幹部（{member.name}）的密碼。')
+    elif not member.is_active:
+        messages.error(request, f'{member.name} 已退團，請先恢復在團狀態再重設密碼。')
+    else:
+        password = get_random_string(10)
+        member.set_password(password)
+        member.must_change_password = True
+        member.save(update_fields=['password', 'must_change_password'])
+        email_sent = send_temp_password_email(member, member.username, password, reset=True)
+        if email_sent:
+            status = f'已寄至 {member.email}（若對方沒收到，請直接轉告）'
+        elif member.email:
+            status = '寄信失敗，請自行告知本人'
+        else:
+            status = '此帳號沒有 Email，請自行告知本人'
+        messages.warning(
+            request,
+            f'已重設 {member.name} 的密碼，{status}：'
+            f'帳號：{member.username}，臨時密碼：{password}。此訊息只會出現一次。'
+        )
+    return redirect('accounts:member_directory')
+
+
+@login_required
 def member_deactivate(request, pk):
     """團員退團：標記 is_active=False（軟刪除），保留所有歷史紀錄"""
     member = get_object_or_404(User, pk=pk)
