@@ -131,6 +131,13 @@ if os.environ.get('DJANGO_SECURE_SSL_REDIRECT', 'False') == 'True':
     # 靠這個 header 才知道使用者其實走的是 https，否則會無限轉址。
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
+# 登入閒置逾時：閒置超過 8 小時自動登出，期間內有任何操作就重新計時。
+# Django 預設是「登入後固定 14 天」且不會延長；系統內有身分證字號、住址等個資，
+# 長效登入風險偏高。SAVE_EVERY_REQUEST 讓每次請求都把期限往後推（滑動視窗），
+# 代價是每個請求多一次 session 寫入，團內規模可忽略。
+SESSION_COOKIE_AGE = 60 * 60 * 8
+SESSION_SAVE_EVERY_REQUEST = True
+
 if os.environ.get('DJANGO_SECURE_COOKIES', 'False') == 'True':
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True

@@ -495,6 +495,10 @@ login(request, form.get_user())         ← Django 把使用者資訊存進 sess
 redirect 到 ?next= 或首頁
 ```
 
+**登入逾時**：`settings.py` 設 `SESSION_COOKIE_AGE = 8 小時` 加 `SESSION_SAVE_EVERY_REQUEST = True`，
+是「閒置逾時」的滑動視窗，不是固定期限：有任何操作就重新計 8 小時，閒置超過 8 小時才登出。
+Django 預設是登入後固定 14 天且不續期，系統內有身分證字號、住址等個資，所以縮短。
+
 #### 團員通訊錄的分組邏輯
 
 ```python
