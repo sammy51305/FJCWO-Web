@@ -17,6 +17,7 @@ urlpatterns = [
     path('directory/report/', views.member_directory_report, name='member_directory_report'),
     path('directory/create/', views.member_create, name='member_create'),
     path('directory/<int:pk>/edit/', views.member_edit, name='member_edit'),
+    path('directory/<int:pk>/reset-password/', views.member_reset_password, name='member_reset_password'),
     path('directory/<int:pk>/deactivate/', views.member_deactivate, name='member_deactivate'),
     path('directory/<int:pk>/reactivate/', views.member_reactivate, name='member_reactivate'),
     path('directory/<int:pk>/delete/', views.member_delete, name='member_delete'),

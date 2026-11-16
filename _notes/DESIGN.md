@@ -539,6 +539,17 @@ status_filter = request.GET.get('status', '') if request.user.is_officer else ''
 `User` 被排練出席、請假、演出出席、財產借用、財務紀錄、公告等多張表用外鍵參照，
 其中不少是 `CASCADE`——真的刪除團員會連帶砍光他所有歷史紀錄。
 
+#### member_reset_password：重設臨時密碼並重寄
+
+團員沒收到帳密信、或忘記密碼時，幹部在通訊錄按鑰匙鈕（`POST /accounts/directory/<pk>/reset-password/`）：
+產生新的隨機臨時密碼、`must_change_password=True`（沿用「臨時密碼＋強制改密碼」機制），並重寄信。
+
+- **新密碼不論寄信成敗都顯示在畫面上**。`send_mail` 只代表 SMTP 收下信，進垃圾信匣、Email 打錯都偵測不到，
+  所以幹部要能直接用 LINE 等管道轉告。訊息只出現一次，需要時再重設一次即可。
+- 密碼雜湊改變，對方既有的登入 session 立即失效。
+- 權限：一般幹部只能重設團員；管理員／superuser 另可重設幹部；**管理員與 superuser 帳號不能由此重設**
+  （否則幹部可藉重設接管最高權限帳號）。不能重設自己（請用變更密碼）、槍手（無登入能力）、已退團者。
+
 #### member_delete：只有「乾淨」帳號才允許真的刪除
 
 「退團」不能滿足所有情境——如果幹部新增團員時打錯字，馬上發現，這種帳號還沒有任何關聯資料，
