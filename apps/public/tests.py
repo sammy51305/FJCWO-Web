@@ -1116,9 +1116,9 @@ class ImportSheetCommandTest(TestCase):
             .order_by('date', 'id').values_list('date', 'category', 'amount', 'description')
         )
         self.assertEqual(expenses, [
-            (dt.date(2026, 11, 1), 'venue', 3000, '團練室：11/1 團練（經手人：匯入幹部）'),
-            (dt.date(2026, 11, 1), 'venue', 3000, '團練室：11/1 團練（經手人：匯入幹部）'),
-            (dt.date(2026, 11, 3), 'instructor', 3000, '指揮費用'),
+            (dt.date(2026, 11, 1), 'practice_room', 3000, '團練室：11/1 團練（經手人：匯入幹部）'),
+            (dt.date(2026, 11, 1), 'practice_room', 3000, '團練室：11/1 團練（經手人：匯入幹部）'),
+            (dt.date(2026, 11, 3), 'conductor_fee', 3000, '指揮費用'),
             (dt.date(2026, 11, 4), 'other', 200, '茶水'),
         ])
         self.assertTrue(all(
@@ -1127,6 +1127,36 @@ class ImportSheetCommandTest(TestCase):
         ))
         self.assertIn('項目「茶水」不在預算項目裡，歸為「其他」', output)
         self.assertNotIn('日期無法辨識', output)     # 只有未勾選勾選框的空白列要被略過
+
+    def test_expense_category_matched_by_name(self):
+        """項目名稱跟分類同名就歸那一類：幹部在後台新建的同名分類下次匯入就對得上；
+        「樂譜」是「樂譜費」的別名；停用的分類不收，歸其他"""
+        import openpyxl
+        from django.core.management import call_command
+
+        from apps.finance.models import FinanceCategory, FinanceRecord
+
+        FinanceCategory.objects.create(name='器材租借', kind='expense')
+        FinanceCategory.objects.filter(code='promotion').update(is_active=False)
+        path = self._workbook()
+        wb = openpyxl.load_workbook(path)
+        del wb['支出紀錄']
+        ws = wb.create_sheet('支出紀錄')
+        ws.append(['日期', '項目', '金額', '說明', '經手人', '收據', '經手人先墊付', '已歸墊'])
+        ws.append([dt.datetime(2026, 5, 1), '器材租借', 800, '', '匯入幹部', False, False, False])
+        ws.append([dt.datetime(2026, 5, 2), '樂譜', 500, '', '匯入幹部', False, False, False])
+        ws.append([dt.datetime(2026, 5, 3), '宣傳', 300, '', '匯入幹部', False, False, False])
+        ws.append([dt.datetime(2026, 5, 4), '開發網站', 200, '', '匯入幹部', False, False, False])
+        wb.save(path)
+
+        out = io.StringIO()
+        call_command('import_sheet', path, '--operator', 'sheet_officer', '--commit', stdout=out)
+        got = {r.amount: r.category.name for r in FinanceRecord.objects.filter(type='expense')}
+        self.assertEqual(got[800], '器材租借')
+        self.assertEqual(got[500], '樂譜費')
+        self.assertEqual(got[300], '其他')           # 宣傳被停用
+        self.assertEqual(got[200], '架站與伺服器費')   # 舊名別名
+        self.assertIn('項目「宣傳」不在預算項目裡', out.getvalue())
 
     def test_advanced_expenses_record_officer_advance(self):
         """幹部先墊付：支出照記，再多記一筆「幹部代墊」收入；已歸墊再記一筆「歸還幹部代墊」支出；重跑不重複"""
@@ -1151,12 +1181,12 @@ class ImportSheetCommandTest(TestCase):
         rows = sorted((t, c, d, int(a)) for t, c, d, a in
                       records.values_list('type', 'category_id', 'date', 'amount'))
         self.assertEqual(rows, sorted([
-            ('expense', 'other', dt.date(2026, 3, 14), 600),            # 創團行政費歸「其他」
+            ('expense', 'founding_admin', dt.date(2026, 3, 14), 600),   # 創團行政費有自己的分類
             ('income', 'officer_advance', dt.date(2026, 3, 14), 600),   # 墊進團帳
-            ('expense', 'other', dt.date(2026, 3, 16), 400),
+            ('expense', 'founding_admin', dt.date(2026, 3, 16), 400),
             ('income', 'officer_advance', dt.date(2026, 3, 16), 400),
             ('expense', 'officer_advance', dt.date(2026, 3, 16), 400),  # 已歸墊：歸還
-            ('expense', 'venue', dt.date(2026, 3, 20), 100),            # 沒墊付就不產生代墊紀錄
+            ('expense', 'practice_room', dt.date(2026, 3, 20), 100),    # 沒墊付就不產生代墊紀錄
         ]))
         self.assertNotIn('不在預算項目裡', out.getvalue())             # 創團行政費是認得的項目
         self.assertIn('勾了「已歸墊」但沒勾「經手人先墊付」', out.getvalue())

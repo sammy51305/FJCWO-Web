@@ -996,13 +996,64 @@ class FinanceCategoryTest(TestCase):
         )
 
     def test_default_categories_seeded_by_migration(self):
-        """資料遷移要建好原本 8 個分類，加上新增的「贊助／捐款」「幹部代墊」；不含售票收入"""
+        """資料遷移要建好原本 8 個分類，加上「贊助／捐款」「幹部代墊」與試算表的預算項目（0015）；不含售票收入"""
         codes = set(FinanceCategory.objects.values_list('code', flat=True))
         self.assertEqual(codes, {
             'venue', 'instructor', 'instrument_purchase', 'instrument_maintenance',
             'score', 'insurance', 'membership', 'sponsorship', 'officer_advance', 'other',
+            'practice_room', 'conductor_fee', 'hosting', 'promotion', 'recording',
+            'staff', 'founding_admin', 'large_instrument',
         })
         self.assertFalse(FinanceCategory.objects.filter(name__contains='售票').exists())
+
+    def test_budget_migration_recategorizes_old_import_records(self):
+        """0015 把舊匯入留在「其他」「場地費」「師資費」的預算項目紀錄歸回新分類；
+        描述不是「項目：說明」格式的手動紀錄、收入、已改過分類的紀錄都不碰"""
+        import importlib
+        from django.apps import apps as django_apps
+
+        def make(code, description, type_='expense'):
+            return FinanceRecord.objects.create(
+                type=type_, category_id=code, amount=100, date='2026-03-14',
+                description=description, created_by=self.officer)
+
+        a = make('other', '創團行政費：租會議室（經手人：榮昕緯）')
+        b = make('venue', '團練室：11/1 團練')
+        c = make('instructor', '指揮費用')
+        d = make('other', '宣傳品設計費')               # 手動紀錄，描述只是剛好以「宣傳」開頭
+        e = make('other', '創團行政費：x', type_='income')   # 收入不動
+        f = make('venue', '場地費：音樂廳')              # 場地費本來就對
+        g = make('score', '創團行政費：x')               # 已被改到別的分類，不動
+        # 模擬遷移前的狀態：新分類還不存在（紀錄都還在舊分類，所以刪得掉）
+        FinanceCategory.objects.filter(
+            code__in=['founding_admin', 'practice_room', 'conductor_fee']).delete()
+        mig = importlib.import_module('apps.finance.migrations.0015_budget_item_categories')
+        mig.add_budget_categories(django_apps, None)
+        for rec in (a, b, c, d, e, f, g):
+            rec.refresh_from_db()
+        self.assertEqual(a.category_id, 'founding_admin')
+        self.assertEqual(b.category_id, 'practice_room')
+        self.assertEqual(c.category_id, 'conductor_fee')
+        self.assertEqual(d.category_id, 'other')
+        self.assertEqual(e.category_id, 'other')
+        self.assertEqual(f.category_id, 'venue')
+        self.assertEqual(g.category_id, 'score')
+
+    def test_budget_migration_reuses_existing_same_name_category(self):
+        """幹部已自己建過同名分類：沿用它，不重複建（名稱唯一），舊紀錄歸到那個分類"""
+        import importlib
+        from django.apps import apps as django_apps
+
+        FinanceCategory.objects.filter(code='promotion').delete()
+        mine = FinanceCategory.objects.create(name='宣傳', kind='both')
+        rec = FinanceRecord.objects.create(
+            type='expense', category_id='other', amount=100, date='2026-03-14',
+            description='宣傳：海報', created_by=self.officer)
+        mig = importlib.import_module('apps.finance.migrations.0015_budget_item_categories')
+        mig.add_budget_categories(django_apps, None)
+        rec.refresh_from_db()
+        self.assertEqual(FinanceCategory.objects.filter(name='宣傳').count(), 1)
+        self.assertEqual(rec.category_id, mine.code)
 
     def test_kinds_of_new_categories(self):
         """贊助／捐款只能是收入；幹部代墊收入（墊進來）與支出（歸還）都要能記"""

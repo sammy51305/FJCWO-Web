@@ -48,7 +48,7 @@ from apps.accounts.views import _import_registration_rows
 from apps.events.models import (
     LeaveRequest, PerformanceEvent, Rehearsal, RehearsalAttendance,
 )
-from apps.finance.models import FeePeriod, FinanceRecord, MembershipFee
+from apps.finance.models import FeePeriod, FinanceCategory, FinanceRecord, MembershipFee
 from apps.finance.views import _sync_fee_income
 from apps.public.models import Venue
 
@@ -76,22 +76,15 @@ _REQUIRED_HEADERS = {
     SHEET_EXPENSES: ('日期', '項目', '金額', '說明', '經手人'),
 }
 
-# 試算表「收支」分頁的預算項目 → 系統收支明細的分類。系統分類比較粗（團練室與場地費同屬
-# 場地費），所以描述一律寫成「項目：說明」，原本的預算項目不會因此消失。
-# 值是 FinanceCategory.code（內建分類的代碼，見 finance/migrations/0012）。
+# 試算表「收支」分頁的預算項目 → 系統收支明細的分類，**以分類名稱對照**：
+# 項目名稱跟系統裡某個啟用中、可記支出的分類同名，就歸那一類（finance/migrations/0015 已把
+# 預算項目全部建成分類）。所以預算多了新項目，幹部只要在後台建一個同名分類，下次匯入就對得上，
+# 不用改程式。只有名稱不一致的才需要列在這裡當別名。
+# 描述一律寫成「項目：說明」，原本的預算項目不會因此消失。
 # 對不上的項目歸「其他」並列入報告，不擋匯入——錢確實花了，帳不能漏。
-_EXPENSE_CATEGORY = {
-    '場地費': 'venue',
-    '團練室': 'venue',
-    '指揮費用': 'instructor',
-    '樂譜': 'score',
-    '架站與伺服器費': 'other',
-    '開發網站': 'other',      # 舊名，改名前填的支出紀錄仍認得
-    '宣傳': 'other',
-    '音樂會錄音錄影': 'other',
-    '工作人員': 'other',
-    '大型樂器': 'other',
-    '創團行政費': 'other',
+_EXPENSE_CATEGORY_ALIAS = {
+    '樂譜': '樂譜費',
+    '開發網站': '架站與伺服器費',      # 舊名，改名前填的支出紀錄仍認得
 }
 # 幹部用自己的錢先墊付時，支出照記，再多記一筆這個分類的收入（墊進團帳）；歸墊時另記一筆支出
 _ADVANCE_CATEGORY = 'officer_advance'
@@ -791,6 +784,11 @@ class Command(BaseCommand):
         wanted = Counter()        # (類型, 日期, 金額, 描述) → 試算表裡的筆數
         categories = {}
         advances = 0
+        # 名稱 → 代碼：啟用中、能記支出的分類
+        expense_categories = {
+            c.name: c.code for c in FinanceCategory.objects.filter(is_active=True)
+            if c.fits(FinanceRecord.Type.EXPENSE)
+        }
         for row_no, row in table:
             day = _to_date(row.get('日期'))
             if day is None:
@@ -804,7 +802,7 @@ class Command(BaseCommand):
             if not item:
                 problems.append(f'第 {row_no} 列：缺項目')
                 continue
-            category = _EXPENSE_CATEGORY.get(item)
+            category = expense_categories.get(_EXPENSE_CATEGORY_ALIAS.get(item, item))
             if category is None:
                 problems.append(f'第 {row_no} 列：項目「{item}」不在預算項目裡，歸為「其他」')
                 category = 'other'
