@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-11-19（共 666 個測試；關於百韻「人物介紹」排版與公開照片路徑 `AboutProfileSectionTest`）；2026-11-18（收支分類補上試算表預算項目、匯入改依分類名稱對照；幹部重設團員臨時密碼 `MemberResetPasswordTest`）；2026-11-16（登入閒置 8 小時逾時 `SessionTimeoutTest`）；2026-11-13（入團申請審核列表改依狀態排序（待審核→已核准→已拒絕）；新增「我的簽到記錄」頁 `PracticeMenuTest`；收款 QR Code 換圖刪舊檔、/media/ 需登入 `PaymentConfigTest`）；2026-11-12（團員撤銷請假、我的請假頁直接列近期排練 `LeaveCancelAndEntryTest`；帳號密碼信附登入網址 `TempPasswordEmailTest`）；2026-11-10（新增 Google 帳號登入與綁定 `GoogleLoginTest`、`<td>` 不可加 d-flex 的模板檢查）；2026-11-08（收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
+> 最後更新：2026-11-20（共 675 個測試；公告內容改用 Quill 格式化文字、HTML 白名單過濾 `AnnouncementRichTextTest`）；2026-11-19（共 666 個測試；關於百韻「人物介紹」排版與公開照片路徑 `AboutProfileSectionTest`）；2026-11-18（收支分類補上試算表預算項目、匯入改依分類名稱對照；幹部重設團員臨時密碼 `MemberResetPasswordTest`）；2026-11-16（登入閒置 8 小時逾時 `SessionTimeoutTest`）；2026-11-13（入團申請審核列表改依狀態排序（待審核→已核准→已拒絕）；新增「我的簽到記錄」頁 `PracticeMenuTest`；收款 QR Code 換圖刪舊檔、/media/ 需登入 `PaymentConfigTest`）；2026-11-12（團員撤銷請假、我的請假頁直接列近期排練 `LeaveCancelAndEntryTest`；帳號密碼信附登入網址 `TempPasswordEmailTest`）；2026-11-10（新增 Google 帳號登入與綁定 `GoogleLoginTest`、`<td>` 不可加 d-flex 的模板檢查）；2026-11-08（收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
 
 ---
 
@@ -90,8 +90,9 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **666 個測試**，分布在 8 個 app。
+共 **675 個測試**，分布在 8 個 app。
 
+> 2026-11-20 公告格式化文字：以 **SQLite 暫時設定**跑全站 674 個全數通過（skip 1），之後補的 `test_size_and_color_on_inline_tags_are_kept` 與 announcements、public 共 135 個再跑一次通過；尚待在 PostgreSQL 上跑一次全站確認。
 > 2026-11-19 關於百韻人物介紹：以 **SQLite 暫時設定**跑全站 666 個全數通過（本機 PostgreSQL 帳號無建庫權限）；尚待在 PostgreSQL 上跑一次全站確認。
 > 最近一次全站測試：2026-11-08 執行 `python manage.py test`（收支分類改為資料表、試算表匯入補場地／演出／幹部借款／先墊付），**595/595 全數通過、無 regression**（System check 亦無問題）。
 > 2026-11-10 Google 登入：在**無 PostgreSQL 帳密的機器上改用 SQLite 暫時設定**跑全站 614 個（不含最後補的槍手案例）全數通過、`GoogleLoginTest` 20/20 通過；尚待在 PostgreSQL 上跑一次全站確認。
@@ -181,7 +182,7 @@ python manage.py test --noinput
 | `FinanceRecordCRUDTest` | 收支明細：保險費分類存在／出現在表單／可實際建立（#13-10）、存取控制（未登入/團員/幹部）、新增（登記者自動帶入）、amount 0/負數/缺說明被擋、編輯、刪除限管理員（幹部擋下、管理員可刪）、列表收入/支出/結餘摘要 |
 | `FeeEditTest` | 團費登記（幹部代登記）：一般團員無權限、登記已繳（status=paid、設 paid_at 與收款幹部）、未繳（status=unpaid、兩者為空）、金額一律自期別快照（不受表單影響）、同 member+period 再登記更新不重複、缺團員/期別被擋 |
 
-### `apps/announcements/tests.py`（28 個）
+### `apps/announcements/tests.py`（37 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -192,6 +193,7 @@ python manage.py test --noinput
 | `AnnouncementEditTest` | 幹部可編輯、無效輸入不儲存 |
 | `AnnouncementPublishTest` | 發布草稿設定 published_at、取消發布清除 published_at |
 | `AnnouncementDeleteTest` | 幹部可刪除、GET 請求不刪除 |
+| `AnnouncementRichTextTest` | 公告格式化文字（Quill）：工具列格式（字級、粗斜底線刪除線、顏色底色、清單縮排、對齊、連結）存檔保留，格式疊加時寫在 `<u>`／`<strong>` 上的字級與顏色也保留；`<script>`／事件屬性／`javascript:`／白名單外 class 與樣式被拿掉；空白編輯器 `<p><br></p>` 視為沒填；沒跑 JS 的純文字原樣保存；詳情頁輸出格式並載入 Quill 樣式、顯示時再過濾一次；舊純文字跳脫後一行一段；編輯頁載入編輯器並帶入既有內容 |
 
 ### `apps/notifications/tests.py`（4 個）
 
@@ -343,5 +345,6 @@ def test_invalid_state_raises(self):
 | `events` | 演出樂譜資料夾設定頁「批次貼上」的名稱→族群自動配對（前端 JS） | Django 測試碰不到瀏覽器 JS；2026-10-22 以 node 對 13 個族群名稱＋「總譜」手動驗證過配對（含「上低音號」不被「低音號」搶走）；後端不信任前端、只驗收最後送出的欄位 |
 | `scores` | 樂譜庫存／演出樂譜資料夾在真實瀏覽器的版面 | 無瀏覽器自動化測試；雲端環境連不到 CDN、Bootstrap 沒載入，只能看結構 |
 | `accounts` | Google 登入與 Google 的實際往返（`_exchange_code` 打 token endpoint） | 測試一律 mock 掉；需在正式站設好 OAuth 用戶端後人工登入一次驗證（步驟見 DEPLOY-WINDOWS 10-b 第 5 點）|
+| `announcements` | Quill 編輯器在真實瀏覽器的操作（工具列、貼上 Word、送出寫回 textarea） | 前端 JS，Django 測試碰不到；後端不信任前端，存檔與顯示都再過濾一次（`AnnouncementRichTextTest`）|
 | `meetings` | 所有功能 | Phase 3，尚未實作 |
 | `notifications` | Admin 觸發通知的整合測試 | 需要 mock Admin save_model，目前僅覆蓋 utils 層 |

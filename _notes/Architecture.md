@@ -508,7 +508,7 @@ Hugo 是靜態網站生成器，無法做到真正的權限控制。
 | 欄位 | 說明 |
 |------|------|
 | title | 標題 |
-| content | 內容 |
+| content | 內容（Quill 編輯器產生的 HTML，存檔與顯示都經白名單過濾；舊公告為純文字，見 DESIGN §4.10）|
 | visibility | public / member_only / officer_only |
 | event_date | 活動日期（選填）|
 | created_by | 發布者（關聯 User）|

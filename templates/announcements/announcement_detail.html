@@ -1,4 +1,13 @@
 {% extends "base.html" %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'vendor/quill-2.0.3/quill.snow.css' %}">
+<style>
+  .announcement-content.ql-editor { padding: 0; height: auto; overflow: visible; font-size: 1rem; }
+  .announcement-content p { margin-bottom: 0; }
+</style>
+{% endblock %}
 
 {% block title %}{{ announcement.title }} — 百韻管樂團{% endblock %}
 
@@ -32,7 +41,8 @@
     </p>
 
     <hr>
-    <div class="lh-lg" style="white-space: pre-wrap;">{{ announcement.content }}</div>
+    {# 內容已在 view 端經白名單過濾（apps/announcements/richtext.py） #}
+    <div class="ql-snow"><div class="ql-editor announcement-content lh-lg">{{ content_html }}</div></div>
 
     {% if user.is_officer %}
     <hr>
