@@ -1800,6 +1800,21 @@ sections = AboutSection.objects.filter(is_visible=True)
 #### 刪除設計
 
 刪除區塊無 cascade 風險（無 FK 關聯），附 `confirm()` 對話框確認即可，不需要 modal。
+刪除時一併刪掉區塊的照片檔（見下）。
+
+#### 人物介紹排版（`layout=profile`，2026-11-19）
+
+用來介紹指揮、駐團老師：照片在左、姓名＋稱謂＋學經歷清單在右，`content` 作為下方的介紹文
+（比照演出手冊的「指揮介紹」頁）。手機寬度改為上下排列。
+
+- **不另開 Model**：人物介紹同樣要排順序、要草稿，只是排版不同，所以在 `AboutSection` 加
+  `layout`（`text`／`profile`）與 `person_name`、`person_title`、`photo`、`credentials`（一行一項）四個選填欄位；
+  `layout=profile` 時姓名必填。一般文章區塊完全不受影響。
+- **照片公開可讀**：關於頁不需登入，但 `/media/` 預設要登入（收據屬內部資料，見 `config/urls.py`）。
+  照片因此存在 `media/public/about/`，`/media/public/` 這條路不需登入；`document_root` 鎖在
+  `MEDIA_ROOT/public`，`/media/public/../finance/…` 會被 `safe_join` 擋下，不能拿來繞過登入讀收據。
+- **只收圖片**：照片在公開路徑上，上傳時以 `forms.ImageField` 驗證（Pillow 打得開才收）。
+- **不留孤兒檔**：換照片刪舊檔、勾「移除照片」刪檔、刪區塊刪檔；刪檔延到驗證通過後才做，表單有錯不會先把舊照片刪掉。
 
 ---
 

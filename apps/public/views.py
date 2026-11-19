@@ -1,5 +1,6 @@
 from datetime import datetime, time
 
+from django import forms
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -183,41 +184,82 @@ def about_manage(request):
     return render(request, 'public/about_manage.html', {'sections': sections})
 
 
+def _apply_about_form(request, section):
+    """把 POST 資料寫進 section（新建或既有皆可），回傳 errors 清單；有錯時 section 不存檔。
+
+    照片：上傳新圖會換掉舊檔（舊檔一併刪除，免得 media/public/about/ 堆積孤兒檔）；
+    勾「移除照片」則清空。實際刪檔延到驗證通過、存檔前才做，驗證失敗不會先把舊照片刪掉。
+    """
+    title = request.POST.get('title', '').strip()
+    content = request.POST.get('content', '').strip()
+    order = request.POST.get('order', '0').strip()
+    layout = request.POST.get('layout', AboutSection.Layout.TEXT)
+
+    section.title = title
+    section.content = content
+    section.is_visible = request.POST.get('is_visible') == 'on'
+    section.layout = layout
+    section.person_name = request.POST.get('person_name', '').strip()
+    section.person_title = request.POST.get('person_title', '').strip()
+    section.credentials = request.POST.get('credentials', '').strip()
+
+    errors = []
+    if not title:
+        errors.append('請填寫標題。')
+    if not content:
+        errors.append('請填寫內容。')
+    if not order.isdigit():
+        errors.append('顯示順序請填入數字。')
+    else:
+        section.order = int(order)
+    if layout not in AboutSection.Layout.values:
+        errors.append('排版選項不正確。')
+    elif layout == AboutSection.Layout.PROFILE and not section.person_name:
+        errors.append('人物介紹請填寫姓名。')
+
+    photo = request.FILES.get('photo')
+    if photo:
+        # 用 ImageField 的表單欄位驗證：Pillow 真的打得開才收，避免把任意檔案放上公開路徑
+        try:
+            photo = forms.ImageField().clean(photo)
+        except forms.ValidationError:
+            errors.append('照片請上傳圖片檔（JPG、PNG 等）。')
+            photo = None
+    if errors:
+        return errors
+
+    if photo:
+        if section.photo:
+            section.photo.delete(save=False)
+        section.photo = photo
+    elif request.POST.get('remove_photo') == 'on' and section.photo:
+        section.photo.delete(save=False)
+        section.photo = ''
+    section.save()
+    return []
+
+
 @login_required
 def about_create(request):
     if not request.user.is_officer:
         messages.error(request, '權限不足。')
         return redirect('public:about')
 
+    section = AboutSection()
     if request.method == 'POST':
-        title = request.POST.get('title', '').strip()
-        content = request.POST.get('content', '').strip()
-        order = request.POST.get('order', '0').strip()
-        is_visible = request.POST.get('is_visible') == 'on'
-
-        errors = []
-        if not title:
-            errors.append('請填寫標題。')
-        if not content:
-            errors.append('請填寫內容。')
-        if not order.isdigit():
-            errors.append('顯示順序請填入數字。')
-
-        if errors:
-            for e in errors:
-                messages.error(request, e)
-        else:
-            AboutSection.objects.create(
-                title=title, content=content,
-                order=int(order), is_visible=is_visible,
-            )
-            messages.success(request, f'區塊《{title}》已新增。')
+        errors = _apply_about_form(request, section)
+        if not errors:
+            messages.success(request, f'區塊《{section.title}》已新增。')
             return redirect('public:about_manage')
+        for e in errors:
+            messages.error(request, e)
+    else:
+        section.order = (AboutSection.objects.order_by('-order').values_list('order', flat=True).first() or 0) + 1
 
-    next_order = (AboutSection.objects.order_by('-order').values_list('order', flat=True).first() or 0) + 1
     return render(request, 'public/about_form.html', {
         'action': 'create',
-        'next_order': next_order,
+        'section': section,
+        'layouts': AboutSection.Layout.choices,
     })
 
 
@@ -228,36 +270,18 @@ def about_edit(request, pk):
         return redirect('public:about')
 
     section = get_object_or_404(AboutSection, pk=pk)
-
     if request.method == 'POST':
-        title = request.POST.get('title', '').strip()
-        content = request.POST.get('content', '').strip()
-        order = request.POST.get('order', '0').strip()
-        is_visible = request.POST.get('is_visible') == 'on'
-
-        errors = []
-        if not title:
-            errors.append('請填寫標題。')
-        if not content:
-            errors.append('請填寫內容。')
-        if not order.isdigit():
-            errors.append('顯示順序請填入數字。')
-
-        if errors:
-            for e in errors:
-                messages.error(request, e)
-        else:
-            section.title = title
-            section.content = content
-            section.order = int(order)
-            section.is_visible = is_visible
-            section.save()
-            messages.success(request, f'區塊《{title}》已更新。')
+        errors = _apply_about_form(request, section)
+        if not errors:
+            messages.success(request, f'區塊《{section.title}》已更新。')
             return redirect('public:about_manage')
+        for e in errors:
+            messages.error(request, e)
 
     return render(request, 'public/about_form.html', {
         'action': 'edit',
         'section': section,
+        'layouts': AboutSection.Layout.choices,
     })
 
 
@@ -272,6 +296,8 @@ def about_delete(request, pk):
 
     section = get_object_or_404(AboutSection, pk=pk)
     title = section.title
+    if section.photo:
+        section.photo.delete(save=False)
     section.delete()
     messages.success(request, f'區塊《{title}》已刪除。')
     return redirect('public:about_manage')

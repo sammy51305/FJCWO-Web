@@ -17,6 +17,29 @@
   {% for section in sections %}
   <section class="mb-5">
     <h3 class="mb-3">{{ section.title }}</h3>
+    {% if section.is_profile %}
+    <div class="row g-4 align-items-start mb-4">
+      {% if section.photo %}
+      <div class="col-sm-5 col-lg-4">
+        <img src="{{ section.photo.url }}" alt="{{ section.person_name }}"
+             class="img-fluid rounded-3 shadow-sm w-100" style="object-fit: cover;">
+      </div>
+      {% endif %}
+      <div class="{% if section.photo %}col-sm-7 col-lg-8{% else %}col-12{% endif %}">
+        <p class="mb-3">
+          <span class="fs-2 fw-light">{{ section.person_name }}</span>
+          {% if section.person_title %}<span class="fs-5 ms-2 text-muted">{{ section.person_title }}</span>{% endif %}
+        </p>
+        {% with lines=section.credential_lines %}
+        {% if lines %}
+        <ul class="list-unstyled small text-muted mb-0">
+          {% for line in lines %}<li class="mb-1">{{ line }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        {% endwith %}
+      </div>
+    </div>
+    {% endif %}
     <div style="white-space: pre-wrap;">{{ section.content }}</div>
   </section>
   {% endfor %}

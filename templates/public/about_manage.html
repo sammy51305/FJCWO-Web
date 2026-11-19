@@ -30,7 +30,10 @@
       {% for section in sections %}
       <tr>
         <td class="text-muted">{{ section.order }}</td>
-        <td>{{ section.title }}</td>
+        <td>
+          {{ section.title }}
+          {% if section.is_profile %}<span class="badge text-bg-light border ms-1">人物介紹：{{ section.person_name }}</span>{% endif %}
+        </td>
         <td>
           {% if section.is_visible %}
           <span class="badge bg-success">公開</span>
