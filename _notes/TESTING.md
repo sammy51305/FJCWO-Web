@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-11-20（共 675 個測試；公告內容改用 Quill 格式化文字、HTML 白名單過濾 `AnnouncementRichTextTest`）；2026-11-19（共 666 個測試；關於百韻「人物介紹」排版與公開照片路徑 `AboutProfileSectionTest`）；2026-11-18（收支分類補上試算表預算項目、匯入改依分類名稱對照；幹部重設團員臨時密碼 `MemberResetPasswordTest`）；2026-11-16（登入閒置 8 小時逾時 `SessionTimeoutTest`）；2026-11-13（入團申請審核列表改依狀態排序（待審核→已核准→已拒絕）；新增「我的簽到記錄」頁 `PracticeMenuTest`；收款 QR Code 換圖刪舊檔、/media/ 需登入 `PaymentConfigTest`）；2026-11-12（團員撤銷請假、我的請假頁直接列近期排練 `LeaveCancelAndEntryTest`；帳號密碼信附登入網址 `TempPasswordEmailTest`）；2026-11-10（新增 Google 帳號登入與綁定 `GoogleLoginTest`、`<td>` 不可加 d-flex 的模板檢查）；2026-11-08（收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
+> 最後更新：2026-11-20（共 686 個測試；團費登記可選一般／學生團費 `FeeEditTierTest`、後台改團費同步收入與補登指令 `FeeIncomeBackfillTest`）；2026-11-20（共 675 個測試；公告內容改用 Quill 格式化文字、HTML 白名單過濾 `AnnouncementRichTextTest`）；2026-11-19（共 666 個測試；關於百韻「人物介紹」排版與公開照片路徑 `AboutProfileSectionTest`）；2026-11-18（收支分類補上試算表預算項目、匯入改依分類名稱對照；幹部重設團員臨時密碼 `MemberResetPasswordTest`）；2026-11-16（登入閒置 8 小時逾時 `SessionTimeoutTest`）；2026-11-13（入團申請審核列表改依狀態排序（待審核→已核准→已拒絕）；新增「我的簽到記錄」頁 `PracticeMenuTest`；收款 QR Code 換圖刪舊檔、/media/ 需登入 `PaymentConfigTest`）；2026-11-12（團員撤銷請假、我的請假頁直接列近期排練 `LeaveCancelAndEntryTest`；帳號密碼信附登入網址 `TempPasswordEmailTest`）；2026-11-10（新增 Google 帳號登入與綁定 `GoogleLoginTest`、`<td>` 不可加 d-flex 的模板檢查）；2026-11-08（收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
 
 ---
 
@@ -90,8 +90,9 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **675 個測試**，分布在 8 個 app。
+共 **686 個測試**，分布在 8 個 app。
 
+> 2026-11-20 團費級距與收入補登：以 **SQLite 暫時設定**跑全站 686 個全數通過；尚待在 PostgreSQL 上跑一次全站確認。
 > 2026-11-20 公告格式化文字：以 **SQLite 暫時設定**跑全站 674 個全數通過（skip 1），之後補的 `test_size_and_color_on_inline_tags_are_kept` 與 announcements、public 共 135 個再跑一次通過；尚待在 PostgreSQL 上跑一次全站確認。
 > 2026-11-19 關於百韻人物介紹：以 **SQLite 暫時設定**跑全站 666 個全數通過（本機 PostgreSQL 帳號無建庫權限）；尚待在 PostgreSQL 上跑一次全站確認。
 > 最近一次全站測試：2026-11-08 執行 `python manage.py test`（收支分類改為資料表、試算表匯入補場地／演出／幹部借款／先墊付），**595/595 全數通過、無 regression**（System check 亦無問題）。
@@ -166,12 +167,14 @@ python manage.py test --noinput
 |-------|---------|
 | `BorrowStatusReportTest` | 存取控制、空狀態訊息、借出中財產顯示、已還財產不顯示、逾期標記（overdue flag）、未到期不標記、overdue_count 正確計算 |
 
-### `apps/finance/tests.py`（98 個）
+### `apps/finance/tests.py`（109 個）
 
 | Class | 測試內容 |
 |-------|---------|
 | `MembershipFeeReportTest` | 存取控制、無期別時提示新增期別、預設最新期別、GET（期別 pk）切換、已繳/待確認/未繳/作廢(視為無紀錄)/無紀錄分類計數、rows 涵蓋活躍非 admin 團員、槍手排除 |
 | `StudentFeeTest` | 學生團費：`amount_for` 學生取學生團費、非學生取一般金額、期別沒訂學生團費時學生繳一般金額；期別表單學生團費選填（留空存 None、0 被擋）；幹部登記、團員申報、幹部確認三處金額快照都取 1,000（收支明細收入同步）；「我的團費」與申報頁顯示學生應繳金額；繳納狀況表頭列學生團費並標示學生 |
+| `FeeEditTierTest` | 登記／編輯團費選一般或學生團費：沒註記學生也能選 1,000（收入同步）、有註記學生也能選 4,500、改選級距收入金額跟著更新不重複、期別沒設學生團費選學生被擋、預設級距依學生註記或既有紀錄金額 |
+| `FeeIncomeBackfillTest` | 團費收入漏帳：後台存成已繳產生收入／改回未繳移除、後台單筆或批次刪除連帶刪收入；`sync_fee_income` 預設只列出不寫入、`--apply` 補登（金額、日期＝繳費日、團費分類、建立者）且重跑不重複、修正金額不一致、未繳／待確認不補、`--apply` 缺 `--operator` 或非幹部被拒 |
 | `FeePeriodTest` | 團費期別主檔 CRUD：存取控制（團員無權限/幹部可看）、新增、同年份+期別重複被擋、金額 0 被擋、編輯、刪除限管理員（幹部擋下/管理員可刪）、已有繳費紀錄時 PROTECT 擋下 |
 | `FeeReportTest` | 團員自助申報（S2 現金 / S4 轉帳）：我的團費列期別/可申報、現金申報建 reported（記收款幹部、金額快照）、缺收款幹部被擋、轉帳申報記末五碼(無收款幹部)、末五碼非 5 位數字被擋、已申報/已繳不可重複、作廢後可重新申報、撤回自己的待確認、不可撤回已繳/他人 |
 | `PaymentConfigTest` | 轉帳收款設定（S4）：存取控制（團員無權限/幹部可看）、儲存結構化欄位（代號/名稱/戶名/帳號）到單例設定、帳號存檔自動去除 dash 與空白、上傳 QR Code 圖檔保存、換圖刪舊檔、/media/ 需登入才能讀 |

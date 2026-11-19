@@ -428,7 +428,9 @@ def _sync_fee_income(fee, user):
 def fee_edit(request):
     """
     團費登記／編輯（幹部限定）。以 member + period(FeePeriod) 定位一筆 MembershipFee
-    （get_or_create），設定狀態（已繳/未繳）與收款幹部；金額由期別固定金額快照，幹部不填。
+    （get_or_create），設定狀態（已繳/未繳）與收款幹部。
+    金額由幹部在「一般團費／學生團費」二選一（期別有設學生團費時才有學生選項），
+    預設依團員的「學生」註記帶入（2026-11-20：原本只能靠註記自動決定、幹部無法改）。
     從團費收繳報表每列進入。確認為已繳時自動同步一筆收支明細收入。
     """
     if not request.user.is_officer:
@@ -447,6 +449,7 @@ def fee_edit(request):
         period_id = request.POST.get('period', '')
         paid = request.POST.get('paid') == 'on'
         paid_at_raw = request.POST.get('paid_at', '').strip()
+        tier = request.POST.get('tier', '')
 
         errors = []
         member = User.objects.filter(pk=member_id).first() if member_id else None
@@ -455,6 +458,8 @@ def fee_edit(request):
             errors.append('請選擇團員。')
         if not period:
             errors.append('請選擇期別。')
+        elif tier == 'student' and not period.student_amount:
+            errors.append(f'「{period}」沒有設定學生團費，請先到「管理期別」設定，或改選一般團費。')
 
         if errors:
             for e in errors:
@@ -462,15 +467,22 @@ def fee_edit(request):
             return render(request, 'finance/fee_form.html', {
                 'members': members, 'periods': periods,
                 'form_data': request.POST,
+                'selected_period': period,
                 'today': timezone.localdate().isoformat(),
             })
 
         paid_at = (parse_date(paid_at_raw) or timezone.localdate()) if paid else None
         S = MembershipFee.Status
+        if tier == 'student':
+            amount = period.student_amount
+        elif tier == 'regular':
+            amount = period.amount
+        else:   # 舊表單沒有這個欄位：照團員的學生註記
+            amount = period.amount_for(member)
         fee, _ = MembershipFee.objects.get_or_create(
-            member=member, period=period, defaults={'amount': period.amount_for(member)},
+            member=member, period=period, defaults={'amount': amount},
         )
-        fee.amount = period.amount_for(member)   # 金額快照：以期別當下的金額為準（學生取學生團費）
+        fee.amount = amount   # 金額快照：以期別當下的金額為準
         fee.status = S.PAID if paid else S.UNPAID
         fee.paid_at = paid_at
         fee.collected_by = request.user if paid else None
@@ -484,15 +496,26 @@ def fee_edit(request):
     fee = None
     if selected_member_id and period_id:
         fee = MembershipFee.objects.filter(member_id=selected_member_id, period_id=period_id).first()
+    selected_period = periods.filter(pk=period_id).first() if period_id.isdigit() else None
+    selected_member = members.filter(pk=selected_member_id).first() if selected_member_id.isdigit() else None
+    # 預設的金額級距：已有紀錄看當初記的金額，沒有紀錄看團員的學生註記
+    if fee and selected_period and selected_period.student_amount:
+        tier = 'student' if fee.amount == selected_period.student_amount else 'regular'
+    elif fee is None and selected_member and selected_member.is_student:
+        tier = 'student'
+    else:
+        tier = 'regular'
     form_data = {
         'member': selected_member_id,
         'period': period_id,
         'paid': fee.is_paid if fee else False,
         'paid_at': fee.paid_at.isoformat() if fee and fee.paid_at else timezone.localdate().isoformat(),
+        'tier': tier,
     }
     return render(request, 'finance/fee_form.html', {
         'members': members, 'periods': periods,
         'form_data': form_data,
+        'selected_period': selected_period,
         'today': timezone.localdate().isoformat(),
     })
 

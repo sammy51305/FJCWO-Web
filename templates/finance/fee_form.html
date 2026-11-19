@@ -14,7 +14,7 @@
   <div class="col-lg-6">
     <h2 class="mb-4">登記／編輯團費</h2>
 
-    <form method="post">
+    <form method="post" id="fee-form">
       {% csrf_token %}
 
       <div class="mb-3">
@@ -22,8 +22,8 @@
         <select name="member" class="form-select" required>
           <option value="">請選擇</option>
           {% for m in members %}
-          <option value="{{ m.pk }}" {% if form_data.member == m.pk|stringformat:"s" %}selected{% endif %}>
-            {{ m.name }}{% if m.instrument %}（{{ m.instrument.name }}）{% endif %}
+          <option value="{{ m.pk }}" data-student="{{ m.is_student|yesno:'1,0' }}" {% if form_data.member == m.pk|stringformat:"s" %}selected{% endif %}>
+            {{ m.name }}{% if m.instrument %}（{{ m.instrument.name }}）{% endif %}{% if m.is_student %}・學生{% endif %}
           </option>
           {% endfor %}
         </select>
@@ -34,15 +34,34 @@
         <select name="period" class="form-select" required>
           <option value="">請選擇</option>
           {% for p in periods %}
-          <option value="{{ p.pk }}" {% if form_data.period == p.pk|stringformat:"s" %}selected{% endif %}>
+          <option value="{{ p.pk }}" data-amount="{{ p.amount|floatformat:'0' }}" data-student-amount="{{ p.student_amount|floatformat:'0'|default:'' }}" {% if form_data.period == p.pk|stringformat:"s" %}selected{% endif %}>
             {{ p }}（團費 {{ p.amount|floatformat:"0" }} 元{% if p.student_amount %}・學生 {{ p.student_amount|floatformat:"0" }} 元{% endif %}）
           </option>
           {% endfor %}
         </select>
         <div class="form-text">
-          金額由期別的固定團費決定，登記時自動帶入。
           尚無期別？<a href="{% url 'finance:fee_period_create' %}">先新增期別</a>。
         </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">金額 <span class="text-danger">*</span></label>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="tier" id="tier-regular" value="regular"
+                 {% if form_data.tier != 'student' %}checked{% endif %}>
+          <label class="form-check-label" for="tier-regular">
+            一般團費 <span id="regular-amount">{% if selected_period %}{{ selected_period.amount|floatformat:"0" }}{% else %}—{% endif %}</span> 元
+          </label>
+        </div>
+        <div class="form-check" id="tier-student-wrap">
+          <input class="form-check-input" type="radio" name="tier" id="tier-student" value="student"
+                 {% if form_data.tier == 'student' %}checked{% endif %}
+                 {% if selected_period and not selected_period.student_amount %}disabled{% endif %}>
+          <label class="form-check-label" for="tier-student">
+            學生團費 <span id="student-amount">{% if selected_period.student_amount %}{{ selected_period.student_amount|floatformat:"0" }} 元{% elif selected_period %}（此期別未設定，可到「管理期別」補上）{% else %}—{% endif %}</span>
+          </label>
+        </div>
+        <div class="form-text">預設依團員資料的「學生」註記帶入，可直接改。</div>
       </div>
 
       <div class="form-check mb-3">
@@ -64,4 +83,35 @@
     </form>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var form = document.getElementById('fee-form');
+  var memberSel = form.querySelector('select[name=member]');
+  var periodSel = form.querySelector('select[name=period]');
+  var regular = document.getElementById('tier-regular');
+  var student = document.getElementById('tier-student');
+
+  // 換期別：更新兩個金額；該期沒有學生團費就停用學生選項
+  function syncPeriod() {
+    var opt = periodSel.selectedOptions[0];
+    var amt = opt && opt.dataset.amount, stu = opt && opt.dataset.studentAmount;
+    document.getElementById('regular-amount').textContent = amt || '—';
+    document.getElementById('student-amount').textContent =
+      !opt || !opt.value ? '—' : (stu ? stu + ' 元' : '（此期別未設定，可到「管理期別」補上）');
+    student.disabled = !!(opt && opt.value && !stu);
+    if (student.disabled && student.checked) regular.checked = true;
+  }
+  // 換團員：依學生註記重新帶預設（使用者之後仍可手動改）
+  function syncMember() {
+    var opt = memberSel.selectedOptions[0];
+    if (opt && opt.dataset.student === '1' && !student.disabled) student.checked = true;
+    else regular.checked = true;
+  }
+  periodSel.addEventListener('change', syncPeriod);
+  memberSel.addEventListener('change', syncMember);
+})();
+</script>
 {% endblock %}

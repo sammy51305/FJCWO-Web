@@ -973,6 +973,175 @@ class StudentFeeTest(TestCase):
         self.assertContains(r, 'badge bg-info text-dark">學生</span>')
 
 
+class FeeEditTierTest(TestCase):
+    """登記／編輯團費可直接選一般或學生團費（2026-11-20 回饋：非學生註記的人選不到 1,000）"""
+
+    def setUp(self):
+        self.officer = User.objects.create_user(
+            username='ft_officer', email='ft_officer@test.local', password='x',
+            name='級距幹部', role=User.Role.OFFICER,
+        )
+        self.adult = User.objects.create_user(
+            username='ft_adult', email='ft_adult@test.local', password='x',
+            name='沒註記學生', role=User.Role.MEMBER,
+        )
+        self.student = User.objects.create_user(
+            username='ft_student', email='ft_student@test.local', password='x',
+            name='有註記學生', role=User.Role.MEMBER, is_student=True,
+        )
+        self.period = FeePeriod.objects.create(year=2026, term='second', amount=4500, student_amount=1000)
+        self.url = reverse('finance:fee_edit')
+        self.client.force_login(self.officer)
+
+    def _post(self, member, tier, period=None):
+        return self.client.post(self.url, {
+            'member': member.pk, 'period': (period or self.period).pk,
+            'paid': 'on', 'paid_at': '2026-11-20', 'tier': tier,
+        })
+
+    def test_choose_student_for_unflagged_member(self):
+        """沒有學生註記的團員，幹部選學生團費 → 金額與收入都是 1,000"""
+        self._post(self.adult, 'student')
+        fee = MembershipFee.objects.get(member=self.adult)
+        self.assertEqual((fee.amount, fee.finance_record.amount), (1000, 1000))
+
+    def test_choose_regular_for_flagged_student(self):
+        """有學生註記的團員，幹部選一般團費 → 4,500"""
+        self._post(self.student, 'regular')
+        self.assertEqual(MembershipFee.objects.get(member=self.student).amount, 4500)
+
+    def test_switching_tier_updates_income(self):
+        """改選級距後，對應的收支明細收入金額跟著更新、不重複新增"""
+        self._post(self.adult, 'regular')
+        self._post(self.adult, 'student')
+        fee = MembershipFee.objects.get(member=self.adult)
+        self.assertEqual(fee.finance_record.amount, 1000)
+        self.assertEqual(FinanceRecord.objects.count(), 1)
+
+    def test_student_tier_rejected_when_period_has_no_student_amount(self):
+        """期別沒設學生團費卻選學生 → 擋下並提示，不建立紀錄"""
+        plain = FeePeriod.objects.create(year=2027, term='first', amount=4500)
+        r = self._post(self.adult, 'student', period=plain)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, '沒有設定學生團費')
+        self.assertFalse(MembershipFee.objects.exists())
+
+    def test_default_tier_follows_flag_or_existing_amount(self):
+        """表單預設：沒紀錄時看學生註記；已有紀錄時看當初記的金額"""
+        r = self.client.get(self.url, {'member': self.student.pk, 'period': self.period.pk})
+        self.assertEqual(r.context['form_data']['tier'], 'student')
+        r = self.client.get(self.url, {'member': self.adult.pk, 'period': self.period.pk})
+        self.assertEqual(r.context['form_data']['tier'], 'regular')
+        self._post(self.adult, 'student')
+        r = self.client.get(self.url, {'member': self.adult.pk, 'period': self.period.pk})
+        self.assertEqual(r.context['form_data']['tier'], 'student')
+        self.assertContains(r, '學生團費 <span id="student-amount">1000 元</span>')
+
+
+class FeeIncomeBackfillTest(TestCase):
+    """團費已繳卻沒有收支明細收入：後台改狀態也要同步、補登指令可補回漏掉的（2026-11-20 回饋）"""
+
+    def setUp(self):
+        from .admin import MembershipFeeAdmin
+        self.officer = User.objects.create_user(
+            username='fb_officer', email='fb_officer@test.local', password='x',
+            name='補登幹部', role=User.Role.OFFICER,
+        )
+        self.member = User.objects.create_user(
+            username='fb_member', email='fb_member@test.local', password='x',
+            name='漏帳團員', role=User.Role.MEMBER,
+        )
+        self.period = FeePeriod.objects.create(year=2026, term='second', amount=4500)
+        self.admin = MembershipFeeAdmin(MembershipFee, AdminSite())
+        self.request = RequestFactory().post('/')
+        self.request.user = self.officer
+
+    def _orphan_paid_fee(self, **kw):
+        """模擬以前在後台直接改成已繳、沒有對應收入的團費"""
+        return MembershipFee.objects.create(
+            member=self.member, period=self.period, amount=4500,
+            status=MembershipFee.Status.PAID, paid_at=timezone.localdate(), **kw,
+        )
+
+    def test_admin_save_paid_creates_income(self):
+        """在後台把團費存成已繳 → 自動產生收入；改回未繳 → 收入移除"""
+        fee = MembershipFee(member=self.member, period=self.period, amount=4500,
+                            status=MembershipFee.Status.PAID, paid_at=timezone.localdate())
+        self.admin.save_model(self.request, fee, None, False)
+        fee.refresh_from_db()
+        self.assertEqual(fee.finance_record.amount, 4500)
+
+        fee.status = MembershipFee.Status.UNPAID
+        self.admin.save_model(self.request, fee, None, True)
+        fee.refresh_from_db()
+        self.assertIsNone(fee.finance_record)
+        self.assertFalse(FinanceRecord.objects.exists())
+
+    def test_admin_delete_removes_income(self):
+        """在後台刪除團費（單筆或批次）→ 對應收入一起刪"""
+        fee = MembershipFee(member=self.member, period=self.period, amount=4500,
+                            status=MembershipFee.Status.PAID, paid_at=timezone.localdate())
+        self.admin.save_model(self.request, fee, None, False)
+        self.admin.delete_queryset(self.request, MembershipFee.objects.all())
+        self.assertFalse(FinanceRecord.objects.exists())
+
+    def test_command_dry_run_does_not_write(self):
+        """補登指令預設只列出，不寫入"""
+        from io import StringIO
+        from django.core.management import call_command
+        self._orphan_paid_fee()
+        out = StringIO()
+        call_command('sync_fee_income', stdout=out)
+        self.assertIn('漏帳團員', out.getvalue())
+        self.assertIn('--apply', out.getvalue())
+        self.assertFalse(FinanceRecord.objects.exists())
+
+    def test_command_apply_backfills_once(self):
+        """--apply 補上收入（金額、日期＝繳費日、團費分類），重跑不會補第二筆"""
+        from io import StringIO
+        from django.core.management import call_command
+        fee = self._orphan_paid_fee()   # 轉帳等沒有收款幹部的情況 → 建立者記為 --operator
+        call_command('sync_fee_income', '--apply', '--operator', 'fb_officer', stdout=StringIO())
+        call_command('sync_fee_income', '--apply', '--operator', 'fb_officer', stdout=StringIO())
+        fee.refresh_from_db()
+        rec = fee.finance_record
+        self.assertEqual(FinanceRecord.objects.count(), 1)
+        self.assertEqual((rec.amount, rec.date, rec.category, rec.type, rec.created_by),
+                         (4500, fee.paid_at, FinanceCategory.membership(), FinanceRecord.Type.INCOME,
+                          self.officer))
+
+    def test_command_apply_requires_officer_operator(self):
+        """--apply 沒給 --operator、或給的不是幹部 → 拒絕執行"""
+        from io import StringIO
+        from django.core.management import CommandError, call_command
+        self._orphan_paid_fee()
+        with self.assertRaises(CommandError):
+            call_command('sync_fee_income', '--apply', stdout=StringIO())
+        with self.assertRaises(CommandError):
+            call_command('sync_fee_income', '--apply', '--operator', 'fb_member', stdout=StringIO())
+        self.assertFalse(FinanceRecord.objects.exists())
+
+    def test_command_fixes_mismatched_amount_and_ignores_unpaid(self):
+        """收入金額與團費不一致 → 修正；未繳／待確認的團費不補收入"""
+        from io import StringIO
+        from django.core.management import call_command
+        fee = self._orphan_paid_fee()
+        rec = FinanceRecord.objects.create(
+            type=FinanceRecord.Type.INCOME, category=FinanceCategory.membership(),
+            amount=1000, date=fee.paid_at, description='舊的', created_by=self.officer,
+        )
+        fee.finance_record = rec
+        fee.save()
+        other = User.objects.create_user(username='fb_other', email='fb_o@test.local', password='x',
+                                         name='還沒繳', role=User.Role.MEMBER)
+        MembershipFee.objects.create(member=other, period=self.period, amount=4500,
+                                     status=MembershipFee.Status.REPORTED)
+        call_command('sync_fee_income', '--apply', '--operator', 'fb_officer', stdout=StringIO())
+        rec.refresh_from_db()
+        self.assertEqual(rec.amount, 4500)
+        self.assertEqual(FinanceRecord.objects.count(), 1)
+
+
 class FinanceCategoryTest(TestCase):
     """收支分類改為資料表（2026-11）：預設分類、自訂分類、適用範圍、停用、系統分類保護。"""
 
