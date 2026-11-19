@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.auth.decorators import login_required
@@ -28,4 +30,14 @@ def serve_media(request, path):
     return media_serve(request, path, document_root=settings.MEDIA_ROOT)
 
 
-urlpatterns += [re_path(r'^media/(?P<path>.*)$', serve_media)]
+# 公開頁用的圖（關於百韻的人物照片）放在 media/public/，不需登入。
+# document_root 鎖在 public/ 子目錄：`media/public/../finance/x` 會被 safe_join 擋成 404，
+# 不能拿這條路繞過上面的登入限制去讀收據。
+def serve_public_media(request, path):
+    return media_serve(request, path, document_root=Path(settings.MEDIA_ROOT) / 'public')
+
+
+urlpatterns += [
+    re_path(r'^media/public/(?P<path>.*)$', serve_public_media),
+    re_path(r'^media/(?P<path>.*)$', serve_media),
+]

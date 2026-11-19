@@ -2,15 +2,17 @@ import datetime as dt
 import io
 import logging
 import re
+import tempfile
 from pathlib import Path
 
 from django.conf import settings
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import path, reverse
 from django.utils import timezone
 
 from apps.accounts.models import User
-from .models import CharterContent, Venue, VenueTimeSlot
+from .models import AboutSection, CharterContent, Venue, VenueTimeSlot
 
 
 class IndexDashboardLeaveResultTest(TestCase):
@@ -857,6 +859,120 @@ class LoggingConfigTest(TestCase):
         written = buffer.getvalue()
         self.assertIn('RuntimeError', written)
         self.assertIn('LOGGING 測試用的例外', written)
+
+
+def _png(name='photo.png'):
+    """Pillow 真的打得開的 1×1 PNG（照片欄位會驗證是不是圖片）。"""
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new('RGB', (1, 1), 'white').save(buf, format='PNG')
+    return SimpleUploadedFile(name, buf.getvalue(), content_type='image/png')
+
+
+class AboutProfileSectionTest(TestCase):
+    """關於百韻「人物介紹」排版：照片＋姓名＋學經歷、照片公開可讀、其他上傳檔仍需登入"""
+
+    def setUp(self):
+        self._media = tempfile.TemporaryDirectory()
+        self.addCleanup(self._media.cleanup)
+        override = override_settings(MEDIA_ROOT=self._media.name)
+        override.enable()
+        self.addCleanup(override.disable)
+        self.officer = User.objects.create_user(
+            username='about_officer', email='about_officer@test.local', password='pw', role='officer')
+        self.client.login(username='about_officer', password='pw')
+
+    def _post(self, url, **extra):
+        data = {'title': '指揮介紹', 'content': '五歲起學習鋼琴。', 'order': '1', 'is_visible': 'on',
+                'layout': 'profile', 'person_name': '陳老師', 'person_title': '老師',
+                'credentials': '甲大學碩士\n\n乙大學學士\n'}
+        data.update(extra)
+        return self.client.post(url, data)
+
+    def test_create_profile_with_photo(self):
+        """新增人物介紹：存下姓名、學經歷與照片，照片放在 media/public/about/"""
+        r = self._post(reverse('public:about_create'), photo=_png())
+        self.assertRedirects(r, reverse('public:about_manage'), fetch_redirect_response=False)
+        section = AboutSection.objects.get()
+        self.assertTrue(section.is_profile)
+        self.assertEqual(section.credential_lines(), ['甲大學碩士', '乙大學學士'])
+        self.assertTrue(section.photo.name.startswith('public/about/'))
+
+    def test_about_page_renders_profile(self):
+        """公開頁顯示姓名、稱謂、每行一項的學經歷與照片"""
+        self._post(reverse('public:about_create'), photo=_png())
+        self.client.logout()
+        r = self.client.get(reverse('public:about'))
+        self.assertContains(r, '陳老師')
+        self.assertContains(r, '<li class="mb-1">乙大學學士</li>', html=True)
+        self.assertContains(r, AboutSection.objects.get().photo.url)
+
+    def test_profile_requires_name(self):
+        """人物介紹沒填姓名不存檔"""
+        r = self._post(reverse('public:about_create'), person_name='')
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(AboutSection.objects.exists())
+
+    def test_rejects_non_image_photo(self):
+        """照片不是圖片檔就不收（照片放在公開路徑，不能讓任意檔案上去）"""
+        fake = SimpleUploadedFile('x.png', b'not an image', content_type='image/png')
+        r = self._post(reverse('public:about_create'), photo=fake)
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(AboutSection.objects.exists())
+
+    def test_text_layout_unchanged(self):
+        """一般文章不需要姓名，頁面也不出現人物排版"""
+        self._post(reverse('public:about_create'), layout='text', person_name='')
+        section = AboutSection.objects.get()
+        self.assertFalse(section.is_profile)
+        r = self.client.get(reverse('public:about'))
+        self.assertNotContains(r, 'list-unstyled small text-muted')
+
+    def test_replace_and_remove_photo_deletes_old_file(self):
+        """換照片會刪掉舊檔；勾「移除照片」清空並刪檔"""
+        self._post(reverse('public:about_create'), photo=_png('a.png'))
+        section = AboutSection.objects.get()
+        old_path = Path(section.photo.path)
+        edit_url = reverse('public:about_edit', args=[section.pk])
+        self._post(edit_url, photo=_png('b.png'))
+        section.refresh_from_db()
+        self.assertFalse(old_path.exists())
+        new_path = Path(section.photo.path)
+        self.assertTrue(new_path.exists())
+        self._post(edit_url, remove_photo='on')
+        section.refresh_from_db()
+        self.assertFalse(section.photo)
+        self.assertFalse(new_path.exists())
+
+    def test_delete_section_deletes_photo(self):
+        """刪除區塊時照片檔一併刪除"""
+        self._post(reverse('public:about_create'), photo=_png())
+        section = AboutSection.objects.get()
+        path_ = Path(section.photo.path)
+        self.client.post(reverse('public:about_delete', args=[section.pk]))
+        self.assertFalse(path_.exists())
+
+    def test_public_photo_readable_without_login(self):
+        """media/public/ 底下的照片不需登入就能讀（關於頁是公開頁）"""
+        self._post(reverse('public:about_create'), photo=_png())
+        url = AboutSection.objects.get().photo.url
+        self.client.logout()
+        r = self.client.get(url)
+        r.close()     # FileResponse 開著檔案；Windows 上不關，暫存目錄刪不掉
+        self.assertEqual(r.status_code, 200)
+
+    def test_other_media_still_requires_login(self):
+        """其他上傳檔（如收據）仍需登入，也不能用 public/../ 繞過"""
+        receipts = Path(self._media.name) / 'finance'
+        receipts.mkdir()
+        (receipts / 'r.txt').write_text('secret')
+        self.client.logout()
+        r = self.client.get('/media/finance/r.txt')
+        self.assertEqual(r.status_code, 302)
+        r = self.client.get('/media/public/../finance/r.txt')
+        self.assertNotEqual(r.status_code, 200)
+        r = self.client.get('/media/public/%2e%2e/finance/r.txt')
+        self.assertNotEqual(r.status_code, 200)
 
 
 class TemplateCommentSyntaxTest(TestCase):

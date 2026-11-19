@@ -13,10 +13,22 @@ class CharterContent(models.Model):
 
 
 class AboutSection(models.Model):
+    class Layout(models.TextChoices):
+        TEXT = 'text', '一般文章'
+        PROFILE = 'profile', '人物介紹'
+
     title = models.CharField('標題', max_length=100)
     content = models.TextField('內容')
     order = models.PositiveSmallIntegerField('顯示順序', default=0)
     is_visible = models.BooleanField('公開顯示', default=True)
+    # 人物介紹（指揮、駐團老師…）：照片在左、姓名與學經歷在右，內容（介紹文）在下。
+    # 不另開 Model：同樣要排順序、要草稿，只是排版不同（見 DESIGN §4.20）
+    layout = models.CharField('排版', max_length=10, choices=Layout, default=Layout.TEXT)
+    person_name = models.CharField('姓名', max_length=50, blank=True)
+    person_title = models.CharField('稱謂', max_length=20, blank=True, help_text='如「老師」，顯示在姓名旁')
+    # 放在 media/public/ 底下：關於頁是公開頁，這個子目錄不需登入就能讀（見 config/urls.py）
+    photo = models.ImageField('照片', upload_to='public/about/', blank=True)
+    credentials = models.TextField('學經歷', blank=True, help_text='一行一項')
 
     class Meta:
         verbose_name = '關於百韻區塊'
@@ -25,6 +37,13 @@ class AboutSection(models.Model):
 
     def __str__(self):
         return self.title
+
+    @property
+    def is_profile(self):
+        return self.layout == self.Layout.PROFILE
+
+    def credential_lines(self):
+        return [line.strip() for line in self.credentials.splitlines() if line.strip()]
 
 
 class Venue(models.Model):

@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-11-18（共 657 個測試；收支分類補上試算表預算項目、匯入改依分類名稱對照；幹部重設團員臨時密碼 `MemberResetPasswordTest`）；2026-11-16（登入閒置 8 小時逾時 `SessionTimeoutTest`）；2026-11-13（入團申請審核列表改依狀態排序（待審核→已核准→已拒絕）；新增「我的簽到記錄」頁 `PracticeMenuTest`；收款 QR Code 換圖刪舊檔、/media/ 需登入 `PaymentConfigTest`）；2026-11-12（團員撤銷請假、我的請假頁直接列近期排練 `LeaveCancelAndEntryTest`；帳號密碼信附登入網址 `TempPasswordEmailTest`）；2026-11-10（新增 Google 帳號登入與綁定 `GoogleLoginTest`、`<td>` 不可加 d-flex 的模板檢查）；2026-11-08（收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
+> 最後更新：2026-11-19（共 666 個測試；關於百韻「人物介紹」排版與公開照片路徑 `AboutProfileSectionTest`）；2026-11-18（收支分類補上試算表預算項目、匯入改依分類名稱對照；幹部重設團員臨時密碼 `MemberResetPasswordTest`）；2026-11-16（登入閒置 8 小時逾時 `SessionTimeoutTest`）；2026-11-13（入團申請審核列表改依狀態排序（待審核→已核准→已拒絕）；新增「我的簽到記錄」頁 `PracticeMenuTest`；收款 QR Code 換圖刪舊檔、/media/ 需登入 `PaymentConfigTest`）；2026-11-12（團員撤銷請假、我的請假頁直接列近期排練 `LeaveCancelAndEntryTest`；帳號密碼信附登入網址 `TempPasswordEmailTest`）；2026-11-10（新增 Google 帳號登入與綁定 `GoogleLoginTest`、`<td>` 不可加 d-flex 的模板檢查）；2026-11-08（收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
 
 ---
 
@@ -90,8 +90,9 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **635 個測試**，分布在 8 個 app。
+共 **666 個測試**，分布在 8 個 app。
 
+> 2026-11-19 關於百韻人物介紹：以 **SQLite 暫時設定**跑全站 666 個全數通過（本機 PostgreSQL 帳號無建庫權限）；尚待在 PostgreSQL 上跑一次全站確認。
 > 最近一次全站測試：2026-11-08 執行 `python manage.py test`（收支分類改為資料表、試算表匯入補場地／演出／幹部借款／先墊付），**595/595 全數通過、無 regression**（System check 亦無問題）。
 > 2026-11-10 Google 登入：在**無 PostgreSQL 帳密的機器上改用 SQLite 暫時設定**跑全站 614 個（不含最後補的槍手案例）全數通過、`GoogleLoginTest` 20/20 通過；尚待在 PostgreSQL 上跑一次全站確認。
 
@@ -198,7 +199,7 @@ python manage.py test --noinput
 |-------|---------|
 | `PushLineMessageTest` | credentials 齊全時發出 API 請求、TOKEN 缺少時略過、GROUP_ID 缺少時略過、API 失敗時 silent fail |
 
-### `apps/public/tests.py`（89 個）
+### `apps/public/tests.py`（98 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -207,6 +208,7 @@ python manage.py test --noinput
 | `IndexNextRehearsalTest` | 首頁「下次排練」卡片挑哪一場：排練開始時刻一過**仍留在卡片上**（不跳成下一場）、今天沒有已開始的排練時顯示未來最近一場、同一天多場取最近開始的、昨天的排練不再顯示、完全沒排練時不炸掉；卡片渲染出路徑標示與「今天的排練／進行中」 |
 | `IndexPerformanceBlockTest` | 首頁「演出活動」區塊含下次排練／我的請假／下載音樂會譜三張卡片；下載卡片列近期演出並連到分譜下載頁、略過已結束與已取消、最多 3 場 |
 | `PublicPagesTest` | 首頁、關於百韻、章程三頁面的 200 回應與不需登入；章程有內容時顯示、無內容時顯示佔位文字 |
+| `AboutProfileSectionTest` | 關於百韻「人物介紹」排版：新增時存下姓名／學經歷／照片（放 `media/public/about/`）、公開頁顯示姓名與每行一項的學經歷與照片、人物介紹沒填姓名不存、非圖片檔不收、一般文章不需姓名也不出現人物排版、換照片與「移除照片」會刪舊檔、刪區塊刪照片；`/media/public/` 未登入可讀，其他 `/media/` 仍需登入且不能用 `public/../` 繞過 |
 | `CharterEditTest` | 存取控制（未登入/一般團員/幹部）、POST 儲存章程並 redirect、二次更新不新增資料 |
 | `VenueManageTest` | 存取控制（未登入/一般團員/幹部）、依名稱搜尋、依類別篩選、新增/編輯場地、新增/刪除時段、刪除限管理員、被演出活動引用（PROTECT）時即使管理員也無法刪除；頁面寫出用途說明、列出被幾場演出／排練使用（`distinct=True` 防 JOIN 相乘）、未使用標「尚未使用」、一筆都沒有與搜尋不到給不同提示 |
 | `RobotsTxtTest` | robots.txt：掛在網站根目錄回純文字、未登入可讀、noindex 模式整站禁止、正常模式只擋內部路徑（公開頁不受影響）、noindex 模式每個回應帶 X-Robots-Tag、正常模式不帶 |
@@ -337,7 +339,7 @@ def test_invalid_state_raises(self):
 
 | App | 功能 | 說明 |
 |-----|------|------|
-| `public` | `about_manage` / `about_create` / `about_edit` / `about_delete` | 關於百韻內容管理，尚無自動測試 |
+| `public` | `about_manage` | 關於百韻管理列表頁（新增／編輯／刪除已由 `AboutProfileSectionTest` 覆蓋）|
 | `events` | 演出樂譜資料夾設定頁「批次貼上」的名稱→族群自動配對（前端 JS） | Django 測試碰不到瀏覽器 JS；2026-10-22 以 node 對 13 個族群名稱＋「總譜」手動驗證過配對（含「上低音號」不被「低音號」搶走）；後端不信任前端、只驗收最後送出的欄位 |
 | `scores` | 樂譜庫存／演出樂譜資料夾在真實瀏覽器的版面 | 無瀏覽器自動化測試；雲端環境連不到 CDN、Bootstrap 沒載入，只能看結構 |
 | `accounts` | Google 登入與 Google 的實際往返（`_exchange_code` 打 token endpoint） | 測試一律 mock 掉；需在正式站設好 OAuth 用戶端後人工登入一次驗證（步驟見 DEPLOY-WINDOWS 10-b 第 5 點）|
