@@ -1313,7 +1313,7 @@ def is_returned(self):
 
 ### 4.10 公告（announcements）
 
-**檔案**：`apps/announcements/models.py`、`views.py`、`urls.py`
+**檔案**：`apps/announcements/models.py`、`views.py`、`urls.py`、`richtext.py`
 
 #### 三層可見範圍
 
@@ -1384,6 +1384,27 @@ QuerySet 只查一次、在 Python 端分組（公告量小，`select_related('c
 未登入者的導覽列上根本沒有入口，只能手打網址才進得去（demo 當天被幹部發現）。
 公告連結現在放在登入判斷之外，與「關於百韻」「組織章程」同一層；
 `AnnouncementListTest` 有一條測試守住這件事，避免日後整理導覽列時又被搬回 if 裡。
+
+#### 內容格式化文字（2026-11-20）
+
+公告內容可以設定字級（小／正常／大／特大）、粗體、斜體、底線、刪除線、文字顏色、底色、
+編號清單與項目符號（可縮排）、對齊、連結。編輯頁用 **Quill 2.0.3**（BSD-3 授權），
+檔案自帶在 `static/vendor/quill-2.0.3/`，**不走 CDN、版本鎖死**，
+所以就算 Quill 日後改授權或 CDN 撤檔都不受影響。不提供字型選擇：中文字型各裝置不一定有，選了也常顯示成預設字體。
+
+- **資料**：`content` 仍是 `TextField`，存 Quill 產生的 HTML（`quill.root.innerHTML`，
+  清單是 `<ol><li data-list="bullet">`、字級對齊縮排是 `ql-*` class、顏色是 inline style），不需要 migration。
+- **安全**：幹部寫、所有人看，等於幹部帳號一旦被盜就能對全團植入腳本，所以 HTML **存檔時與顯示時各過濾一次**
+  （`richtext.sanitize_html()`，用 `nh3`）：只留 `p br strong em u s span ol ul li a`；
+  class／style 可掛在 `span strong em u s a` 上（格式疊加時 Quill 會直接寫成 `<u class="ql-size-large" style="color: …">`）；
+  class 只放行工具列做得出來的 `ql-size-*`、`ql-align-*`、`ql-indent-*`、`ql-ui`；
+  style 只放行 `color`／`background-color` 且值只能是 `#hex` 或 `rgb()`；連結只放行 http／https／mailto。
+  顯示時再過濾，是為了連 Django Admin 直接改進資料庫的內容也擋得住。
+- **舊公告相容**：不以 `<` 開頭的內容視為舊純文字，顯示時跳脫後一行一個 `<p>`、空行為 `<p><br></p>`（比照 Quill 的寫法），
+  在編輯頁打開時也以同樣的 HTML 帶進編輯器。瀏覽器沒跑 JS 時送出的純文字同樣原樣保存。
+- **空白判斷**：Quill 空白時送 `<p><br></p>`，所以「請填寫內容」改以去掉標籤後的純文字判斷（`richtext.plain_text()`）。
+- **顯示**：詳情頁載入 `quill.snow.css`，內容包在 `.ql-snow > .ql-editor` 裡，清單符號、字級、對齊靠 Quill 自己的樣式呈現。
+- LINE 推播只送標題，不受影響。
 
 #### URL 結構
 

@@ -1,6 +1,28 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}{% if action == 'edit' %}編輯公告{% else %}新增公告{% endif %} — 百韻管樂團{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'vendor/quill-2.0.3/quill.snow.css' %}">
+<style>
+  #content-editor { min-height: 240px; font-size: 1rem; }
+  #content-editor .ql-editor { min-height: 240px; }
+  .ql-snow .ql-picker.ql-size .ql-picker-label::before,
+  .ql-snow .ql-picker.ql-size .ql-picker-item::before { content: '正常'; }
+  .ql-snow .ql-picker.ql-size .ql-picker-label[data-value=small]::before,
+  .ql-snow .ql-picker.ql-size .ql-picker-item[data-value=small]::before { content: '小'; }
+  .ql-snow .ql-picker.ql-size .ql-picker-label[data-value=large]::before,
+  .ql-snow .ql-picker.ql-size .ql-picker-item[data-value=large]::before { content: '大'; }
+  .ql-snow .ql-picker.ql-size .ql-picker-label[data-value=huge]::before,
+  .ql-snow .ql-picker.ql-size .ql-picker-item[data-value=huge]::before { content: '特大'; }
+  .ql-snow .ql-tooltip::before { content: '連結：'; }
+  .ql-snow .ql-tooltip[data-mode=link]::before { content: '輸入網址：'; }
+  .ql-snow .ql-tooltip a.ql-action::after { content: '編輯'; }
+  .ql-snow .ql-tooltip a.ql-remove::before { content: '移除'; }
+  .ql-snow .ql-tooltip.ql-editing a.ql-action::after { content: '儲存'; }
+</style>
+{% endblock %}
 
 {% block content %}
 <nav aria-label="breadcrumb" class="mb-3">
@@ -14,7 +36,7 @@
   <div class="col-lg-7">
     <h2 class="mb-4">{% if action == 'edit' %}編輯公告{% else %}新增公告{% endif %}</h2>
 
-    <form method="post">
+    <form method="post" id="announcement-form">
       {% csrf_token %}
 
       <div class="mb-3">
@@ -25,7 +47,13 @@
 
       <div class="mb-3">
         <label class="form-label fw-semibold">內容 <span class="text-danger">*</span></label>
-        <textarea name="content" class="form-control" rows="8" required>{{ announcement.content|default:'' }}</textarea>
+        {% comment %}
+          JS 載入後 textarea 會隱藏，改用 Quill 編輯器；送出前把編輯器的 HTML 寫回 textarea。
+          伺服器端會再做白名單過濾（apps/announcements/richtext.py）。
+        {% endcomment %}
+        <textarea name="content" id="content-input" class="form-control" rows="8" required>{{ content_html|default:''|force_escape }}</textarea>
+        <div id="content-editor" class="d-none"></div>
+        <div class="form-text">可用工具列調整字級、粗體、底線、顏色、條列與對齊。從 Word 貼上時，不支援的格式會被移除。</div>
       </div>
 
       <div class="mb-3">
@@ -63,4 +91,56 @@
     {% endif %}
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'vendor/quill-2.0.3/quill.js' %}"></script>
+<script>
+(function () {
+  if (typeof Quill === 'undefined') return;  // 載入失敗就退回一般文字框
+  var input = document.getElementById('content-input');
+  var holder = document.getElementById('content-editor');
+
+  holder.innerHTML = input.value;   // 先放入既有內容，Quill 初始化時會解析
+  holder.classList.remove('d-none');
+  input.classList.add('d-none');
+  input.removeAttribute('required');
+
+  var quill = new Quill(holder, {
+    theme: 'snow',
+    modules: {
+      toolbar: [
+        [{ size: ['small', false, 'large', 'huge'] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ color: [] }, { background: [] }],
+        [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }],
+        [{ align: [] }],
+        ['link', 'clean']
+      ]
+    }
+  });
+
+  var titles = {
+    '.ql-bold': '粗體', '.ql-italic': '斜體', '.ql-underline': '底線', '.ql-strike': '刪除線',
+    '.ql-color': '文字顏色', '.ql-background': '底色', '.ql-size': '字級', '.ql-align': '對齊',
+    '.ql-list[value=ordered]': '編號清單', '.ql-list[value=bullet]': '項目符號',
+    '.ql-indent[value="-1"]': '減少縮排', '.ql-indent[value="+1"]': '增加縮排',
+    '.ql-link': '插入連結', '.ql-clean': '清除格式'
+  };
+  var toolbar = quill.getModule('toolbar').container;
+  Object.keys(titles).forEach(function (sel) {
+    toolbar.querySelectorAll(sel).forEach(function (el) { el.setAttribute('title', titles[sel]); });
+  });
+
+  document.getElementById('announcement-form').addEventListener('submit', function (e) {
+    if (quill.getText().trim() === '') {
+      e.preventDefault();
+      alert('請填寫內容。');
+      quill.focus();
+      return;
+    }
+    input.value = quill.root.innerHTML;
+  });
+})();
+</script>
 {% endblock %}

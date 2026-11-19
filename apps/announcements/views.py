@@ -6,6 +6,7 @@ from django.utils import timezone
 from apps.notifications.utils import push_line_message
 
 from .models import Announcement
+from .richtext import clean_content, plain_text, render_content
 
 
 def _visible_visibilities(user):
@@ -53,6 +54,7 @@ def announcement_detail(request, pk):
     announcement = get_object_or_404(qs, pk=pk)
     return render(request, 'announcements/announcement_detail.html', {
         'announcement': announcement,
+        'content_html': render_content(announcement.content),
     })
 
 
@@ -77,14 +79,14 @@ def announcement_create(request):
 
     if request.method == 'POST':
         title = request.POST.get('title', '').strip()
-        content = request.POST.get('content', '').strip()
+        content = clean_content(request.POST.get('content', ''))
         visibility = request.POST.get('visibility', '')
         event_date = request.POST.get('event_date', '').strip() or None
 
         errors = []
         if not title:
             errors.append('請填寫標題。')
-        if not content:
+        if not plain_text(content):
             errors.append('請填寫內容。')
         if visibility not in Announcement.Visibility.values:
             errors.append('請選擇可見範圍。')
@@ -119,14 +121,14 @@ def announcement_edit(request, pk):
 
     if request.method == 'POST':
         title = request.POST.get('title', '').strip()
-        content = request.POST.get('content', '').strip()
+        content = clean_content(request.POST.get('content', ''))
         visibility = request.POST.get('visibility', '')
         event_date = request.POST.get('event_date', '').strip() or None
 
         errors = []
         if not title:
             errors.append('請填寫標題。')
-        if not content:
+        if not plain_text(content):
             errors.append('請填寫內容。')
         if visibility not in Announcement.Visibility.values:
             errors.append('請選擇可見範圍。')
@@ -146,6 +148,7 @@ def announcement_edit(request, pk):
     return render(request, 'announcements/announcement_form.html', {
         'action': 'edit',
         'announcement': announcement,
+        'content_html': render_content(announcement.content),
         'visibility_choices': Announcement.Visibility.choices,
     })
 

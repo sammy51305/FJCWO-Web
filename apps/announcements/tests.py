@@ -348,3 +348,105 @@ class AnnouncementDeleteTest(TestCase):
         self.client.force_login(self.officer)
         self.client.get(reverse('announcements:announcement_delete', args=[self.ann.pk]))
         self.assertTrue(Announcement.objects.filter(pk=self.ann.pk).exists())
+
+
+class AnnouncementRichTextTest(TestCase):
+    """公告格式化文字（Quill 編輯器）：存檔與顯示都經白名單過濾、舊純文字照常顯示"""
+
+    def setUp(self):
+        self.officer = User.objects.create_user(
+            username='rt_officer', email='rt_officer@test.local',
+            password='testpass123', name='測試幹部', role=User.Role.OFFICER,
+        )
+        self.create_url = reverse('announcements:announcement_create')
+
+    def _create(self, content):
+        self.client.force_login(self.officer)
+        self.client.post(self.create_url, {
+            'title': '格式測試', 'content': content,
+            'visibility': Announcement.Visibility.PUBLIC,
+        })
+        return Announcement.objects.filter(title='格式測試').first()
+
+    def _publish(self, content):
+        return Announcement.objects.create(
+            title='顯示測試', content=content, visibility=Announcement.Visibility.PUBLIC,
+            created_by=self.officer, published_at=timezone.now(),
+        )
+
+    def test_toolbar_formats_are_kept(self):
+        """字級、粗體、底線、刪除線、顏色、底色、清單、對齊、縮排、連結都保留"""
+        html = (
+            '<p class="ql-align-center"><span class="ql-size-large">大</span>'
+            '<strong>粗</strong><em>斜</em><u>底線</u><s>刪</s>'
+            '<span style="color: rgb(230, 0, 0); background-color: #ffff00;">色</span></p>'
+            '<ol><li data-list="bullet" class="ql-indent-1"><span class="ql-ui" contenteditable="false">'
+            '</span>項目</li></ol>'
+            '<p><a href="https://example.com">連結</a></p>'
+        )
+        ann = self._create(html)
+        for kept in ['class="ql-align-center"', 'class="ql-size-large"', '<strong>粗</strong>',
+                     '<em>斜</em>', '<u>底線</u>', '<s>刪</s>', 'color: rgb(230, 0, 0)',
+                     'background-color: #ffff00', 'data-list="bullet"', 'ql-indent-1',
+                     'href="https://example.com"']:
+            self.assertIn(kept, ann.content)
+
+    def test_size_and_color_on_inline_tags_are_kept(self):
+        """格式疊加時 Quill 把字級與顏色直接寫在 <u>／<strong> 上，也要保留"""
+        ann = self._create(
+            '<p><u class="ql-size-large" style="color: rgb(230, 0, 0);">底線大紅</u>'
+            '<strong class="ql-size-huge" style="background-color: #ffff00;">粗</strong></p>'
+        )
+        self.assertIn('<u class="ql-size-large" style="color: rgb(230, 0, 0)">', ann.content)
+        self.assertIn('<strong class="ql-size-huge" style="background-color: #ffff00">', ann.content)
+
+    def test_dangerous_html_is_stripped_on_save(self):
+        """<script>、事件屬性、javascript: 連結、不在白名單的 class／樣式都被拿掉"""
+        ann = self._create(
+            '<p onclick="alert(1)" class="evil ql-align-right">安全文字'
+            '<script>alert(1)</script><img src=x onerror=alert(1)>'
+            '<a href="javascript:alert(1)">壞連結</a>'
+            '<span style="position: fixed; color: #000; background: url(x)">x</span></p>'
+        )
+        self.assertIn('安全文字', ann.content)
+        self.assertIn('ql-align-right', ann.content)
+        for bad in ['<script', 'onclick', 'onerror', '<img', 'javascript:', 'evil',
+                    'position', 'url(']:
+            self.assertNotIn(bad, ann.content)
+
+    def test_empty_editor_is_rejected(self):
+        """Quill 空白時送出 <p><br></p>，應視為沒填內容"""
+        self.assertIsNone(self._create('<p><br></p>'))
+
+    def test_plain_text_submission_kept_as_is(self):
+        """沒跑 JS 時送出的純文字原樣保存，不被跳脫成 &lt;"""
+        ann = self._create('第一行 a<b\n第二行')
+        self.assertEqual(ann.content, '第一行 a<b\n第二行')
+
+    def test_detail_renders_formatting(self):
+        """詳情頁輸出格式化 HTML 並載入 Quill 樣式"""
+        ann = self._publish('<p><u>底線文字</u></p>')
+        r = self.client.get(reverse('announcements:announcement_detail', args=[ann.pk]))
+        self.assertContains(r, '<u>底線文字</u>', html=False)
+        self.assertContains(r, 'vendor/quill-2.0.3/quill.snow.css')
+
+    def test_detail_sanitizes_stored_html(self):
+        """顯示時再過濾一次：從後台直接寫進資料庫的惡意 HTML 也不會輸出"""
+        ann = self._publish('<p>正文<script>alert(1)</script><img src=x onerror=alert(1)></p>')
+        r = self.client.get(reverse('announcements:announcement_detail', args=[ann.pk]))
+        self.assertContains(r, '正文')
+        self.assertNotContains(r, 'alert(1)')
+
+    def test_legacy_plain_text_is_escaped_with_line_breaks(self):
+        """舊純文字公告：跳脫特殊字元，一行一段、空行保留"""
+        ann = self._publish('第一行 <b>不是粗體</b>\n\n第三行')
+        r = self.client.get(reverse('announcements:announcement_detail', args=[ann.pk]))
+        self.assertContains(r, '<p>第一行 &lt;b&gt;不是粗體&lt;/b&gt;</p><p><br></p><p>第三行</p>', html=False)
+
+    def test_edit_form_loads_editor_with_existing_content(self):
+        """編輯頁載入 Quill，並把既有內容（舊純文字轉段落）放進編輯器"""
+        ann = self._publish('舊內容')
+        self.client.force_login(self.officer)
+        r = self.client.get(reverse('announcements:announcement_edit', args=[ann.pk]))
+        self.assertContains(r, 'vendor/quill-2.0.3/quill.js')
+        self.assertContains(r, '&lt;p&gt;舊內容&lt;/p&gt;')  # 放在 textarea 裡，所以是跳脫後的樣子
