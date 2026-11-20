@@ -441,6 +441,79 @@ class FeeEditTest(TestCase):
         self.client.post(self.url, {'member': '', 'period': ''})
         self.assertFalse(MembershipFee.objects.exists())
 
+    def test_cash_is_default_and_records_officer(self):
+        """沒選繳費方式（舊表單）視為現金：收款幹部＝登記者、不留末五碼"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'member': self.member.pk, 'period': self.period.pk, 'paid': 'on',
+            'account_last5': '12345',
+        })
+        fee = MembershipFee.objects.get(member=self.member, period=self.period)
+        self.assertEqual(fee.payment_method, MembershipFee.PaymentMethod.CASH)
+        self.assertEqual(fee.collected_by, self.officer)
+        self.assertEqual(fee.account_last5, '')
+
+    def test_transfer_records_last5_without_collector(self):
+        """幹部代登記轉帳：記末五碼、不記收款幹部，報表顯示轉帳與末五碼"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'member': self.member.pk, 'period': self.period.pk, 'paid': 'on',
+            'payment_method': 'transfer', 'account_last5': '54321',
+        })
+        fee = MembershipFee.objects.get(member=self.member, period=self.period)
+        self.assertEqual(fee.payment_method, MembershipFee.PaymentMethod.TRANSFER)
+        self.assertEqual(fee.account_last5, '54321')
+        self.assertIsNone(fee.collected_by)
+        r = self.client.get(reverse('finance:membership_fee_report'), {'period': self.period.pk})
+        self.assertContains(r, '54321')
+
+    def test_transfer_last5_optional(self):
+        """末五碼選填：幹部手上沒有對方帳號也能登記轉帳"""
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'member': self.member.pk, 'period': self.period.pk, 'paid': 'on',
+            'payment_method': 'transfer', 'account_last5': '',
+        })
+        fee = MembershipFee.objects.get(member=self.member, period=self.period)
+        self.assertEqual(fee.status, MembershipFee.Status.PAID)
+        self.assertEqual(fee.account_last5, '')
+
+    def test_transfer_last5_must_be_five_digits(self):
+        """末五碼有填就必須是 5 位數字，否則擋下不建立紀錄"""
+        self.client.force_login(self.officer)
+        r = self.client.post(self.url, {
+            'member': self.member.pk, 'period': self.period.pk, 'paid': 'on',
+            'payment_method': 'transfer', 'account_last5': '12a4',
+        })
+        self.assertContains(r, '5 位數字')
+        self.assertFalse(MembershipFee.objects.exists())
+
+    def test_edit_form_prefills_transfer(self):
+        """編輯既有轉帳紀錄時，表單帶出轉帳與末五碼"""
+        MembershipFee.objects.create(
+            member=self.member, period=self.period, amount=500,
+            status=MembershipFee.Status.PAID, payment_method='transfer', account_last5='24680',
+        )
+        self.client.force_login(self.officer)
+        r = self.client.get(self.url, {'member': self.member.pk, 'period': self.period.pk})
+        self.assertContains(r, 'value="24680"')
+
+    def test_unpaid_clears_transfer_info(self):
+        """改回未繳時清除繳費方式與末五碼"""
+        MembershipFee.objects.create(
+            member=self.member, period=self.period, amount=500,
+            status=MembershipFee.Status.PAID, payment_method='transfer', account_last5='24680',
+        )
+        self.client.force_login(self.officer)
+        self.client.post(self.url, {
+            'member': self.member.pk, 'period': self.period.pk,
+            'payment_method': 'transfer', 'account_last5': '24680',
+        })
+        fee = MembershipFee.objects.get(member=self.member, period=self.period)
+        self.assertEqual(fee.status, MembershipFee.Status.UNPAID)
+        self.assertEqual(fee.account_last5, '')
+        self.assertEqual(fee.payment_method, MembershipFee.PaymentMethod.CASH)
+
 
 class FeeReportTest(TestCase):
     """團員自助申報繳費（附錄五 §9 P2，現金）"""
