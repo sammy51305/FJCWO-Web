@@ -76,6 +76,27 @@
         <div class="form-text">僅在勾選「已繳費」時生效；未勾選則視為未繳（清除繳費日與收款幹部）。</div>
       </div>
 
+      <div class="mb-3">
+        <label class="form-label fw-semibold">繳費方式</label>
+        <div class="btn-group d-block" role="group">
+          <input type="radio" class="btn-check" name="payment_method" id="pm_cash" value="cash"
+                 {% if form_data.payment_method != 'transfer' %}checked{% endif %}>
+          <label class="btn btn-outline-primary" for="pm_cash">現金</label>
+          <input type="radio" class="btn-check" name="payment_method" id="pm_transfer" value="transfer"
+                 {% if form_data.payment_method == 'transfer' %}checked{% endif %}>
+          <label class="btn btn-outline-primary" for="pm_transfer">轉帳</label>
+        </div>
+        <div class="form-text">現金：收款幹部記為你本人。僅在勾選「已繳費」時生效。</div>
+      </div>
+
+      <div class="mb-4" id="last5-block" {% if form_data.payment_method != 'transfer' %}style="display:none;"{% endif %}>
+        <label class="form-label fw-semibold">匯款帳號末五碼</label>
+        <input type="text" name="account_last5" class="form-control" maxlength="5"
+               inputmode="numeric" pattern="[0-9]{5}" placeholder="例如 12345"
+               value="{{ form_data.account_last5|default:'' }}">
+        <div class="form-text">對方轉出帳號的末 5 碼，供財務對帳；不知道可以留空。</div>
+      </div>
+
       <div class="d-flex gap-2">
         <button type="submit" class="btn btn-primary">儲存</button>
         <a href="{% url 'finance:membership_fee_report' %}" class="btn btn-outline-secondary">取消</a>
@@ -110,6 +131,13 @@
     if (opt && opt.dataset.student === '1' && !student.disabled) student.checked = true;
     else regular.checked = true;
   }
+  // 選轉帳才顯示末五碼欄位
+  var last5Block = document.getElementById('last5-block');
+  form.querySelectorAll('input[name=payment_method]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      last5Block.style.display = document.getElementById('pm_transfer').checked ? '' : 'none';
+    });
+  });
   periodSel.addEventListener('change', syncPeriod);
   memberSel.addEventListener('change', syncMember);
 })();

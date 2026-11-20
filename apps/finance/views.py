@@ -450,8 +450,16 @@ def fee_edit(request):
         paid = request.POST.get('paid') == 'on'
         paid_at_raw = request.POST.get('paid_at', '').strip()
         tier = request.POST.get('tier', '')
+        M = MembershipFee.PaymentMethod
+        method = M.TRANSFER if request.POST.get('payment_method') == M.TRANSFER else M.CASH
+        account_last5 = request.POST.get('account_last5', '').strip()
 
         errors = []
+        # 幹部代登記的轉帳，末五碼選填（幹部手上不一定有對方的轉出帳號）；有填就得是 5 位數字
+        if paid and method == M.TRANSFER and account_last5 and not (
+            account_last5.isdigit() and len(account_last5) == 5
+        ):
+            errors.append('匯款帳號末五碼請填 5 位數字，不知道可以留空。')
         member = User.objects.filter(pk=member_id).first() if member_id else None
         period = FeePeriod.objects.filter(pk=period_id).first() if period_id else None
         if not member:
@@ -485,7 +493,10 @@ def fee_edit(request):
         fee.amount = amount   # 金額快照：以期別當下的金額為準
         fee.status = S.PAID if paid else S.UNPAID
         fee.paid_at = paid_at
-        fee.collected_by = request.user if paid else None
+        # 現金：收款幹部記登記者本人；轉帳：沒有經手的幹部，改記末五碼供對帳。未繳則兩者都清空
+        fee.payment_method = method if paid else M.CASH
+        fee.collected_by = request.user if paid and method == M.CASH else None
+        fee.account_last5 = account_last5 if paid and method == M.TRANSFER else ''
         fee.save()
         _sync_fee_income(fee, request.user)   # 已繳→產生收入；未繳→移除
         messages.success(request, f'已更新 {member.name} 的「{period}」團費紀錄。')
@@ -511,6 +522,8 @@ def fee_edit(request):
         'paid': fee.is_paid if fee else False,
         'paid_at': fee.paid_at.isoformat() if fee and fee.paid_at else timezone.localdate().isoformat(),
         'tier': tier,
+        'payment_method': fee.payment_method if fee else MembershipFee.PaymentMethod.CASH,
+        'account_last5': fee.account_last5 if fee else '',
     }
     return render(request, 'finance/fee_form.html', {
         'members': members, 'periods': periods,
