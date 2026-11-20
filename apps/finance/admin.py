@@ -43,6 +43,25 @@ class MembershipFeeAdmin(admin.ModelAdmin):
                     'paid_at', 'collected_by', 'account_last5']
     list_filter = ['status', 'payment_method', 'period']
     search_fields = ['member__name']
+    exclude = ['finance_record']   # 由系統依狀態自動維護，不讓人手動接錯
+
+    # 在後台把團費改成已繳／改回未繳，也要跟網站上的操作一樣同步收支明細收入，
+    # 否則「團費已繳、收支明細卻沒有這筆」（2026-11-20 回饋）
+    def save_model(self, request, obj, form, change):
+        from .views import _sync_fee_income
+        super().save_model(request, obj, form, change)
+        _sync_fee_income(obj, request.user)
+
+    def delete_model(self, request, obj):
+        rec = obj.finance_record
+        super().delete_model(request, obj)
+        if rec is not None:
+            rec.delete()
+
+    def delete_queryset(self, request, queryset):
+        record_ids = [pk for pk in queryset.values_list('finance_record_id', flat=True) if pk]
+        super().delete_queryset(request, queryset)
+        FinanceRecord.objects.filter(pk__in=record_ids).delete()
 
 
 @admin.register(PaymentConfig)
