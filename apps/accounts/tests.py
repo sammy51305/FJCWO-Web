@@ -908,6 +908,51 @@ class RegistrationTest(TestCase):
         ))
         self.assertEqual(Registration.objects.count(), 1)
 
+    def test_duplicate_pending_apply_blocked_case_insensitive(self):
+        """Email 只差大小寫仍視為同一人，不能藉此繞過待審核的重複檢查"""
+        from .models import Registration
+        Registration.objects.create(
+            name='第一次', instrument=self.family, email='dup@test.local',
+        )
+        self.client.post(self.apply_url, profile_post(
+            name='第二次', email='Dup@Test.local', instrument=self.family.pk,
+        ))
+        self.assertEqual(Registration.objects.count(), 1)
+
+    def test_apply_blocked_when_email_already_has_account(self):
+        """
+        申請已核准、帳號已建好的人再送一次申請，應被擋下並提示聯絡幹部重設密碼。
+        實際案例：團員沒收到帳密信，以為申請沒過又重送一份，審核列表因而多出廢單。
+        """
+        from .models import Registration
+        Registration.objects.create(
+            name='已核准', instrument=self.family, email='approved@test.local',
+            status=Registration.Status.APPROVED,
+        )
+        User.objects.create_user(
+            username='approved_member', email='approved@test.local',
+            password='x', name='已核准', role=User.Role.MEMBER,
+        )
+        r = self.client.post(self.apply_url, profile_post(
+            name='已核准', email='APPROVED@test.local', instrument=self.family.pk,
+        ))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, '已有團員帳號')
+        self.assertContains(r, '重設密碼')
+        self.assertEqual(Registration.objects.count(), 1)
+
+    def test_rejected_applicant_can_apply_again(self):
+        """被拒絕過（沒有帳號）的人可以重新申請，避免新規則誤擋"""
+        from .models import Registration
+        Registration.objects.create(
+            name='被拒', instrument=self.family, email='rejected@test.local',
+            status=Registration.Status.REJECTED,
+        )
+        self.client.post(self.apply_url, profile_post(
+            name='被拒', email='rejected@test.local', instrument=self.family.pk,
+        ))
+        self.assertEqual(Registration.objects.count(), 2)
+
     # ── T11 狀態查詢（公開）──────────────────────────────────
 
     def test_status_page_accessible_without_login(self):

@@ -277,7 +277,7 @@ Django 官方建議用 `settings.AUTH_USER_MODEL`，因為 User model 可能被�
 
 | View | 路由 | 說明 |
 |------|------|------|
-| `registration_apply` | `GET/POST /accounts/register/` | 填寫申請表單，送出後建立 `Registration`（status=pending）|
+| `registration_apply` | `GET/POST /accounts/register/` | 填寫申請表單，送出後建立 `Registration`（status=pending）；Email 已有帳號或已有待審核申請時擋下（見下方「防止重複申請」）|
 | `registration_status` | `GET/POST /accounts/register/status/` | 輸入 Email 查詢自己的申請狀態，**不需登入** |
 | `registration_review` | `GET/POST /accounts/register/review/` | 幹部管理頁：查詢／篩選所有申請、核准／拒絕／重新開放審核；列表排序為待審核 → 已核准 → 已拒絕，同狀態內最新申請在前 |
 | `registration_create` | `GET/POST /accounts/register/create/` | 幹部手動新增一筆申請紀錄（例如電話報到，補登進系統）|
@@ -285,7 +285,19 @@ Django 官方建議用 `settings.AUTH_USER_MODEL`，因為 User model 可能被�
 | `registration_delete` | `POST /accounts/register/<pk>/delete/` | **管理員**刪除申請紀錄（含已核准者）|
 
 `registration_status` 設計為公開頁面，讓申請者不需帳號就能確認申請進度，
-避免對方不斷來電詢問。查詢以 Email 為鍵，列出該 Email 所有申請紀錄。
+避免對方不斷來電詢問。查詢以 Email 為鍵，列出該 Email 所有申請紀錄（不分大小寫）。
+
+#### 防止重複申請（registration_apply）
+
+送出時依序檢查，比對 Email 一律**不分大小寫**（`email__iexact`）：
+
+| 情況 | 結果 | 理由 |
+|------|------|------|
+| Email 已有 `User` 帳號（含申請已核准） | 擋下，提示「已有團員帳號，若沒收到帳號密碼信，請聯絡幹部重設密碼」 | 再送一份也建不了帳號（核准會因「已有帳號」失敗），只會在審核列表多一筆廢單。實際案例：團員沒收到帳密信，以為沒過又重送；該做的是幹部用「重設密碼」重寄 |
+| Email 已有待審核申請 | 擋下，提示耐心等候 | 避免同一人塞多筆待審 |
+| 只有被拒絕的申請、沒有帳號 | 允許重新申請 | 被拒後補件重送是正常流程 |
+
+原本只擋「待審核」且區分大小寫，已核准的人或改個大小寫就能再送一份。
 
 #### registration_review 從「審核清單」升級成「管理頁」
 
