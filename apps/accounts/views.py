@@ -781,10 +781,16 @@ def registration_apply(request):
     """入團申請（公開，不需登入）"""
     if request.method == 'POST':
         data, errors = _parse_profile_fields(request.POST)
-        if data['email'] and Registration.objects.filter(
-            email=data['email'], status=Registration.Status.PENDING
-        ).exists():
-            errors.append('此 Email 已有待審核的申請，請耐心等候。')
+        # 比對不分大小寫：同一人改個大小寫重打 Email 不該被當成新申請。
+        # 已有帳號（含申請已核准）也擋下——再送一份既建不了帳號（核准會因「已有帳號」失敗），
+        # 又讓審核列表多出一筆廢單；這種人多半是沒收到帳密信，該做的是請幹部重設密碼。
+        if data['email']:
+            if User.objects.filter(email__iexact=data['email']).exists():
+                errors.append('此 Email 已有團員帳號，不需重新申請。若沒收到帳號密碼信，請聯絡幹部重設密碼。')
+            elif Registration.objects.filter(
+                email__iexact=data['email'], status=Registration.Status.PENDING
+            ).exists():
+                errors.append('此 Email 已有待審核的申請，請耐心等候。')
 
         if errors:
             for e in errors:
@@ -809,7 +815,7 @@ def registration_status(request):
     if request.method == 'POST':
         queried_email = request.POST.get('email', '').strip()
         if queried_email:
-            registrations = Registration.objects.filter(email=queried_email).order_by('-created_at')
+            registrations = Registration.objects.filter(email__iexact=queried_email).order_by('-created_at')
             if not registrations.exists():
                 messages.info(request, '查無此 Email 的申請紀錄。')
 

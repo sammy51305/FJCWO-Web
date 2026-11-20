@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-11-20（共 686 個測試；團費登記可選一般／學生團費 `FeeEditTierTest`、後台改團費同步收入與補登指令 `FeeIncomeBackfillTest`）；2026-11-20（共 675 個測試；公告內容改用 Quill 格式化文字、HTML 白名單過濾 `AnnouncementRichTextTest`）；2026-11-19（共 666 個測試；關於百韻「人物介紹」排版與公開照片路徑 `AboutProfileSectionTest`）；2026-11-18（收支分類補上試算表預算項目、匯入改依分類名稱對照；幹部重設團員臨時密碼 `MemberResetPasswordTest`）；2026-11-16（登入閒置 8 小時逾時 `SessionTimeoutTest`）；2026-11-13（入團申請審核列表改依狀態排序（待審核→已核准→已拒絕）；新增「我的簽到記錄」頁 `PracticeMenuTest`；收款 QR Code 換圖刪舊檔、/media/ 需登入 `PaymentConfigTest`）；2026-11-12（團員撤銷請假、我的請假頁直接列近期排練 `LeaveCancelAndEntryTest`；帳號密碼信附登入網址 `TempPasswordEmailTest`）；2026-11-10（新增 Google 帳號登入與綁定 `GoogleLoginTest`、`<td>` 不可加 d-flex 的模板檢查）；2026-11-08（收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
+> 最後更新：2026-11-20（共 689 個測試；入團申請擋下已有帳號的 Email、比對不分大小寫 `RegistrationTest`）；2026-11-20（共 686 個測試；團費登記可選一般／學生團費 `FeeEditTierTest`、後台改團費同步收入與補登指令 `FeeIncomeBackfillTest`）；2026-11-20（共 675 個測試；公告內容改用 Quill 格式化文字、HTML 白名單過濾 `AnnouncementRichTextTest`）；2026-11-19（共 666 個測試；關於百韻「人物介紹」排版與公開照片路徑 `AboutProfileSectionTest`）；2026-11-18（收支分類補上試算表預算項目、匯入改依分類名稱對照；幹部重設團員臨時密碼 `MemberResetPasswordTest`）；2026-11-16（登入閒置 8 小時逾時 `SessionTimeoutTest`）；2026-11-13（入團申請審核列表改依狀態排序（待審核→已核准→已拒絕）；新增「我的簽到記錄」頁 `PracticeMenuTest`；收款 QR Code 換圖刪舊檔、/media/ 需登入 `PaymentConfigTest`）；2026-11-12（團員撤銷請假、我的請假頁直接列近期排練 `LeaveCancelAndEntryTest`；帳號密碼信附登入網址 `TempPasswordEmailTest`）；2026-11-10（新增 Google 帳號登入與綁定 `GoogleLoginTest`、`<td>` 不可加 d-flex 的模板檢查）；2026-11-08（收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
 
 ---
 
@@ -90,15 +90,16 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **686 個測試**，分布在 8 個 app。
+共 **689 個測試**，分布在 8 個 app。
 
+> 2026-11-20 入團申請重複檢查：以 **SQLite 暫時設定**跑全站 689 個全數通過；尚待在 PostgreSQL 上跑一次全站確認。
 > 2026-11-20 團費級距與收入補登：以 **SQLite 暫時設定**跑全站 686 個全數通過；尚待在 PostgreSQL 上跑一次全站確認。
 > 2026-11-20 公告格式化文字：以 **SQLite 暫時設定**跑全站 674 個全數通過（skip 1），之後補的 `test_size_and_color_on_inline_tags_are_kept` 與 announcements、public 共 135 個再跑一次通過；尚待在 PostgreSQL 上跑一次全站確認。
 > 2026-11-19 關於百韻人物介紹：以 **SQLite 暫時設定**跑全站 666 個全數通過（本機 PostgreSQL 帳號無建庫權限）；尚待在 PostgreSQL 上跑一次全站確認。
 > 最近一次全站測試：2026-11-08 執行 `python manage.py test`（收支分類改為資料表、試算表匯入補場地／演出／幹部借款／先墊付），**595/595 全數通過、無 regression**（System check 亦無問題）。
 > 2026-11-10 Google 登入：在**無 PostgreSQL 帳密的機器上改用 SQLite 暫時設定**跑全站 614 個（不含最後補的槍手案例）全數通過、`GoogleLoginTest` 20/20 通過；尚待在 PostgreSQL 上跑一次全站確認。
 
-### `apps/accounts/tests.py`（203 個）
+### `apps/accounts/tests.py`（206 個）
 
 | Class | 測試內容 |
 |-------|---------|
@@ -116,7 +117,7 @@ python manage.py test --noinput
 | `SensitiveProfileFieldsTest` | #13-1 必填欄位大改：七個必填各自空白都擋下、樂器／聲部／畢業年份選填可留空、Registration 存得下聲部、身分證字號格式驗證與轉大寫、遮蔽只留末四碼（未填時為空字串）、居留證號可收、幹部端證號可留空、入學年科系原文照存、通訊錄與名冊報表不外洩身分證字號與住址、核准時四個敏感欄位整批帶進帳號、沒填樂器也能核准、既有帳號欄位空著仍可正常使用 |
 | `MemberDeleteTest` | 無關聯紀錄的帳號可真正刪除、有關聯紀錄（如出席）的帳號擋下並保留、不能刪除自己、一般團員無法刪除他人、管理員／superuser 可強制刪除有關聯紀錄的帳號、PROTECT 關聯（如發過公告）即使管理員也無法繞過 |
 | `UserRoleTest` | `is_officer` 各角色行為（member/officer/admin/superuser）、`is_staff` 與 `is_superuser` 自動設定 |
-| `RegistrationTest` | 顯示名稱為「入團申請」（#13-2）、申請（公開存取、重複申請防止、送出建立紀錄）、狀態查詢（用 email 查）、幹部審核（核准/拒絕）、核准同步建立 User 帳號（含 must_change_password）、寄送臨時密碼信件、Email 重複時擋下不建立重複帳號 |
+| `RegistrationTest` | 顯示名稱為「入團申請」（#13-2）、申請（公開存取、重複申請防止：待審核／已有帳號皆擋、Email 不分大小寫、被拒絕者可重新申請，送出建立紀錄）、狀態查詢（用 email 查）、幹部審核（核准/拒絕）、核准同步建立 User 帳號（含 must_change_password）、寄送臨時密碼信件、Email 重複時擋下不建立重複帳號 |
 | `RegistrationManageTest` | 依姓名/Email 搜尋、依狀態篩選、列表排序（待審核→已核准→已拒絕）、拒絕可重新開放審核（核准不行）、新增申請紀錄（幹部限定）、編輯基本資料（不影響審核狀態）、刪除申請紀錄（限管理員：幹部與團員都不可、按鈕也不顯示；已核准者可刪；刪紀錄不會刪掉核准時建立的帳號）|
 | `StudentFlagTest` | 團員「學生」標記：預設否、幹部編輯時勾選／取消勾選（並預先帶入表單）、學生與角色互不影響（幹部也可以是學生）、新增團員時勾選 |
 | `MemberCreateTest` | 存取控制（未登入/一般團員/幹部）、POST 新增團員成功（角色固定 member）、帳號依 Email 自動產生、Email 重複不建立記錄、寄送臨時密碼信件 |
