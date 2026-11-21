@@ -2,7 +2,7 @@
 
 本文件說明如何執行測試、目前的測試覆蓋範圍，以及新增測試的慣例。
 
-> 最後更新：2026-11-20（共 695 個測試；幹部代登記團費可選現金／轉帳、記末五碼 `FeeEditTest`）；2026-11-20（共 689 個測試；入團申請擋下已有帳號的 Email、比對不分大小寫 `RegistrationTest`）；2026-11-20（共 686 個測試；團費登記可選一般／學生團費 `FeeEditTierTest`、後台改團費同步收入與補登指令 `FeeIncomeBackfillTest`）；2026-11-20（共 675 個測試；公告內容改用 Quill 格式化文字、HTML 白名單過濾 `AnnouncementRichTextTest`）；2026-11-19（共 666 個測試；關於百韻「人物介紹」排版與公開照片路徑 `AboutProfileSectionTest`）；2026-11-18（收支分類補上試算表預算項目、匯入改依分類名稱對照；幹部重設團員臨時密碼 `MemberResetPasswordTest`）；2026-11-16（登入閒置 8 小時逾時 `SessionTimeoutTest`）；2026-11-13（入團申請審核列表改依狀態排序（待審核→已核准→已拒絕）；新增「我的簽到記錄」頁 `PracticeMenuTest`；收款 QR Code 換圖刪舊檔、/media/ 需登入 `PaymentConfigTest`）；2026-11-12（團員撤銷請假、我的請假頁直接列近期排練 `LeaveCancelAndEntryTest`；帳號密碼信附登入網址 `TempPasswordEmailTest`）；2026-11-10（新增 Google 帳號登入與綁定 `GoogleLoginTest`、`<td>` 不可加 d-flex 的模板檢查）；2026-11-08（收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
+> 最後更新：2026-11-22（共 702 個測試；登入失敗 5 次鎖 15 分鐘 `LoginThrottleTest`、登入頁顯示錯誤訊息）；2026-11-20（共 695 個測試；幹部代登記團費可選現金／轉帳、記末五碼 `FeeEditTest`）；2026-11-20（共 689 個測試；入團申請擋下已有帳號的 Email、比對不分大小寫 `RegistrationTest`）；2026-11-20（共 686 個測試；團費登記可選一般／學生團費 `FeeEditTierTest`、後台改團費同步收入與補登指令 `FeeIncomeBackfillTest`）；2026-11-20（共 675 個測試；公告內容改用 Quill 格式化文字、HTML 白名單過濾 `AnnouncementRichTextTest`）；2026-11-19（共 666 個測試；關於百韻「人物介紹」排版與公開照片路徑 `AboutProfileSectionTest`）；2026-11-18（收支分類補上試算表預算項目、匯入改依分類名稱對照；幹部重設團員臨時密碼 `MemberResetPasswordTest`）；2026-11-16（登入閒置 8 小時逾時 `SessionTimeoutTest`）；2026-11-13（入團申請審核列表改依狀態排序（待審核→已核准→已拒絕）；新增「我的簽到記錄」頁 `PracticeMenuTest`；收款 QR Code 換圖刪舊檔、/media/ 需登入 `PaymentConfigTest`）；2026-11-12（團員撤銷請假、我的請假頁直接列近期排練 `LeaveCancelAndEntryTest`；帳號密碼信附登入網址 `TempPasswordEmailTest`）；2026-11-10（新增 Google 帳號登入與綁定 `GoogleLoginTest`、`<td>` 不可加 d-flex 的模板檢查）；2026-11-08（收支分類改為資料表，試算表匯入補場地、演出、幹部借款、先墊付）
 
 ---
 
@@ -90,8 +90,9 @@ python manage.py test --noinput
 
 ## 目前測試總覽
 
-共 **695 個測試**，分布在 8 個 app。
+共 **702 個測試**，分布在 8 個 app。
 
+> 2026-11-22 登入失敗次數限制：以 **SQLite 暫時設定**跑全站 702 個全數通過；尚待在 PostgreSQL 上跑一次全站確認。
 > 2026-11-20 幹部代登記團費記末五碼：以 **SQLite 暫時設定**跑全站 695 個全數通過；尚待在 PostgreSQL 上跑一次全站確認。
 > 2026-11-20 入團申請重複檢查：以 **SQLite 暫時設定**跑全站 689 個全數通過；尚待在 PostgreSQL 上跑一次全站確認。
 > 2026-11-20 團費級距與收入補登：以 **SQLite 暫時設定**跑全站 686 個全數通過；尚待在 PostgreSQL 上跑一次全站確認。
@@ -100,11 +101,12 @@ python manage.py test --noinput
 > 最近一次全站測試：2026-11-08 執行 `python manage.py test`（收支分類改為資料表、試算表匯入補場地／演出／幹部借款／先墊付），**595/595 全數通過、無 regression**（System check 亦無問題）。
 > 2026-11-10 Google 登入：在**無 PostgreSQL 帳密的機器上改用 SQLite 暫時設定**跑全站 614 個（不含最後補的槍手案例）全數通過、`GoogleLoginTest` 20/20 通過；尚待在 PostgreSQL 上跑一次全站確認。
 
-### `apps/accounts/tests.py`（206 個）
+### `apps/accounts/tests.py`（213 個）
 
 | Class | 測試內容 |
 |-------|---------|
-| `LoginLogoutTest` | 登入頁存取、正確/錯誤帳密、session 建立與清除、登出導向 |
+| `LoginThrottleTest` | 登入失敗次數限制：失敗 4 次仍可登入、5 次後鎖住（密碼對也不行、顯示「次數過多」）、登入成功歸零、帳號大小寫／空白視為同一帳號、只鎖被猜的帳號、到期自動解鎖、`/admin/` 登入同樣受限 |
+| `LoginLogoutTest` | 登入頁存取、正確/錯誤帳密（錯誤時顯示訊息）、session 建立與清除、登出導向 |
 | `SessionTimeoutTest` | 閒置逾時：session 期限 8 小時且每次請求續期、登入後 cookie 效期、有操作會把快到期的 session 推回 8 小時後、過期後被導向登入頁 |
 | `GoogleLoginTest` | Google 帳號登入（token 交換以 mock 取代，不連 Google）：未設 client id 時按鈕隱藏且網址 404、導向 Google 帶 state／nonce／PKCE／正確 redirect_uri、首次以已驗證 email（不分大小寫）比對並綁定 sub、已綁定只認 sub、next 導回與外站過濾；**拒絕**：查無團員且不建帳號、email 未驗證、團員已綁別的 Google 帳號（不改綁）、停用帳號、槍手、state 不符（不去換 token）、無 session、nonce 不符、使用者在 Google 取消；個人資料頁手動綁定 email 不同的 Google 帳號後可登入、不可搶綁他人已綁帳號、綁定需登入且限 POST、解除綁定；id_token 的 iss／aud／exp／sub 驗證 |
 | `TempPasswordEmailTest` | 帳號密碼信：有設 `SITE_URL` 時附上「登入網址：`SITE_URL`＋`/accounts/login/`」、帳號與臨時密碼照常附上；`SITE_URL` 留空時不附網址那一行 |

@@ -253,7 +253,9 @@ def google_callback(request):
         messages.error(request, '此帳號已停用，如有疑問請聯絡幹部。')
         return redirect(login_url)
 
-    login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+    # backend 必須是 AUTHENTICATION_BACKENDS 裡的路徑，否則下一個請求 session 會被判失效。
+    # Google 登入不經密碼、不受登入失敗鎖定限制：帳號被別人故意打錯鎖住時，本人仍能用這條路進來。
+    login(request, user, backend='apps.accounts.login_throttle.ThrottledModelBackend')
     return redirect(_safe_next(request, stored.get('next')))
 
 
