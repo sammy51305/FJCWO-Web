@@ -91,6 +91,11 @@ else:
 
 AUTH_USER_MODEL = 'accounts.User'
 
+# 取代預設的 ModelBackend：同一帳號連續登入失敗 5 次鎖 15 分鐘，網站登入頁與 /admin/ 都適用
+# （見 apps/accounts/login_throttle.py）。換掉後，部署前已登入者的 session 記的是舊 backend 路徑，
+# 會被登出一次、重新登入即可。
+AUTHENTICATION_BACKENDS = ['apps.accounts.login_throttle.ThrottledModelBackend']
+
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},

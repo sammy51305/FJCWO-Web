@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm
 
+from . import login_throttle
 from .models import User
 
 
@@ -9,6 +10,12 @@ class BootstrapAuthenticationForm(AuthenticationForm):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             field.widget.attrs['class'] = 'form-control'
+
+    def clean(self):
+        # 鎖定中先擋：不做密碼驗證，訊息也明確說是「次數過多」，而不是「帳號或密碼錯誤」
+        if login_throttle.is_locked(self.cleaned_data.get('username')):
+            raise forms.ValidationError(login_throttle.LOCKOUT_MESSAGE, code='locked')
+        return super().clean()
 
     def confirm_login_allowed(self, user):
         # 槍手（role=guest）是純名冊人物，一律不可登入系統（見 DESIGN 附錄五 §5 資安守則）。

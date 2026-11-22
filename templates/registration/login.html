@@ -12,6 +12,9 @@
     <h2 class="mb-4 text-center">團員登入</h2>
     <form method="post">
       {% csrf_token %}
+      {% for error in form.non_field_errors %}
+        <div class="alert alert-danger py-2 small">{{ error }}</div>
+      {% endfor %}
       {% for field in form %}
         <div class="mb-3">
           <label class="form-label">{{ field.label }}</label>

@@ -29,6 +29,86 @@ def profile_post(**overrides):
 
 
 
+class LoginThrottleTest(TestCase):
+    """登入失敗次數限制：同一帳號連續失敗 5 次鎖 15 分鐘，網站登入頁與 /admin/ 都適用"""
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()   # 計數存在記憶體快取，測試之間不能互相影響
+        self.addCleanup(cache.clear)
+        self.user = User.objects.create_user(
+            username='throttled', email='throttled@test.local',
+            password='testpass123', name='被鎖團員', role=User.Role.MEMBER,
+        )
+        self.login_url = reverse('accounts:login')
+
+    def _fail(self, times, username='throttled'):
+        for _ in range(times):
+            self.client.post(self.login_url, {'username': username, 'password': 'wrong'})
+
+    def _login(self, password='testpass123', username='throttled'):
+        return self.client.post(self.login_url, {'username': username, 'password': password})
+
+    def test_four_failures_still_allow_login(self):
+        """失敗 4 次還沒到上限，密碼對仍可登入"""
+        self._fail(4)
+        r = self._login()
+        self.assertRedirects(r, '/', fetch_redirect_response=False)
+
+    def test_five_failures_lock_even_correct_password(self):
+        """失敗 5 次後鎖住：密碼正確也登不進去，並顯示「次數過多」而非「帳號或密碼錯誤」"""
+        self._fail(5)
+        r = self._login()
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, '登入失敗次數過多')
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_success_resets_counter(self):
+        """登入成功就歸零：之後再失敗 4 次仍可登入"""
+        self._fail(4)
+        self._login()
+        self.client.logout()
+        self._fail(4)
+        r = self._login()
+        self.assertRedirects(r, '/', fetch_redirect_response=False)
+
+    def test_username_case_and_spaces_count_as_same_account(self):
+        """帳號大小寫、前後空白不同仍算同一個帳號，不能換個寫法繞過"""
+        self._fail(3, username='Throttled')
+        self._fail(2, username=' THROTTLED ')
+        r = self._login()
+        self.assertContains(r, '登入失敗次數過多')
+
+    def test_lock_is_per_account(self):
+        """鎖的是被猜的那個帳號，其他人不受影響（正式站所有人 IP 都是 127.0.0.1，不能以 IP 鎖）"""
+        User.objects.create_user(
+            username='other', email='other@test.local',
+            password='testpass123', name='其他團員', role=User.Role.MEMBER,
+        )
+        self._fail(5)
+        r = self._login(username='other')
+        self.assertRedirects(r, '/', fetch_redirect_response=False)
+
+    def test_lock_expires(self):
+        """鎖定時間到了就自動解鎖"""
+        from django.core.cache import cache
+        self._fail(5)
+        cache.clear()   # 模擬 15 分鐘到期（快取項目過期）
+        r = self._login()
+        self.assertRedirects(r, '/', fetch_redirect_response=False)
+
+    def test_admin_login_is_throttled_too(self):
+        """/admin/ 登入同樣計數與鎖定：管理員帳號是最高權限，更不能被無限猜"""
+        User.objects.create_superuser(
+            username='boss', email='boss@test.local', password='testpass123', name='管理員',
+        )
+        admin_login = reverse('admin:login')
+        for _ in range(5):
+            self.client.post(admin_login, {'username': 'boss', 'password': 'wrong'})
+        self.client.post(admin_login, {'username': 'boss', 'password': 'testpass123'})
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+
 class LoginLogoutTest(TestCase):
     """登入 / 登出"""
 
@@ -81,12 +161,13 @@ class LoginLogoutTest(TestCase):
         self.assertRedirects(r, '/events/', fetch_redirect_response=False)
 
     def test_invalid_login_shows_error(self):
-        """錯誤密碼停留在登入頁"""
+        """錯誤密碼停留在登入頁，並顯示錯誤訊息（原本模板沒印 non_field_errors，打錯密碼畫面毫無提示）"""
         r = self.client.post(self.login_url, {
             'username': 'testuser',
             'password': 'wrongpassword',
         })
         self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'alert-danger')
 
     def test_invalid_login_no_session(self):
         """錯誤密碼不建立登入 session"""
